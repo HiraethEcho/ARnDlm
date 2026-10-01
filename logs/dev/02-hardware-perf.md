@@ -220,6 +220,53 @@ Qwen3-0.6B @ B2 已经占 9.9GB, 大模型才考虑。
 
 ---
 
+## 本机实测: Tier 阶梯 (2026-10-01)
+
+`scripts/bench_throughput.py` 实测, 同一进程顺序跑, 每点warmup 50 步 + 计时 100 步,
+packing 零 padding, bf16 + AdamW + sdpa, 不开 grad ckpt。卡空闲时测,
+`GPU use 0%`。
+
+模型结构取自 `SPEC.md` 的三档候选 (Qwen3 风格, vocab 6400):
+
+| 配置 | params | train tok/s | wall tok/s | ms/step | peak GB | h@332M train | h@332M wall |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| tier0 h256 L2 (debug) | 3,213,056 | 59,242 | 37,861 | 69.1 | 0.50 | 1.6 | 2.4 |
+| tier1 h512 L8 | 26,879,488 | 8,240 | 5,512 | 497.1 | 1.41 | **11.2** | **16.8** |
+| tier2 h768 L12 | 80,433,408 | 3,540 | 2,379 | 1,157.1 | 2.76 | 26.1 | 38.8 |
+
+全部 batch=8, seq=512。
+
+### ⚠️ SPEC 里的参数量标注偏低约 2 倍
+
+`SPEC.md` 写「candidate around 50M」和「around 150M」, **实测是 26.9M 和 80.4M**。
+若按 SPEC 的标称值算成本会高估一倍。已向用户提出, 是否改 SPEC 待定。
+
+### seq_len 扫描 (tier1, batch 8)
+
+| seq | train tok/s | wall tok/s | ms/step | peak GB | h@332M train |
+|---:|---:|---:|---:|---:|---:|
+| 256 | **8,999** | 6,013 | 227.6 | 0.81 | 10.3 |
+| 512 | 8,240 | 5,512 | 497.1 | 1.41 | 11.2 |
+| 1024 | 6,731 | 4,477 | 1,217.0 | 2.68 | 13.7 |
+
+- **seq 1024 比 512 慢 18%** → `AGENTS.md` 里的「seq ≤ 512」硬约束本机复现, 成立。
+- **seq 256 比 512 快 9%** —— 不是小模型特有的, tier1 已经在算力瓶颈上了。
+  代价是上下文减半。**决策时要拿质量换, 不能只看 tok/s。**
+- `tok/param` 随规模下降 → 算力受限, 不是带宽或 launch 受限。
+
+### 小模型的固定开销 (tier0)
+
+| 配置 | train tok/s | wall tok/s | wall/train |
+|---|---:|---:|---:|
+| h256 L2 @ seq 512 | 59,242 | 37,861 | 0.64 |
+| h256 L2 @ seq 128 | 54,313 | 28,373 | 0.52 |
+
+**step 外的固定开销 (组batch / python / launch) 占到 36-48%**。
+所以 tier0 跑 smoke test 很便宜: 2M token 约 **37 秒**。但不要用 tier0 的
+tok/s 推算大模型的固定开销 —— 那部分随 batch 变化。
+
+---
+
 ## 时间速查
 
 多轮实测 (test/08-train-step-bench.py, 双向 attention)。
