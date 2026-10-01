@@ -12,8 +12,6 @@ neither author designed for.
 from __future__ import annotations
 
 from base.hf.a2d_dllm import DLLMLoss
-from base.native.a2d_minimind import (DLLM_CELL, build_bidirectional,
-                                       sample_native_dlm)
 
 METHOD = "dLLM-A2D"
 

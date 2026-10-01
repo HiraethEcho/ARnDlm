@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "example"))
 
 from common import config as C
-from common.a2d import a2d_loss, corrupt, sample_t
+from common.a2d import a2d_loss, corrupt
 from base.hf.direct_dlm import dlm_forward, make_direct_loss, trainable_fingerprint
 from base.hf.model import build_model
 

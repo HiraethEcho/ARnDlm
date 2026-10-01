@@ -27,8 +27,7 @@ from base.hf.a2d_dllm import DLLMLoss
 from base.qwen3_0p6b.common_qwen import (CELL_DLLM, CELL_MINIMIND, MASK_TOKEN,
                                           build_a2d_lora, build_blocks,
                                           special_ids, trainable_report)
-from base.qwen3_0p6b.lora_common import (make_minimind_loss, packed,
-                                          prompts_for, sample_lora_dlm)
+from base.qwen3_0p6b.lora_common import prompts_for, sample_lora_dlm
 
 FAILS: list[str] = []
 

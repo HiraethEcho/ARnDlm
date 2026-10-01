@@ -13,7 +13,7 @@ import torch
 from common import config as C
 from common.a2d import a2d_loss, corrupt, sample_dlm, sample_t
 from common.tokenizer import decode, encode
-from base.native.model import BASE, build_native_model
+from base.native.model import build_native_model
 
 A2D_CELL = "native-minimind-a2d-example"
 DLLM_CELL = "native-dllm-a2d-example"

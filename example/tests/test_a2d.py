@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "example"))
 
 from common import config as C
-from common.a2d import (a2d_loss, corrupt, gumbel_argmax, sample_dlm, sample_t,
+from common.a2d import (a2d_loss, corrupt, gumbel_argmax, sample_dlm,
                         top_k_filter)
 from base.hf.model import build_model as build_hf
 from base.native.model import build_native_model

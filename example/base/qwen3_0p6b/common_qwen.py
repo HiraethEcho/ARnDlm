@@ -21,14 +21,13 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
 # Must be set before any from_pretrained call; the hub cache lives on /mnt/extra.
 os.environ.setdefault("HF_HOME", "/mnt/extra/hf")
 
 import torch
 
-from common.config import EOS, PAD, ROOT
+from common.config import ROOT
 
 CELL_DLLM = "qwen3-0.6b-dllm-a2d-lora-example"
 CELL_MINIMIND = "qwen3-0.6b-minimind-a2d-lora-example"

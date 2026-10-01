@@ -25,8 +25,8 @@ from common import config as C
 from common.a2d import a2d_loss, corrupt, sample_t
 from common.ckpt import load_state_dict
 from base.native.a2d_dllm import make_dllm_loss
-from base.native.a2d_minimind import (build_bidirectional, make_a2d_loss,
-                                       native_forward, sample_native_dlm)
+from base.native.a2d_minimind import (build_bidirectional, native_forward,
+                                       sample_native_dlm)
 
 FAILS: list[str] = []
 

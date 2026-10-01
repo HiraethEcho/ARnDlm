@@ -22,7 +22,7 @@ from common import config as C
 from common.cell import finish_cell
 from common.cli import add_common_args, resolve
 from common.loop import Loop
-from base.qwen3_0p6b.common_qwen import (BASE, BLOCK_SIZE, CELL_MINIMIND, LORA_R,
+from base.qwen3_0p6b.common_qwen import (BASE, CELL_MINIMIND, LORA_R,
                                           build_a2d_lora, build_blocks,
                                           data_dir_note, special_ids,
                                           trainable_report)
