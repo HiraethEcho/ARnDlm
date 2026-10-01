@@ -13,6 +13,7 @@ Checks that need a cell that has not run yet report SKIP rather than passing.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -206,13 +207,70 @@ def c5(args) -> dict:
             "tensors": len(state)}
 
 
+def decode_bench(args) -> dict:
+    """Time both decoders on the same model, prompt and block/step settings.
+
+    DLM decoding re-runs the whole sequence every step (notes/03 §5), so the
+    cost is steps x full_forward. Comparing the hand-written sampler against
+    MDLMSampler says whether that loop is worth rewriting; comparing against a
+    single forward says how expensive denoising is in absolute terms.
+    """
+    import time
+
+    from common.a2d import sample_dlm as sample_ours
+    from base.hf.a2d_dllm import build_a2d_model, sample_dllm
+    from base.hf.a2d_minimind import dlm_forward
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    model = build_a2d_model(C.TIER0, ar_ckpt=HF_AR if HF_AR.exists() else None).to(device).eval()
+    prompt = torch.tensor([[C.BOS, 100, 200, 300]], device=device)
+
+    def timed(fn, warmup: int = 2, runs: int = 3):
+        # Warmup is not optional here: the first timed call pays CUDA context
+        # and kernel-selection costs, which for a 33-forward decode loop was
+        # larger than the measurement itself (notes/05-measurement.md Bug 3).
+        for _ in range(warmup):
+            fn()
+        samples = []
+        for _ in range(runs):
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            t0 = time.perf_counter()
+            fn()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            samples.append((time.perf_counter() - t0) * 1e3)
+        return min(samples)
+
+    gen = args.gen_len
+    num_blocks = math.ceil(gen / args.block_size)
+    # dllm divides its `steps` budget across blocks
+    # (samplers/mdlm.py:131: `steps = math.ceil(steps / num_blocks)`), while
+    # `steps` here means steps *per block* (notes/03 §7: steps >= block_size).
+    # At the same "steps=8" label dllm therefore runs 8 forwards and this sampler
+    # runs 32. Multiply dllm's budget so the benchmark compares equal work.
+    ours = timed(lambda: sample_ours(dlm_forward(model), prompt, gen,
+                                     block_size=args.block_size, steps=args.dlm_steps,
+                                     temperature=args.temperature))
+    theirs = timed(lambda: sample_dllm(model, prompts=("x",), max_new_tokens=gen,
+                                       block_size=args.block_size,
+                                       steps=args.dlm_steps * num_blocks,
+                                       temperature=args.temperature))
+    forwards = 1 + (gen + args.block_size - 1) // args.block_size * args.dlm_steps
+    return {"status": "INFO", "ours_ms": round(ours, 1), "dllm_ms": round(theirs, 1),
+            "gen_len": gen, "block_size": args.block_size, "dlm_steps": args.dlm_steps,
+            "full_forwards": forwards,
+            "ms_per_forward_ours": round(ours / forwards, 2)}
+
+
 CHECKS = {"c1": c1, "c2": c2, "c5": c5}
+EXTRAS = {"decode-bench": decode_bench}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("check", choices=[*CHECKS, "all"])
+    ap.add_argument("check", choices=[*CHECKS, *EXTRAS, "all"])
     ap.add_argument("--tol", type=float, default=TOL)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--batch-size", type=int, default=8)
@@ -222,7 +280,15 @@ def main() -> int:
     ap.add_argument("--bench", action="store_true",
                     help="time each loss implementation on the same batch (C2)")
     ap.add_argument("--cpu", action="store_true")
+    ap.add_argument("--gen-len", type=int, default=32)
+    ap.add_argument("--block-size", type=int, default=8)
+    ap.add_argument("--dlm-steps", type=int, default=8)
+    ap.add_argument("--temperature", type=float, default=0.3)
     args = ap.parse_args()
+
+    if args.check in EXTRAS:
+        print(f"[{args.check}] " + " ".join(f"{k}={v}" for k, v in EXTRAS[args.check](args).items()))
+        return 0
 
     names = list(CHECKS) if args.check == "all" else [args.check]
     worst = 0
