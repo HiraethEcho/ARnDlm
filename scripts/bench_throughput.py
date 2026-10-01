@@ -156,6 +156,7 @@ def run(a: argparse.Namespace) -> dict:
     print(f"run     warmup={a.warmup} timed={a.steps}", flush=True)
 
     total_step_time = 0.0
+    all_step_time = 0.0
     wall0 = time.perf_counter()
     for step in range(a.warmup + a.steps):
         batch = next_batch()
@@ -167,6 +168,7 @@ def run(a: argparse.Namespace) -> dict:
         opt.zero_grad(set_to_none=True)
         torch.cuda.synchronize()
         dt = time.perf_counter() - t0
+        all_step_time += dt
         if step < a.warmup:
             continue
         total_step_time += dt
@@ -178,7 +180,14 @@ def run(a: argparse.Namespace) -> dict:
     wall = time.perf_counter() - wall0
 
     train_tps = tokens_per_step * a.steps / total_step_time
-    wall_tps = tokens_per_step * a.steps / wall
+    # Numerator and denominator must cover the same interval (notes/05 Bug 2).
+    # Counting only a.steps of tokens against a wall clock that includes the
+    # warmup makes wall_tps come out ~ (warmup+steps)/steps too low, which reads
+    # as a mysterious per-step overhead that is not there.
+    total_steps = a.warmup + a.steps
+    wall_tps = tokens_per_step * total_steps / wall
+    warmup_s = all_step_time - total_step_time
+    gap_s = wall - all_step_time
     # 6 * N * tokens: forward 1x, backward 2x.
     eff_tflops = 6 * n_train * tokens_per_step * a.steps / total_step_time / 1e12
 
@@ -189,6 +198,9 @@ def run(a: argparse.Namespace) -> dict:
         "train_only_tps": round(train_tps),
         "wall_tps": round(wall_tps),
         "ms_per_step": round(total_step_time / a.steps * 1000, 1),
+        "warmup_s": round(warmup_s, 2),
+        "step_gap_s": round(gap_s, 2),
+        "gap_pct": round(100 * gap_s / wall, 2),
         "eff_tflops": round(eff_tflops, 3),
         "final_loss": round(loss_val, 4),
         "peak_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2),

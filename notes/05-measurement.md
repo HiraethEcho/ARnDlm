@@ -50,6 +50,35 @@ tok_s = (tokens_done - tokens_seen) / train_seconds       # ✓
 
 ---
 
+## Bug 2 的实例: 我自己违反了一次
+
+`scripts/bench_throughput.py` 第一版的 `wall_tps`:
+
+```python
+wall = time.perf_counter() - wall0        # wall0 在循环之前 → 含预热
+wall_tps = tokens_per_step * a.steps / wall # 分子只数计时步
+```
+
+**后果**: tier1 报出 `wall_tps 5,512` vs `train_tps 8,240`, 看起来像每步有
+33% 的额外开销, 于是得出了「step 外固定开销很大」的错误结论, 并据此推算出
+332M token 要 16.8 小时 (实际 11.6)。
+
+**签名 —— 看到这个比值就知道中招了**:
+
+```
+wall_tps / train_tps = (warmup + steps) / steps = 150/100 = 1.5
+```
+
+实测 8240/5512 = **1.495**。若真的是每步开销, 这个比值不会这么干净地等于
+步数比。
+
+**真正的 step 外开销只有 0.09%** (修好后测的)。两个口径在本项目里给出同一个数。
+
+**教训**: 「我读过这份笔记」不等于「我下次不会犯」。写benchmark 脚本时
+把 `warmup + steps` 一起当常量处理, 别分开算。
+
+---
+
 ## Bug 3 — benchmark 太短
 
 **症状**: 第一次测出 `5,736 tok/s / 1,897 ms/step`, 预测 20M token 跑 60 分钟。
@@ -159,6 +188,41 @@ FLOPs/step ≈ 6 × N_params × tokens_per_step        (前向 1× + 反向 2×)
 | 梯度累积 | 显存占用**完全不变**, 只是把 batch 拆开算 |
 | 更大 batch | 本机有效 (B=1→8 涨 53%), 但 B>8 无收益 |
 | `torch.compile` | 可能有效 (fusion, 直接对着那 23% 去) |
+
+---
+
+## 跨实现对拍的容差 —— bf16 下不可能到 1e-5
+
+实测 (CPU, fp32/bf16 各跑一遍同一模型, hidden 64 · 2 层 · vocab 128 · seq 32 ·
+batch 2, logits 量级 max|logit| = 0.860):
+
+| 对照 | max\|Δ\| | 相对 |
+|---|---:|---:|
+| fp32 跑两次 (确定性自检) | 0.00e+00 | — |
+| fp32 整批[0] vs fp32 单条 | 0.00e+00 | — |
+| **fp32 vs bf16 (纯舍入, 同一实现)** | **4.99e-03** | 5.8e-3 |
+| fp32 vs fp16 (纯舍入) | 6.08e-04 | 7.1e-4 |
+| bf16 整批[0] vs bf16 单条 | 0.00e+00 | — |
+
+### 怎么用这个数字
+
+| 精度 | 可达到的容差 | 适用于 |
+|---|---|---|
+| bf16 | `1e-2` 量级 | 便宜的对拍, 抓结构性 bug (RoPE 位置错、GQA 头数错) |
+| fp32 | `1e-5` | 严对拍, 同一实现的不同写法 |
+| fp32 + 独立实现 | `1e-5` 是**乐观下界** | `example/PLAN.md` C1 |
+
+**两个独立实现 (transformers vs 手写 torch) 的差异必然大于「纯舍入」** ——
+RoPE 的 cos/sin 累加顺序、`repeat_interleave` 的位置、norm 的 eps 位置、
+attention 的 backend 选择, 每一项都能引入差异。
+
+所以: **bf16 下写 1e-5 的阈值是错的, 不是实现有 bug。** 想要 1e-5 就必须
+在 fp32 下对拍。fp16 比 bf16 精一个数量级 (6e-4 vs 5e-3), 但 fp16 有溢出风险,
+只适合做对拍不适合做训练。
+
+⚠️ 第一版这个测量是错的 —— dtype 参数传了但没 `.to(dtype)`, 同一对计算一次报
+0.00e+00 一次报 9.12e-01。**两个数字互相矛盾时, 不要挑一个信, 重写。**
+上表带确定性自检 (同一 fp32 跑两次必须报 0)。
 
 ---
 

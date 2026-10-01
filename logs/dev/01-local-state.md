@@ -312,9 +312,14 @@ inter 1536 · vocab 6400 · tied embedding = **28,452,352 参数**。
 
 | 项 | 实测 |
 |---|---|
-| 稳态吞吐 (28.45M, seq 512) | **≈ 7,700 tok/s** |
-| 跑完 332M token (minimind3-6400) | **11.9 h** |
-| 跑 20M token | 43 min |
+| 稳态吞吐 (28.45M, seq 512, B8) | **≈ 7,700-8,000 tok/s** |
+| 跑完 332M token (minimind3-6400) | **11.6 h** |
+| step 外开销 (组batch / H2D / python) | **0.09%** —— 可忽略 |
+| 跑 20M token | 45 min |
+
+⚠️ 第一版这张表的「11.9 h (train-only) / 16.8 h (wall)」里 **wall 那个数是错的** ——
+`bench_throughput.py` 的 `wall_tps` 分子只数计时步的 token, 分母却含预热,
+违反分子分母范围一致 (notes/05 Bug 2)。修后 wall = 8,067 tok/s ≈ train。
 
 1. **batch 8 和 16 吞吐一样** (7932 vs 7708, 差 2.8% 在噪声内)。
    ms/step 精确翻倍 (516 → 1055) → 加 batch 只加开销不加算力。

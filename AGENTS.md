@@ -120,13 +120,14 @@ A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版�
 
 - **瓶颈是 attention 的 backward kernel**, 不是带宽, 不是算力。换 SDPA backend 无解。
 - **`max_seq_len ≤ 512`** — attention 是 O(T²)。本机实测 seq 1024 比 512 慢 18%
-  (6,731 vs 8,240 tok/s, tier1 B8), 约束成立。
+  (6,731 vs 7,995 tok/s, tier1 B8), 约束成立。
 - **batch 8 就够** — B=8 和 B=16 吞吐 indistinguishable (ms/step 精确翻倍),
   B8 省一半显存。B=1 到 B=64 吞吐只差 30-53%。
 - **不开 gradient checkpointing** — 本机上小模型慢 18-23%, 只省 3GB。
 - **packing (pad=False) 吞吐高 1.71x** — 带宽受限机器上零 padding 浪费很值。
-- 实测量级: **tier1 (26.9M, seq 512, B8) ≈ 8,240 tok/s**, 332M token 约
-  11.2 h (train-only) / 16.8 h (wall)。完整阶梯见 `logs/dev/02-hardware-perf.md`。
+- 实测量级: **tier1 (26.9M, seq 512, B8) ≈ 7,995 tok/s**, 332M token 约
+  11.6 h。**step 外开销实测 0.09%**, 所以 wall-clock 与 train-only 几乎相等。
+  完整阶梯见 `logs/dev/02-hardware-perf.md`。
 - **run-to-run 方差可达 ±20%**, 小矩阵和短 benchmark 尤其不稳。
 
 **自训模型的目标参数量先不钉死。** 冒烟测试测出实际吞吐后再定 ——
@@ -135,6 +136,7 @@ A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版�
 ## 报告数字
 
 - **必须同时报 `train-only` 和 `wall-clock` 两个吞吐。** 验证和采样会污染分母。
+  (benchmark 脚本里两者会重合, 因为没有验证采样; 真正的污染源是训练脚本。)
 - **不要只报整体数字** — 逐项测到具体哪个 kernel 慢才可行动。
 - **`Predicted` 和 `Measured` 分两列写, 不要合并。**
 - benchmark ≥ 400 步, 先丢弃预热。

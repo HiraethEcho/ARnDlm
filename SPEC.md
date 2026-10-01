@@ -95,9 +95,11 @@ context_length: 128
 
 该配置只用于 pipeline validation，不代表正式模型规模。
 
-实测 3,213,056 params。同一批次里 **step 外的固定开销占 wall 的 36-48%**
-(组batch / python / launch)，所以 smoke test 极便宜：2M token 约 37 秒。
-但不要拿它的 tok/s 推算大模型的固定开销——那部分随 batch 变化。
+实测 3,213,056 params。单步 18.8 ms (seq 128) / 64.4 ms (seq 512), 2M token 约
+37 秒, 适合当 smoke test。
+
+⚠️ **前 50 步是 kernel 编译相, 比稳态慢 1.15-1.8 倍**。单步只有十几毫秒时
+这个开销相对很大, 起步要多留预热步, 否则前几十步的 loss 不可信。
 
 ### Tier 1 · Main experiment candidates
 
@@ -114,8 +116,9 @@ context_length: 512
 ```
 
 实测 (2026-10-01, AMD Radeon 880M, ROCm 10.0, bf16 + AdamW + sdpa, packing 零 padding,
-seq 512 / batch 8): **8,240 train-only tok/s**, 跑完 `minimind3-6400` 的 332M token 约
-**11.2 小时** (train-only) / 16.8 小时 (wall-clock)。峰值显存 1.41 GB。
+seq 512 / batch 8): **7,995 train-only tok/s**, 跑完 `minimind3-6400` 的 332M token 约
+**11.6 小时**。wall-clock 吞吐与 train-only 几乎相等 (step 外开销 0.09%), 所以两个
+口径在本项目里给出同一个数。峰值显存 1.41 GB。
 
 batch 8 与 batch 16 吞吐无法区分 (ms/step 精确翻倍)，故取 8。数据见
 `logs/dev/02-hardware-perf.md`。
@@ -132,8 +135,8 @@ intermediate_size: 2048
 context_length: 512
 ```
 
-同条件实测: **3,540 train-only tok/s**, 332M token 约 **26.1 小时** (train-only) /
-38.8 小时 (wall-clock), 峰值显存 2.76 GB。吞吐随规模亚线性 (3.0x 参数 → 2.33x
+同条件实测: **3,540 train-only tok/s**, 332M token 约 **26.1 小时**,
+峰值显存 2.76 GB。吞吐随规模亚线性 (3.0x 参数 → 2.33x
 耗时)，即大模型的每 token 算力更高；代价是 wall-clock 翻倍。是否上这一档取决于
 单次实验的预算上限，不取决于它能不能跑完。
 
