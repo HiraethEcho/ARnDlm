@@ -14,9 +14,9 @@ A 版在 `example/` 全部跑通之前，这些步骤只是骨架；跑通一个
 | 2 | `training/ar_hf/` | `example/base/hf/train_ar.py` | 行1 base | ✅ 已细化 |
 | 3 | `models/minimind_qwen/` | `example/base/native/model.py` | 行2 base | ✅ 已细化 |
 | 4 | `training/ar_native/` | `example/base/native/train_ar.py` | 行2 base | ✅ 已细化 |
-| 5 | `diffusion/` corruption + scheduler | `example/base/*/a2d_minimind.py` | 三格方法 | 待写 |
-| 6 | `diffusion/loss.py` | 同上 + `test/04` | 三格方法 | 待写 |
-| 7 | `diffusion/sampler.py` | 同上 | 三格方法 | 待写 |
+|5|`diffusion/` corruption + scheduler|`example/base/*/a2d_minimind.py`|三格方法|✅ 已细化|
+|6|`diffusion/loss.py`|同上 + `test/04`|三格方法|✅ 已细化|
+|7|`diffusion/sampler.py`|同上|三格方法|✅ 已细化|
 | 8 | `training/a2d_minimind/` | `example/base/*/a2d_minimind.py` | MiniMind-A2D 列 | 待写 |
 | 9 | `training/a2d_dllm/` | `example/base/*/a2d_dllm.py` | dLLM-A2D 列 | 待写 |
 | 10 | `training/direct_dlm/` | `example/base/*/direct_dlm.py` | Direct-DLM 列 | 待写 |
