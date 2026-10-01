@@ -20,18 +20,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import torch
-
 from common import config as C
 from common.cell import finish_cell
 from common.cli import add_common_args, resolve
 from common.ckpt import load_into, load_state_dict
 from common.loop import Loop
 from common.losses import ar_loss
-from common.verify import verify_checkpoint
-from base.hf.model import CELL as HF_CELL, build_model as build_hf
-from base.native.model import (CELL, METHOD, build_native_model, sample_native)
-from base.native.model import BASE
+from common.verify import logits_delta, verify_checkpoint
+from base.hf.model import build_model as build_hf
+from base.native.model import (BASE, CELL, METHOD, build_native_model,
+                                  sample_native)
 
 CKPT = C.cell_dir("qwen-mini/minimind-ar-example")
 HF_CKPT = C.cell_dir("qwen-mini/hf-ar-example")
@@ -76,12 +74,7 @@ def main() -> int:
             load_into(native, load_state_dict(HF_CKPT))
             hf = build_hf(C.TIER0, seed=0).to(loop.device).float().eval()
             load_into(hf, load_state_dict(HF_CKPT))
-            worst = 0.0
-            for idx in eval_batches:
-                batch = data.batch(idx).to(loop.device)
-                with torch.no_grad():
-                    worst = max(worst, float((native(batch).logits
-                                              - hf(batch).logits).abs().max()))
+            worst = logits_delta(native, hf, data, eval_batches, loop.device)
             passed = worst <= 1e-5
             print(f"  C1  {'OK' if passed else 'FAIL'}  hf-ar-example vs minimind-ar-example"
                   f"  max|dlogit| {worst:.2e}  (tol 1e-5)")
