@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import argparse
 import math
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -263,7 +265,86 @@ def decode_bench(args) -> dict:
             "ms_per_forward_ours": round(ours / forwards, 2)}
 
 
-CHECKS = {"c1": c1, "c2": c2, "c5": c5}
+def c3(args) -> dict:
+    """Same as C2, on the native base. C2 and C3 together show the loss does not
+    care which implementation of the model it drives."""
+    from common.a2d import a2d_loss, corrupt, sample_t
+    from base.hf.a2d_dllm import DLLMLoss
+    from base.native.a2d_dllm import make_dllm_loss
+    from base.native.a2d_minimind import build_bidirectional, native_forward
+
+    if not (NATIVE_AR / "model.safetensors").exists():
+        return {"status": "SKIP", "detail": "no native AR checkpoint; run cell 2"}
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    nat = build_bidirectional(0).to(device).float().eval()
+    load_into(nat, load_state_dict(NATIVE_AR))
+
+    data, batches = _eval_batches(batch=args.batch_size)
+    batch = data.batch(batches[0]).to(device)
+    b = batch.shape[0]
+    eps = 1e-3
+
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    t = sample_t(b, device, epsilon=eps)
+    x_t, masked = corrupt(batch, t, C.MASK)
+    with torch.no_grad():
+        ours = a2d_loss(native_forward(nat)(x_t), batch, masked, t)
+
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    theirs = make_dllm_loss(nat, epsilon=eps)(nat, batch)[0].detach()
+
+    rel = abs(float(ours) - float(theirs)) / max(abs(float(theirs)), 1e-9)
+    return {"status": "PASS" if rel < 0.01 else "FAIL", "rel_diff": rel,
+            "loss_ours": float(ours), "loss_dllm": float(theirs), "tol": 0.01}
+
+
+def c4(args) -> dict:
+    """`N steps` must equal `M + resume + (N-M)`, step for step.
+
+    Runs on the real Tier 0 model, not a toy: the toy in test_common.py passes
+    and still missed this once, because the resumed run restarted the epoch's
+    batch order and nothing raised.
+    """
+    import dataclasses
+
+    from common.data import BlockStream
+    from common.loop import Loop
+    from common.losses import ar_loss
+    from base.hf.model import build_model as build_hf
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    cfg = dataclasses.replace(C.AR_TRAIN, steps=args.steps, log_every=10 ** 9)
+    data = build_packed(C.DATA_DIR, block_size=C.BLOCK_SIZE, max_blocks=4096)
+
+    straight = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, ar_loss, device=device)
+    straight.fit(data)
+
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        part = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, ar_loss, device=device)
+        # max_steps, not a smaller cfg.steps: changing steps changes the cosine
+        # schedule and the two runs stop being comparable (this bit me twice).
+        part.fit(data, max_steps=args.steps - 10)
+        part.save(tmp, {})
+
+        cont = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, ar_loss, device=device)
+        stream = BlockStream(len(data), cfg.batch_size, cfg.seed)
+        cont.load(tmp, stream=stream)
+        cont.fit(data, stream=stream)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    worst = max((abs(a - b) for a, b in zip(straight.losses, cont.losses)), default=0.0)
+    same_len = len(straight.losses) == len(cont.losses) == args.steps
+    return {"status": "PASS" if worst == 0.0 and same_len else "FAIL",
+            "worst_step_delta": worst, "steps": args.steps,
+            "matched": same_len}
+
+
+CHECKS = {"c1": c1, "c2": c2, "c3": c3, "c4": c4, "c5": c5}
 EXTRAS = {"decode-bench": decode_bench}
 
 
@@ -273,6 +354,8 @@ def main() -> int:
     ap.add_argument("check", choices=[*CHECKS, *EXTRAS, "all"])
     ap.add_argument("--tol", type=float, default=TOL)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--steps", type=int, default=40,
+                    help="training steps for c4 (must be >= 10)")
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--random", action="store_true", help="compare freshly initialised weights")
     ap.add_argument("--layer-report", action="store_true",
