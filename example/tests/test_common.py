@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common import config as C
 from common.ckpt import load_state_dict, save_model
-from common.data import BlockStream, build_packed
+from common.data import BlockStream, PackedData, build_packed
 from common.loop import Loop
 from common.metrics import TpsMeter, loss_windows, repetition_rates
 from common.model import build_qwen3_config, count_params
@@ -210,9 +210,7 @@ class TinyLM(torch.nn.Module):
         return self.head(self.emb(x))
 
 
-def _tiny_data(n_blocks: int = 64, block: int = 8) -> "object":
-    from common.data import PackedData
-
+def _tiny_data(n_blocks: int = 64, block: int = 8) -> PackedData:
     g = torch.Generator().manual_seed(3)
     blocks = torch.randint(0, TINY_VOCAB, (n_blocks, block), generator=g, dtype=torch.int32)
     return PackedData(blocks=blocks, n_docs=n_blocks, n_tokens=n_blocks * block,

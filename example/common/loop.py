@@ -66,6 +66,9 @@ class Loop:
         amp: str = "bfloat16",
         require_cuda: bool = True,
     ):
+        """NOTE: parameter initialisation is *not* seeded here -- the model is
+        already built by the time this runs. Callers that compare two runs must
+        seed before constructing the model (see _make_loop in the test)."""
         self.model = model
         self.cfg = cfg
         self.loss_fn = loss_fn
@@ -96,6 +99,7 @@ class Loop:
         self.model.train()
         n_tokens = self.cfg.batch_size * data.block_size
         limit = self.cfg.steps if max_steps is None else min(self.cfg.steps, self.step + max_steps)
+        extra: dict = {}
 
         while self.step < limit:
             idx = stream.next()
@@ -156,7 +160,9 @@ class Loop:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         (self.out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
         with (self.out_dir / "metrics.csv").open("w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(self.rows[0].keys()))
+            writer = csv.DictWriter(fh, fieldnames=list(self.rows[0].keys()) if self.rows
+                                    else ["step", "loss", "lr", "tokens",
+                                          "train_only_tps", "wall_tps"])
             writer.writeheader()
             writer.writerows(self.rows)
 

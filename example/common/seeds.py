@@ -7,6 +7,7 @@ device selection *prints* what it picked and `require_cuda` makes it fatal.
 from __future__ import annotations
 
 import random
+from contextlib import nullcontext
 
 import numpy as np
 import torch
@@ -68,7 +69,5 @@ def autocast(device: torch.device, name: str = "bfloat16"):
     these step counts); only the matmuls run in bf16.
     """
     if device.type != "cuda" or name == "float32":
-        from contextlib import nullcontext
-
         return nullcontext()
     return torch.autocast(device_type="cuda", dtype=_DTYPES[name])

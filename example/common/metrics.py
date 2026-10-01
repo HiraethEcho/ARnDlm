@@ -26,9 +26,6 @@ class TpsMeter:
         self.train_seconds = 0.0
         self._wall_start = time.perf_counter()
 
-    def restart_wall(self) -> None:
-        self._wall_start = time.perf_counter()
-
     def add(self, tokens: int, train_seconds: float) -> None:
         self.tokens += tokens
         self.train_seconds += train_seconds

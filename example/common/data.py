@@ -19,8 +19,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 
+from . import config as C
 from .config import BOS, EOS, DATA_DIR
 
 
@@ -38,19 +38,6 @@ class PackedData:
     def batch(self, idx: torch.Tensor) -> torch.Tensor:
         """Gather rows and cast to int64 once, at batch level."""
         return self.blocks[idx].long()
-
-
-class PackedDataset(Dataset):
-    """Thin wrapper so the tests and the native row share one __getitem__ shape."""
-
-    def __init__(self, blocks: torch.Tensor):
-        self.blocks = blocks
-
-    def __len__(self) -> int:
-        return int(self.blocks.shape[0])
-
-    def __getitem__(self, i: int) -> torch.Tensor:
-        return self.blocks[i]
 
 
 def _load(prepared_dir: Path):
@@ -110,6 +97,10 @@ def build_packed(
     128-wide blocks are 512 B each, so 100k blocks is ~50 MB.
     """
     meta, tokens, lengths = _load(Path(prepared_dir))
+    if meta.get("vocab_size") != C.VOCAB:
+        # A corpus tokenized with a different BPE would index the embedding
+        # wrongly, and the only symptom would be a mysteriously high loss.
+        raise ValueError(f"{prepared_dir}: vocab {meta.get('vocab_size')} != {C.VOCAB}")
     if val_frac > 0:
         n_val = int(lengths.shape[0] * val_frac)
         train_lengths = lengths[:-n_val] if n_val else lengths
