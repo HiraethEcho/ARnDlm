@@ -19,7 +19,7 @@ A 版在 `example/` 全部跑通之前，这些步骤只是骨架；跑通一个
 | 7 | `diffusion/sampler.py` | 同上 | 三格方法 | ✅ 已细化 |
 | 8 | `training/a2d_minimind/` | `example/base/*/a2d_minimind.py` | MiniMind-A2D 列 | ✅ 已细化 |
 | 9 | `training/a2d_dllm/` | `example/base/*/a2d_dllm.py` | dLLM-A2D 列 | ✅ 已细化 |
-| 10 | `training/direct_dlm/` | `example/base/*/direct_dlm.py` | Direct-DLM 列 | 待写 |
+| 10 | `training/direct_dlm/` | `example/base/*/direct_dlm.py` | Direct-DLM 列 | ✅ 已细化 |
 | 11 | `evaluation/` | `example/common/metrics.py` + 各格采样 | 全部 | 待写 |
 | 12 | Qwen3-0.6B LoRA 两格 | `example/base/qwen3_0p6b/` | 行3 两格 | 待写 |
 | 13 | Tier 1 定档 | `logs/dev/02-hardware-perf.md` | 收尾 | 待写 |
