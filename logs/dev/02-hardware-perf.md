@@ -225,6 +225,11 @@ Qwen3-0.6B @ B2 已经占 9.9GB, 大模型才考虑。
 多轮实测 (test/08-train-step-bench.py, 双向 attention)。
 **run-to-run 方差可达 ±20%** —— 小矩阵和短 benchmark 尤其不稳。
 
+> ⚠️ **2026-10-01 补充: ±20% 只在「卡真的空着」时成立。**
+> 这张 880M 是核显, 桌面合成器 (niri + Brave) 和另一个 pi 会话都共享它。
+> 实测同一配置三次跑出 8,824 / 6,054 / 3,251 tok/s —— **2.7 倍离散度**。
+> 测之前先确认没有别的 GPU 任务, 详见 `01-local-state.md` 的「吞吐冒烟测试」。
+
 ```
 模型                        params    tok/s    20M tok   peakGB
 minimind-3  H768 L8  V6400   64M      3,700-4,700   70-90m   4.6

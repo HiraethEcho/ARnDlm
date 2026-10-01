@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PREPARED = ROOT / "data" / "prepared" / "minimind3-6400"
-TOKENIZER = ROOT / "src" / "base" / "tokenizer.json"
+TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
 
 BOS, EOS = 1, 2
 

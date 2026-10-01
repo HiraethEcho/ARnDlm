@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TOKENIZER = ROOT / "src" / "base" / "tokenizer.json"
+TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
 
 # 训练循环按 id 引用这些 token。写死在这里 = tokenizer 一改就 FAIL,
 # 不会静默用错 id。

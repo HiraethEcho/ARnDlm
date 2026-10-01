@@ -70,16 +70,23 @@ seq_len。这四个数是耦合的。
 ├── data/
 │   ├── raw/
 │   │   ├── pretrain_t2t_mini.jsonl   1.24 GB
-│   │   └── sft_t2t_mini.jsonl        1.74 GB
-│   └── prepared/minimind3-6400/
-│       ├── tokens.bin         665 MB, uint16, 332,495,324 token
-│       ├── doc_lengths.npy    int32, (1270238,) mean 261.8 max 11802
-│       └── meta.json          vocab_size=6400, n_docs=1270238,
-│                              total_tokens=332495324, val_frac=0.01
+│   │   ├── sft_t2t_mini.jsonl        1.74 GB
+│   │   ├── minimind_dataset/         ← 2026-10-01 加, 11 个 jsonl + 2 个 symlink
+│   │   ├── tinystories.jsonl         8.7 MB, 10,000 篇
+│   │   ├── openwebtext.jsonl         48.6 MB, 10,000 篇
+│   │   └── wikipedia-zh.jsonl        36.1 MB, 10,000 篇
+│   └── prepared/
+│       ├── minimind3-6400/           主实验数据 (SPEC 3.3)
+│       ├── minimind-subsets/         之前切的分片, 当前无 pipeline 引用
+│       ├── tinystories-6400/         3,110,358 tok / 10,000 docs
+│       ├── openwebtext-6400/         17,174,450 tok / 10,000 docs
+│       └── wikipedia-zh-6400/        38,571,096 tok / 10,000 docs
 ├── ckpt/                      checkpoints/ 链到这里
 ├── hf/hub/
 │   ├── models--Qwen--Qwen3-0.6B/       T2c 的目标, 已下载
-│   └── datasets--openai--gsm8k/
+│   ├── datasets--openai--gsm8k/
+│   ├── datasets--roneneldan--TinyStories/
+│   └── datasets--jingyaogong--minimind_dataset/   hf_hub_download 的 cache
 └── LAYOUT.md
 ```
 
@@ -192,6 +199,178 @@ pin 的是 `4.2.0`。已验证压回 4.2.0 后 `trl` 和 `dllm` 都照常 import
   会报 `ImportError: Can't determine version for bottleneck`。
   **别在 `/tmp` 里直接跑 python。**
 
+## 数据集补齐 (2026-10-01)
+
+### `datasets` 4.2.0 在本机彻底不可用
+
+`load_dataset(streaming=True)` 直接报:
+
+```
+TypeError: Pickler._batch_setitems() takes 2 positional arguments but 3 were given
+```
+
+`.venv` 里是 `dill 0.4.0`, 而 `datasets` 4.2.0 还在用 dill<0.3.9 的旧签名。
+**不动 pin** (dill 降级会连带动 `datasets`/`trl` 的解析), 改走
+`scripts/download_data.py --backend parquet`: `hf_hub_download` 拉 parquet 分片
++ `pyarrow` 流式读列。实测三个数据集全部走通, `--backend auto` 会先试
+`datasets` 再白屏报错回退到 parquet。
+
+### minimind_dataset 全量下载 —— 已完成, 大小逐个对齐
+
+`scripts/download_minimind.py` (新) → `data/raw/minimind_dataset/`,
+共 22 GiB 磁盘占用, 11 个 `.jsonl` 全部下载成功。
+**每个文件的字节数与 HF `repo_info(siblings[].size)` 逐个比对一致**,
+无 `.incomplete` / `.lock` 残留, 前 2000 行 JSON 全部可解析。
+
+```
+agent_rl.jsonl        82,036,930     2,001+ 行
+agent_rl_math.jsonl   18,372,683     2,001+
+dpo.jsonl             53,653,322     17,166
+lora_exam.jsonl       24,650,716     2,001+
+lora_identity.jsonl        22,789        91
+lora_medical.jsonl     34,002,385     2,001+
+pretrain_t2t.jsonl  8,275,074,893     8,468,827
+rlaif.jsonl           23,754,740     19,502
+sft_t2t.jsonl     14,096,018,369     5,109,432
+pretrain_t2t_mini.jsonl -> ../pretrain_t2t_mini.jsonl   (symlink)
+sft_t2t_mini.jsonl      -> ../sft_t2t_mini.jsonl        (symlink)
+```
+
+`data/raw/` 下已有的 `pretrain_t2t_mini.jsonl` / `sft_t2t_mini.jsonl`
+**用 symlink 接进新目录而不是重下** —— `prepared/minimind3-6400/meta.json`
+记录的 `source_file` 指向原路径, 重下会让两份同 sha 文件并存。
+
+实测下载速度约 **6.6 MB/s** (24.5 GiB 用了 ~63 min)。hf-mirror 是这个速度,
+按它估算: 单看 `sft_t2t.jsonl` 14 GiB 就要 ~36 min。
+
+**下次长下载不要挂 subagent**: `dl-minimind` 跑了 63 min 后被 provider
+abort (`opencode/space-bunny-free` 超时/中断), 子进程一起没了, 结果也没
+返还。而 `hf_hub_download` 本身断点续传, 重跑就接上 —— 长任务应该由主会话
+直接跑 (`ctx_execute` 配长 timeout), 或者分小文件多次跑, 不值得赌 subagent
+能活到最后。
+
+### 对话数据不能直接喂 `prepare_data.py`
+
+`dpo/rlaif/agent_rl/sft_t2t` 是 `conversations` 格式, 没有 `text` 键。
+`read_text()` 会静默跳过 (`if isinstance(text, str)`) —— **不报错, 只是
+0 token**。展平成单条 text 需要 chat template, 属于 B 版实现。
+详见 `notes/06-datasets.md` 第 2 节。
+
+### 6400 BPE 对中文是超标的
+
+实测 `wikipedia-zh` 达到 **1.07 token/char**, 比字符数还多; minimind 混合语料
+1.46 chars/token。选 `max_seq_len` 时必须按 chars/token 换算。
+
+## 吞吐冒烟测试 (2026-10-01)
+
+`scripts/bench_throughput.py` (新)。**第一轮作废, 第二轮 (卡空闲时) 有效。**
+
+### 第一轮: 机器被抢, 结果作废
+
+同配置 (seq=512, batch=16, 28,452,352 参数, bf16, sdpa) 三次独立跑:
+
+| 跑次 | 步数 | train-only tok/s | ms/step |
+|---|---:|---:|---:|
+| sweep | 100 | 8,824 | 928 |
+| repeat a | 400 | 6,054 | 1,353 |
+| repeat c | 400 | **3,251** | **2,520** |
+
+**2.7 倍离散度。** 所以 `02-hardware-perf.md` 里写的
+「run-to-run 方差 ±20%」在这张卡上是错的 —— 那个 ±20% 是卡空闲时测的。
+一旦有别的会话在跑, 方差是 2-3 倍级。
+
+**当时的三方共享方**:
+
+| 共享方 | 证据 |
+|---|---|
+| 桌面合成器 | `niri` + `brave --type=gpu-process` 常驻 (PID 357557) |
+| **另一个 pi 会话** | PID 354003, 14:44 启动, cwd 同样是 `/home/revo/Projects/ARnDlm` |
+| 本会话自己的编译 | 前 ~25 步落在预热相里 |
+
+`rocm-smi` 在测量期间报 `GPU use 1%` 但 `VRAM 93%` 且 `No KFD PIDs` ——
+即显存被桌面端占着而当前没有计算进程。**「没进程」不等于「卡是空的」。**
+复测前 `GPU use 0%`, 离散度就降到 1.4%。
+
+### 第二轮: 有效结果
+
+模型: `Qwen3ForCausalLM`, hidden 512 · 8 层 · Q8/KV4 · head_dim 64 ·
+inter 1536 · vocab 6400 · tied embedding = **28,452,352 参数**。
+数据 `prepared/minimind3-6400`, packing 定长块零 padding, bf16 + AdamW + sdpa,
+不开 gradient checkpointing。计时只包 forward+loss+backward+step,
+两侧 `torch.cuda.synchronize()`, warmup 50 步丢弃。
+
+| seq/batch | 跑次 | train-only tok/s | wall tok/s | ms/step | final_loss | peak GB |
+|---|---:|---:|---:|---:|---:|---:|
+| 512/16 | a | 7,748 | 6,903 | 1057.2 | 5.5486 | 2.69 |
+| 512/16 | b | 7,583 | 6,724 | 1080.3 | 5.5486 | 2.69 |
+| 512/16 | d | 7,793 | 6,893 | 1051.2 | 5.5486 | 2.69 |
+| 512/8 | c | 7,932 | 7,025 | 516.4 | 6.0373 | 1.45 |
+
+**512/16 三次离散度 1.4%** (7583-7793)。`peak_gb` 随 batch 线性 (1.45 → 2.69)。
+
+### 结论
+
+| 项 | 实测 |
+|---|---|
+| 稳态吞吐 (28.45M, seq 512) | **≈ 7,700 tok/s** |
+| 跑完 332M token (minimind3-6400) | **11.9 h** |
+| 跑 20M token | 43 min |
+
+1. **batch 8 和 16 吞吐一样** (7932 vs 7708, 差 2.8% 在噪声内)。
+   ms/step 精确翻倍 (516 → 1055) → 加 batch 只加开销不加算力。
+   与 `02-hardware-perf.md` 里「B>8 无收益」一致, 现在在本机复现。
+   → **batch 取 8**, 显存少一半, 吞吐不亏。
+2. 这 7,700 不能和老项目的 3,700-4,700 直接比 —— 老数字是双向 attention +
+   64M 参数 + 可能有其他负载, 三个变量都不同。
+3. `final_loss` 三次完全相同 (5.5486) —— 计算路径确定, 变的只是墙钟。
+
+### 还没测的 (不能下结论的部分)
+
+| 问题 | 状态 |
+|---|---|
+| 哪个 kernel 慢 (attention fwd/bwd 逐项) | ❌ 本轮只报整体 |
+| 换 SDPA backend 有没有用 | ❌ |
+| packing vs padding 的 1.71x | ❌ 没测对照组 |
+| 跨文档 attention 污染 | ❌ packing 直接首尾相接, 无 attention 隔离 |
+| 参数量扫描 (28M → 51M → 更大) | ❌ 只测了 28M 一个点 |
+
+### 脚本自身的 bug (已修)
+
+1. **sweep 在一个进程里跑所有配置**, `max_memory_allocated()` 从没重置
+   → `peak_gb` 单调递增 (0.52 → 5.15), 全是假的。修法: 每个配置前
+   `reset_peak_memory_stats()`。
+2. **warmup=25 不够**, 前 ~25 步落在编译/预热相。修法: 默认提到 50 步。
+
+### 测吞吐前的 checklist
+
+1. `rocm-smi --showuse` 确认 `GPU use` 接近 0%;
+2. 确认没有别的 GPU 任务 (另一个 pi 会话 / 浏览器 GPU 进程);
+3. 同一配置跑 **3 次** 报离散度, 不是跑一次;
+4. warmup ≥ 50 步;
+
+### test/01 · test/02 的 tokenizer 路径已修 (2026-10-01)
+
+两个脚本都写的是 `ROOT / "src" / "base" / "tokenizer.json"`, 但 scaffold 改版后
+tokenizer 已经搬到根目录 `tokenizer/tokenizer.json` —— `src/` 目录不存在。
+两个脚本都会在 `Tokenizer.from_file` 处报「找不到文件」。
+
+**这类错误危险在于它发生在验证环节**: 测试全绿给人「数据管线验过了」的错觉,
+实际上一次都没跑通。修的是路径常量, 不改验证逻辑。修后两个都 PASS:
+
+| test | 结果 |
+|---|---|
+| `01-tokenizer-mask.py` | vocab 6400 · mask id 27 (`<|buffer1|>`) 自然文本 56 token 内不出现 · 往返一致 · **编码速度 1,485k tok/s** |
+| `02-data-pipeline.py` | 332,495,324 token 三文件自洽 · packing T=512 拼 65 篇首尾全 BOS/EOS · PAD 区全 0 · random/median doc decode 通顺 |
+
+**编码 1,485k tok/s vs 训练 7,700 tok/s = 190 倍余量** → 数据组批永远不会成为
+瓶颈, 与 `02-hardware-perf.md` 里旧项目测到的 0.01% 一致。`--num_workers`
+在这套配置下可以直接不管。
+
+⚠️ `test/02` 验的是 **token 排列** (BOS/EOS/PAD 位置), **不验 attention 隔离**。
+packing 把多篇文档首尾相接时没有 document mask, 模型能看见上一篇的尾巴 ——
+与 MiniMind 的做法一致, 但对 DLM 的 block 去噪可能有影响, 还没验。见上表
+「还没测的」。
+
 ## 项目当前进度
 
 **scaffold 已建并提交 (`1ba36ca`), 训练未开始。** `src/` 七个目录全是空的
@@ -205,6 +384,9 @@ pin 的是 `4.2.0`。已验证压回 4.2.0 后 `trl` 和 `dllm` 都照常 import
   notes/{01,02,03-minimind-dlm,04,05}
   logs/{dev,run}/.gitkeep
   scripts/{setup_env.sh, setup_symlinks.sh, install_dllm.sh, plot.py}
+  scripts/download_data.py            (加了 parquet backend)
+  scripts/download_minimind.py        (新, minimind_dataset 全量)
+  scripts/prepare_data.py
   example/README.md                      (A/B 契约, 代码待 T1a/T2a)
   test/{README.md, 01..05}               5 个全部冒烟通过
   src/{base,utils,transformer,minimind,a2d,dllm-a2d,dllm}/__init__.py
@@ -213,6 +395,10 @@ pin 的是 `4.2.0`。已验证压回 4.2.0 后 `trl` 和 `dllm` 都照常 import
 
 **没做**: `configs/` 只有 base.yaml · `src/` 没有任何实现 ·
 没训过任何模型 · 没测过吞吐。
+
+**数据已就位**: minimind3-6400 (332M tok, 主实验) +
+tinystories/openwebtext/wikipedia-zh 各 10,000 篇已 tokenize;
+minimind 全量 11 个 jsonl / 22 GiB 下载完成并校验。
 
 ## 下一步
 
