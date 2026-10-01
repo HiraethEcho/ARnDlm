@@ -243,7 +243,9 @@ def sample_native(model: NativeQwen3ForCausalLM, prompts=PROMPTS, max_new_tokens
         generated: list[int] = []
         for _ in range(max_new_tokens):
             window = prefix[:, -max_context:]
-            logits = model(window).logits[0, -1].float()
+            # is_causal=True explicitly: this is AR sampling, and the model
+            # object may have been switched to bidirectional for an A2D cell.
+            logits = model(window, is_causal=True).logits[0, -1].float()
             if temperature <= 0:
                 nxt = int(logits.argmax())
             else:
@@ -259,7 +261,3 @@ def sample_native(model: NativeQwen3ForCausalLM, prompts=PROMPTS, max_new_tokens
     return {"prompts": list(prompts), "ids": ids, "texts": texts,
             "params": {"max_new_tokens": max_new_tokens, "temperature": temperature,
                        "top_k": top_k, "kv_cache": False}}
-
-
-def head_dim(cfg: ModelCfg) -> int:
-    return math.floor(cfg.hidden_size / cfg.num_heads)

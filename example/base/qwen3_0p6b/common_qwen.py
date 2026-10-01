@@ -59,7 +59,7 @@ def build_a2d_lora(seed: int = 42, trainable: str = "all"):
     import dllm
     from dllm.pipelines.a2d import A2DQwen3Config
     from peft import LoraConfig, get_peft_model
-    from transformers import AutoConfig
+    from transformers import AutoConfig, AutoModelForCausalLM
 
     from common.seeds import seed_all
 
@@ -67,10 +67,26 @@ def build_a2d_lora(seed: int = 42, trainable: str = "all"):
     target = A2DQwen3Config(**{k: v for k, v in cfg.to_dict().items()
                                if k != "model_type"})
     seed_all(seed)
+
+    # Load the *pretrained* Qwen3-0.6B weights, then convert. Building the A2D
+    # model straight from the config gives a randomly initialised 600M backbone,
+    # and LoRA on top of that is a 600M-parameter scratch run wearing a LoRA
+    # costume -- it looks identical in the parameter census and trains fine.
+    source = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.float32)
+    state = source.state_dict()
+    pretrained_embedding = state["model.embed_tokens.weight"].clone()
     model = dllm.pipelines.a2d.A2DQwen3LMHeadModel(target)
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    missing = [k for k in missing if k not in ("lm_head.weight",)]   # tied alias
+    if missing or unexpected:
+        raise RuntimeError(f"Qwen3 weights did not transfer: "
+                           f"missing={missing[:5]} unexpected={unexpected[:5]}")
+    del source, state
 
     tokenizer = load_tokenizer()
     model.resize_token_embeddings(len(tokenizer))     # adds the MASK row
+    assert torch.equal(model.get_input_embeddings().weight[:-1],
+                       pretrained_embedding[:-1]), "resize must keep loaded rows"
 
     modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
     if trainable == "qk":

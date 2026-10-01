@@ -43,7 +43,12 @@ def verify_checkpoint(ckpt_dir: Path | str, build_fn, live_model: torch.nn.Modul
     except RuntimeError as exc:
         return {"ok": False, "reason": str(exc)}
 
+    # The live model is only a reference: do not leave it moved to another
+    # device, cast, or stuck in eval mode for whatever the caller does next.
+    was_training = live_model.training
     live = live_model.to(device).float().eval()
     delta = logits_delta(fresh, live, data, batches, device)
+    if was_training:
+        live_model.train()
     return {"ok": delta <= 1e-5, "max_logit_delta": delta,
             "tensors": report["tensors"], "aliased_tied": report["aliased_tied"]}

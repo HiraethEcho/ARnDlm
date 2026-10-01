@@ -144,6 +144,15 @@ def section_sampler() -> None:
     filt = top_k_filter(torch.tensor([[1.0, 5.0, 2.0, 7.0]]), 2)
     check("top_k keeps k and masks the rest",
           torch.isinf(filt[0, 0]) and float(filt[0, 1]) == 5.0, str(filt.tolist()))
+    supp = top_k_filter(torch.tensor([[1.0, 5.0, 2.0, 7.0]]), 0, suppress=1)
+    check("suppress forbids a specific id", torch.isinf(supp[0, 1]), str(supp.tolist()))
+
+    # A masked position must never be "revealed" as MASK: the budget would be
+    # spent without changing the sequence and the loop could exit still masked.
+    forced = torch.full((1, 1, C.VOCAB), -1e4)
+    forced[0, 0, C.MASK] = 50.0                      # model's best guess is MASK
+    tok, _ = gumbel_argmax(top_k_filter(forced, 50, suppress=C.MASK), 0.0)
+    check("MASK cannot be sampled", int(tok) != C.MASK, f"token {int(tok)}")
     lg = torch.tensor([[0.1, 0.9, 0.3]])
     token, conf = gumbel_argmax(lg, temperature=0.0)
     want = torch.softmax(lg, dim=-1).max()

@@ -79,26 +79,39 @@ def gumbel_argmax(logits: torch.Tensor, temperature: float = 1.0,
     (notes/03 §7). temperature=0 degenerates to argmax. `generator` makes the
     draw reproducible, which C2 needs when two implementations sample the same
     prompt. Note a CUDA tensor needs a CUDA generator.
+
+    Always float32, even when the logits are bf16: `rand` at bf16 can round u
+    to exactly 1.0, and `-log(-log(1.0))` is +inf, which would hand every
+    surviving candidate an infinite perturbation.
     """
     if temperature <= 0:
-        conf, token = F.softmax(logits, dim=-1).max(dim=-1)
+        conf, token = F.softmax(logits.float(), dim=-1).max(dim=-1)
         return token, conf
-    # float32, not float64: the float64 draw measured 0.93 ms against 1.25 ms
-    # for the whole forward at Tier 0, so it was ~40% of decode time for no
-    # accuracy benefit at these magnitudes.
-    u = torch.rand(logits.shape, device=logits.device, dtype=logits.dtype,
+    u = torch.rand(logits.shape, device=logits.device, dtype=torch.float32,
                    generator=generator).clamp_(1e-20, 1.0)
     gumbel = -torch.log(-torch.log(u))
-    perturbed = logits / temperature + gumbel
+    perturbed = logits.float() / temperature + gumbel
     token = perturbed.argmax(dim=-1)
     # Confidence has to be the model's actual probability of the token it
     # committed to, not the perturbed score -- otherwise the reveal order is
     # driven by the noise and not by the model.
-    confidence = F.softmax(logits, dim=-1).gather(-1, token.unsqueeze(-1)).squeeze(-1)
+    confidence = F.softmax(logits.float(), dim=-1).gather(
+        -1, token.unsqueeze(-1)).squeeze(-1)
     return token, confidence
 
 
-def top_k_filter(logits: torch.Tensor, top_k: int) -> torch.Tensor:
+def top_k_filter(logits: torch.Tensor, top_k: int,
+                  suppress: int | tuple | None = None) -> torch.Tensor:
+    """Keep the k best candidates; optionally forbid specific ids outright.
+
+    `suppress` matters: MASK lives inside the vocabulary, so a masked position
+    can sample MASK, "reveal" it, and burn one unit of the reveal budget while
+    the position stays masked. The loop would then exit with MASK in the output.
+    """
+    if suppress is not None:
+        ids = (suppress,) if isinstance(suppress, int) else tuple(suppress)
+        logits = logits.clone()
+        logits[..., list(ids)] = -float("inf")
     if not top_k or top_k >= logits.shape[-1]:
         return logits
     kth = torch.topk(logits, top_k, dim=-1).values[..., -1, None]
@@ -109,6 +122,7 @@ def top_k_filter(logits: torch.Tensor, top_k: int) -> torch.Tensor:
 def sample_dlm(logits_fn, prompt_ids: torch.Tensor, gen_len: int, *,
                mask_id: int = MASK, block_size: int = 8, steps: int = 8,
                temperature: float = 0.3, top_k: int = 50,
+               max_context: int | None = None,
                generator: torch.Generator | None = None) -> torch.Tensor:
     """Block-wise confidence decoding (notes/03 §5).
 
@@ -129,6 +143,12 @@ def sample_dlm(logits_fn, prompt_ids: torch.Tensor, gen_len: int, *,
     device = prompt_ids.device
     prompt_len = prompt_ids.shape[1]
     total = prompt_len + gen_len
+    if max_context is not None and total > max_context:
+        # Every step feeds the whole sequence, so exceeding the context is not a
+        # truncation the model can absorb -- RoPE positions run past the trained
+        # range. Fail loudly instead of emitting plausible-looking garbage.
+        raise ValueError(f"prompt {prompt_len} + gen {gen_len} exceeds "
+                         f"max_context {max_context}")
     x = torch.cat([prompt_ids,
                    torch.full((prompt_ids.shape[0], gen_len), mask_id,
                               device=device, dtype=prompt_ids.dtype)], dim=1)
@@ -139,8 +159,14 @@ def sample_dlm(logits_fn, prompt_ids: torch.Tensor, gen_len: int, *,
         remaining = [end - start] * x.shape[0]
         steps_left = steps
         while steps_left > 0 and max(remaining) > 0:
-            logits = top_k_filter(logits_fn(x), top_k)
-            token, confidence = gumbel_argmax(logits, temperature, generator)
+            full_logits = logits_fn(x)
+            # Sample from the truncated distribution, but score confidence on the
+            # untouched logits: top-k renormalises inside the surviving
+            # candidates, which would reorder positions whose top-k mass differs.
+            token, _ = gumbel_argmax(top_k_filter(full_logits, top_k, suppress=mask_id),
+                                     temperature, generator)
+            confidence = F.softmax(full_logits.float(), dim=-1).gather(
+                -1, token.unsqueeze(-1)).squeeze(-1)
 
             for b in range(x.shape[0]):
                 if remaining[b] == 0:

@@ -60,8 +60,9 @@ def sample_lora_dlm(model, tokenizer, prompt_ids, gen_len: int, *, mask_id: int,
                          steps=steps, temperature=temperature, top_k=top_k)
         generated = out[0, x.shape[1]:]
         if tokenizer.eos_token_id in generated:
-            cut = generated.index(tokenizer.eos_token_id)
-            generated = generated[:cut]
+            # generated is a tensor: list.index() does not exist on it.
+            hit = (generated == tokenizer.eos_token_id).nonzero()
+            generated = generated[: int(hit[0])] if hit.numel() else generated
         ids.append(generated.tolist())
         texts.append(tokenizer.decode(generated, skip_special_tokens=True))
     return {"prompts": ["<fixed prompt 1>", "<fixed prompt 2>"], "ids": ids,
