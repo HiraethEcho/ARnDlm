@@ -19,13 +19,19 @@ METHOD = "Direct-DLM"
 
 
 def make_direct_loss(model, generator: torch.Generator | None = None,
-                     epsilon: float = 0.0):
-    """The MDLM objective. `epsilon` > 0 reproduces dllm's t range (for C2)."""
+                     epsilon: float = 0.0, logits_fn=None):
+    """The MDLM objective. `epsilon` > 0 reproduces dllm's t range (for C2).
+
+    `logits_fn` lets the native row reuse this objective with its own
+    bidirectional forward instead of the transformers 4D-mask one.
+    """
+    logits_fn = logits_fn or dlm_forward(model)
+
     def loss_fn(model, batch: torch.Tensor):
         t = sample_t(batch.shape[0], batch.device, generator, epsilon=epsilon)
         t_safe = t.clamp_min(1e-3)          # 1/t at t~0 would explode
         x_t, masked = corrupt(batch, t, C.MASK, generator)
-        return a2d_loss(dlm_forward(model)(x_t), batch, masked, t_safe), {
+        return a2d_loss(logits_fn(x_t), batch, masked, t_safe), {
             "t_mean": float(t.mean())}
     return loss_fn
 

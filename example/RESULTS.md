@@ -11,3 +11,6 @@ Tier 0 · 200 steps · tinystories-6400 · 只验 pipeline，不看模型能力�
 | hf-minimind-a2d-example | Qwen-mini-HF | MiniMind-DLM-A2D | 3213056 | 200 | 5.8107 -> 5.2759 | 45,304 | 39,295 | 4.9723 | 0.5172 | from hf-ar-example, A2D lr 1e-04 |
 | hf-dllm-a2d-example | Qwen-mini-HF | dLLM-A2D | 3213056 | 200 | 5.7631 -> 5.2761 | 27,233 | 25,746 | 4.9765 | 0.0000 | from hf-ar-example, dllm MDLMTrainer, block 8, steps 8 |
 | hf-direct-dlm-example | Qwen-mini-HF | Direct-DLM | 3213056 | 200 | 8.4999 -> 5.8585 | 45,168 | 40,394 | 5.6427 | 0.7931 | random init, lr 3e-04, block 8, steps 8 |
+| native-minimind-a2d-example | Qwen-mini-MiniMind | MiniMind-DLM-A2D | 3213056 | 200 | 5.7642 -> 5.2846 | 47,491 | 42,203 | 4.9692 | 0.4655 | from minimind-ar-example, lr 1e-04, block 8, steps 8 |
+| native-dllm-a2d-example | Qwen-mini-MiniMind | dLLM-A2D | 3213056 | 200 | 5.7136 -> 5.2850 | 27,831 | 25,856 | 4.9728 | 0.4828 | from minimind-ar-example, dllm loss on native torch, block 8 |
+| native-direct-dlm-example | Qwen-mini-MiniMind | Direct-DLM | 3213056 | 200 | 8.4655 -> 5.8544 | 47,602 | 42,381 | 5.6351 | 0.6897 | random init, lr 3e-04, block 8, steps 8 |

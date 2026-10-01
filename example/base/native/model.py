@@ -202,7 +202,16 @@ class NativeQwen3ForCausalLM(nn.Module):
         self._last_is_causal = is_causal
 
     def forward(self, input_ids: torch.Tensor,
-                is_causal: bool | None = None) -> CausalLMOutput:
+                is_causal: bool | None = None,
+                attention_mask: torch.Tensor | None = None) -> CausalLMOutput:
+        """Accepts transformers' keyword signature on purpose.
+
+        dllm's MDLMTrainer.compute_loss calls `model(input_ids=...,
+        attention_mask=...)`, so this row can be trained by the same upstream
+        code as row 1. `attention_mask` is accepted and ignored: the native
+        model has no padding to mask, because packing drops the ragged tail
+        instead of padding it.
+        """
         causal = self._last_is_causal if is_causal is None else is_causal
         return CausalLMOutput(logits=self.lm_head(self.model(input_ids, causal)))
 
