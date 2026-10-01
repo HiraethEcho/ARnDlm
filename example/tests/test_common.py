@@ -291,6 +291,10 @@ def section_loop() -> None:
         check("metrics.csv written", (tmp / "straight" / "metrics.csv").exists())
         check("eval loss on frozen batches", s1.get("eval_loss", -1) > 0,
               f"{s1.get('eval_loss')}")
+        check("wall includes eval, train-only does not",
+              s1["throughput"]["wall_tps"] < s1["throughput"]["train_only_tps"],
+              f"train {s1['throughput']['train_only_tps']:,.0f} vs "
+              f"wall {s1['throughput']['wall_tps']:,.0f} tok/s")
 
         # eval_loss must be independent of train/eval mode and of batch order.
         a = straight.eval_loss(data, ev)

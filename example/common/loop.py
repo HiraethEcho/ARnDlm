@@ -106,31 +106,12 @@ class Loop:
         while self.step < limit:
             idx = stream.next()
             batch = data.batch(idx).to(self.device, non_blocking=True)
-
-            lr = _lr_at(self.step, self.cfg)
-            for group in self.opt.param_groups:
-                group["lr"] = lr
-
-            if self.device.type == "cuda":
-                torch.cuda.synchronize()          # exclude queue time from the step
-            t0 = time.perf_counter()
-
-            with autocast(self.device, self.amp):
-                loss, extra = self.loss_fn(self.model, batch)
-            loss.backward()
-            if self.cfg.grad_clip:
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.grad_clip)
-            self.opt.step()
-            self.opt.zero_grad(set_to_none=True)
-
-            if self.device.type == "cuda":
-                torch.cuda.synchronize()
-            step_seconds = time.perf_counter() - t0
+            value, step_seconds, extra = self._train_step(batch)
 
             self.step += 1
-            value = float(loss.detach())
             self.losses.append(value)
             meter.add(n_tokens, step_seconds)      # only the update, never validation
+            lr = self.opt.param_groups[0]["lr"]
             self.rows.append({
                 "step": self.step,
                 "loss": round(value, 6),
@@ -144,23 +125,54 @@ class Loop:
                       f"lr {lr:.2e}  train {meter.train_tps:,.0f} tok/s  "
                       f"wall {meter.wall_tps:,.0f} tok/s", flush=True)
 
+        # Evaluation and sampling run *before* the summary is assembled, so the
+        # wall-clock number includes them while train-only does not. That gap is
+        # the whole point of reporting both (notes/05-measurement.md Bug 1).
+        eval_loss = self.eval_loss(data, eval_batches) if eval_batches is not None else None
+        sample = sample_fn(self) if sample_fn is not None else None
+
         summary = {
             "steps": self.step,
             "tokens": meter.tokens,
             "loss": loss_windows(self.losses, self.cfg.loss_window),
             "throughput": meter.as_dict(),
+            "eval_loss": eval_loss,
+            "sample": sample,
             "peak_gb": (round(torch.cuda.max_memory_allocated() / 1e9, 3)
                         if self.device.type == "cuda" else None),
             "config": as_dict(self.cfg),
             "extra": extra if isinstance(extra, dict) else {},
         }
-        if eval_batches is not None:
-            summary["eval_loss"] = self.eval_loss(data, eval_batches)
-        if sample_fn is not None:
-            summary["sample"] = sample_fn(self)
         if self.out_dir:
             self._write_logs(summary)
         return summary
+
+    def _train_step(self, batch: torch.Tensor) -> tuple[float, float, dict]:
+        """One parameter update. Returns (loss, seconds, loss_fn extras).
+
+        The two `cuda.synchronize()` calls bracket exactly this region: without
+        the first, the timer would include the previous step's queued kernels,
+        and the reported ms/step would drift with queue depth.
+        """
+        lr = _lr_at(self.step, self.cfg)
+        for group in self.opt.param_groups:
+            group["lr"] = lr
+
+        if self.device.type == "cuda":
+            torch.cuda.synchronize()
+        t0 = time.perf_counter()
+
+        with autocast(self.device, self.amp):
+            loss, extra = self.loss_fn(self.model, batch)
+        loss.backward()
+        if self.cfg.grad_clip:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.grad_clip)
+        self.opt.step()
+        self.opt.zero_grad(set_to_none=True)
+
+        if self.device.type == "cuda":
+            torch.cuda.synchronize()
+        return float(loss.detach()), time.perf_counter() - t0, extra
 
     @torch.no_grad()
     def eval_loss(self, data: PackedData, batches) -> float:
