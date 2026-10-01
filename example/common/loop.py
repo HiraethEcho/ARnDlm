@@ -81,6 +81,7 @@ class Loop:
         self.losses: list[float] = []
         self.rows: list[dict] = []
         self.stream: BlockStream | None = None
+        self._stream_state: dict | None = None
         seed_all(cfg.seed)
 
     # ---------------------------------------------------------------- training
@@ -93,7 +94,7 @@ class Loop:
         a smaller `cfg.steps` would do -- acceptance C4 compares `N + resume`
         against one long run, and the two halves must follow the same schedule.
         """
-        stream = stream or BlockStream(len(data), self.cfg.batch_size, self.cfg.seed)
+        stream = stream or self._resume_stream(data)
         self.stream = stream          # remembered so save() cannot save a foreign one
         meter = TpsMeter()
         self.model.train()
@@ -146,6 +147,19 @@ class Loop:
         if self.out_dir:
             self._write_logs(summary)
         return summary
+
+    def _resume_stream(self, data: PackedData) -> BlockStream:
+        """Continue where the checkpoint left off.
+
+        Restoring weights without the batch position replays the first batches
+        of the epoch. It looks like a normal run -- the loss curve just ends up
+        somewhere else -- and it is exactly the divergence C4 exists to catch.
+        """
+        stream = BlockStream(len(data), self.cfg.batch_size, self.cfg.seed)
+        if self._stream_state is not None:
+            stream.load_state(self._stream_state)
+            print(f"[resume] batch stream at epoch {stream.epoch} pos {stream.pos}")
+        return stream
 
     def _train_step(self, batch: torch.Tensor) -> tuple[float, float, dict]:
         """One parameter update. Returns (loss, seconds, loss_fn extras).
@@ -230,9 +244,7 @@ class Loop:
         """
         out_dir = Path(out_dir)
         state = ckpt_io.load_state_dict(out_dir)
-        missing, unexpected = self.model.load_state_dict(state, strict=False)
-        if missing or unexpected:
-            raise RuntimeError(f"state_dict mismatch: missing={missing} unexpected={unexpected}")
+        report = ckpt_io.load_into(self.model, state)
         train_state = ckpt_io.load_train_state(out_dir)
         self.step = int(train_state["step"])
         self.losses = list(train_state.get("losses", []))
@@ -241,3 +253,5 @@ class Loop:
             load_rng_state(train_state["rng"])
         if stream is not None and train_state.get("stream") is not None:
             stream.load_state(train_state["stream"])
+        # Remembered so a later fit() continues instead of restarting the epoch.
+        self._stream_state = train_state.get("stream")

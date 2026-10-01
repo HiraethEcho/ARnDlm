@@ -20,9 +20,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import config as C
 from common.cell import finish_cell
 from common.cli import add_common_args, resolve
+from common.cli import resume as resume_from
 from common.loop import Loop
 from common.verify import verify_checkpoint
 from base.hf.model import BASE, CELL, METHOD, ar_loss, build_model, sample_ar
+
+CKPT = C.cell_dir("qwen-mini/hf-ar-example")
 
 
 def main() -> int:
@@ -35,6 +38,9 @@ def main() -> int:
 
     model = build_model(C.TIER0, seed=train_cfg.seed)
     loop = Loop(model, train_cfg, ar_loss, out_dir=C.run_dir(CELL))
+    if args.resume:
+        resume_from(loop, CKPT)
+        print(f"  resumed at step {loop.step}")
 
     config = {"cell": CELL, "base": BASE, "method": METHOD,
               "model": C.as_dict(C.TIER0), "train": C.as_dict(train_cfg),
@@ -42,15 +48,15 @@ def main() -> int:
 
     summary = finish_cell(
         loop, data, cell=CELL, base=BASE, method=METHOD,
-        ckpt_dir=C.cell_dir("qwen-mini/hf-ar-example"),
+        ckpt_dir=CKPT,
         run_dir=C.run_dir(CELL), config=config,
         sample_fn=lambda lp: sample_ar(lp.model),
         eval_batches=eval_batches,
-        notes=f"{data.n_tokens:,} tok, Tier 0")
+        notes=f"{data.n_tokens:,} tok, Tier 0"
+              + (f", resumed from step {args.resume}" if args.resume else ""))
 
     if not args.no_verify:
-        report = verify_checkpoint(C.cell_dir("qwen-mini/hf-ar-example"),
-                                   lambda: build_model(C.TIER0, seed=0),
+        report = verify_checkpoint(CKPT, lambda: build_model(C.TIER0, seed=0),
                                    loop.model, data, eval_batches, loop.device)
         print(f"  verify  {'OK' if report['ok'] else 'FAIL'}  "
               f"reloaded {report.get('tensors')} tensors, "

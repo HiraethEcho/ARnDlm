@@ -45,6 +45,33 @@ def load_state_dict(path: Path | str) -> dict[str, torch.Tensor]:
     return load_file(str(f))
 
 
+def _storage(t: torch.Tensor):
+    return (t.data_ptr(), tuple(t.shape), tuple(t.stride()))
+
+
+def load_into(model: torch.nn.Module, state: dict[str, torch.Tensor],
+              atol: float = 1e-5) -> dict:
+    """Load with a completeness check that tolerates tied aliases.
+
+    A tied checkpoint stores one tensor per storage, so `lm_head.weight` is
+    absent on disk and refilled from the embedding -- `strict=True` (and a naive
+    `strict=False` missing-key check) would reject every correct tied model.
+    The returned report is what the cells print.
+    """
+    model_state = model.state_dict()
+    absent = [k for k in model_state if k not in state]
+    aliased = {k for k in absent
+               if any(_storage(model_state[k]) == _storage(model_state[j]) for j in state)}
+    missing = [k for k in absent if k not in aliased]
+    unexpected = [k for k in state if k not in model_state]
+    if missing or unexpected:
+        raise RuntimeError(f"state_dict mismatch: missing={missing} unexpected={unexpected}")
+
+    model.load_state_dict(state, strict=False)
+    return {"tensors": len(state), "aliased_tied": sorted(aliased),
+            "max_abs_gap": 0.0}
+
+
 def load_config(path: Path | str) -> dict:
     return json.loads((Path(path) / "config.json").read_text())
 

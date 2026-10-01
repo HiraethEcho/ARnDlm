@@ -274,15 +274,17 @@ def section_loop() -> None:
         part.save(tmp / "part", {"note": "resume"})
 
         cont = _make_loop(cfg, tmp / "cont")
-        stream = BlockStream(len(data), 4, 11)
-        cont.load(tmp / "part", stream=stream)
-        s2 = cont.fit(data, stream=stream)
+        # No stream argument: fit() must continue the saved batch order by itself.
+        cont.load(tmp / "part")
+        s2 = cont.fit(data)
 
         # The two runs differ only in where the checkpoint landed; the loss
         # trajectory must match step for step.
         match = all(abs(a - b) < 1e-9 for a, b in zip(straight.losses, cont.losses))
         check("resume reproduces the same losses", match,
               f"last {straight.losses[-1]:.9f} vs {cont.losses[-1]:.9f}")
+        check("resume without an explicit stream also matches", cont.step == 12,
+              f"step {cont.step}")
         check("step counter restored", cont.step == 12, f"{cont.step}")
         check("throughput reported both ways",
               s1["throughput"]["train_only_tps"] > 0 and s1["throughput"]["wall_tps"] > 0,

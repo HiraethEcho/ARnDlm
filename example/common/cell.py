@@ -56,6 +56,11 @@ def finish_cell(loop: Loop, data: PackedData, *, cell: str, base: str, method: s
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "samples.txt").write_text(
         "\n\n".join(f"--- {r['prompt']}\n{r['text']}" for r in sample_rows))
+    # Rewrite summary.json: fit() wrote it before repetition and the checkpoint
+    # path existed, and logs/run is the only record of a run.
+    import json
+
+    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
 
     append_result(cell, base, method, meta["params"], summary["steps"],
                   loss=summary["loss"],

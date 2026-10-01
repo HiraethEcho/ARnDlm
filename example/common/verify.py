@@ -13,7 +13,7 @@ from pathlib import Path
 
 import torch
 
-from .ckpt import load_state_dict
+from .ckpt import load_into, load_state_dict
 from .data import PackedData
 
 
@@ -38,28 +38,12 @@ def verify_checkpoint(ckpt_dir: Path | str, build_fn, live_model: torch.nn.Modul
     for the wrong reason. `live_model` is the only independent reference.
     """
     fresh = build_fn().to(device).float().eval()
-    state = load_state_dict(ckpt_dir)
-    model_state = fresh.state_dict()
-
-    # A tied checkpoint legitimately omits `lm_head.weight`: safetensors stores
-    # one tensor per storage, and `load_state_dict` fills the alias from the
-    # embedding. Counting that as "missing" would fail every tied model, so
-    # only names that are absent *and* unaliased count.
-    absent = [k for k in model_state if k not in state]
-    # state_dict() returns detached *views*, so `is` never matches; compare
-    # storage identity instead.
-    def _storage(t):
-        return (t.data_ptr(), tuple(t.shape), tuple(t.stride()))
-
-    aliased = {k for k in absent
-               if any(_storage(model_state[k]) == _storage(model_state[j]) for j in state)}
-    missing = [k for k in absent if k not in aliased]
-    unexpected = [k for k in state if k not in model_state]
-    if missing or unexpected:
-        return {"ok": False, "reason": f"missing={missing} unexpected={unexpected}"}
-    fresh.load_state_dict(state, strict=False)   # aliases fill in from the embedding
+    try:
+        report = load_into(fresh, load_state_dict(ckpt_dir))
+    except RuntimeError as exc:
+        return {"ok": False, "reason": str(exc)}
 
     live = live_model.to(device).float().eval()
     delta = logits_delta(fresh, live, data, batches, device)
-    return {"ok": delta <= 1e-5, "max_logit_delta": delta, "tensors": len(state),
-            "aliased_tied": sorted(aliased)}
+    return {"ok": delta <= 1e-5, "max_logit_delta": delta,
+            "tensors": report["tensors"], "aliased_tied": report["aliased_tied"]}
