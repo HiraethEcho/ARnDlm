@@ -22,7 +22,7 @@ A 版在 `example/` 全部跑通之前，这些步骤只是骨架；跑通一个
 | 10 | `training/direct_dlm/` | `example/base/*/direct_dlm.py` | Direct-DLM 列 | ✅ 已细化 |
 | 11 | `evaluation/` | `example/common/metrics.py` + 各格采样 | 全部 | ✅ 已细化 |
 | 12 | Qwen3-0.6B LoRA 两格 | `example/base/qwen3_0p6b/` | 行3 两格 | ✅ 已细化 |
-| 13 | Tier 1 定档 | `logs/dev/02-hardware-perf.md` | 收尾 | 待写 |
+| 13 | Tier 1 定档 | `logs/dev/02-hardware-perf.md` | 收尾 | ✅ 已细化 |
 
 ## 怎么用
 
