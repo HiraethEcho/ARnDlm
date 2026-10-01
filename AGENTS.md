@@ -2,10 +2,13 @@
 
 ## 写代码 —— 分工 (最重要)
 
-| | 谁写 | 位置 | 用什么 |
-|---|---|---|---|
-| **A 版 (参考实现)** | **AI 写** | `example/` | `transformers` / `dllm` 包 |
-| **B 版 (正式实现)** | **你自己写** | 根目录下的 `models/`、`training/`、`diffusion/` 等目录 | 见下 |
+**A/B 的轴是「用包 vs 不用包」, 不是「AI vs 人」。**
+每条路线都有两版实现 —— A 版在 `example/` (AI 写), B 版在根目录 (你写)。
+
+| | 谁写 | 位置 |
+|---|---|---|
+| **A 版 (参考实现)** | **AI 写** | `example/` |
+| **B 版 (正式实现)** | **你自己写** | 根目录下的 `models/`、`training/`、`diffusion/` 等目录 |
 
 七条路线和依赖见 `SPEC.md`。简言之: `data/` 和 `utils/` 是公用底座,
 剩下五个是路线 —— 同一个功能走两条路 (用包 / 不用包):
@@ -16,19 +19,40 @@
 | A2D | `training/a2d_minimind/` | `training/a2d_dllm/` |
 | 从零训 DLM | — | `training/direct_dlm/` |
 
+### 实验矩阵 (SPEC 2.3) 每格的 A 版 / B 版
+
+矩阵的两个轴是**独立的**: base model 决定权重从哪来, method 决定怎么转 DLM。
+三个 DLM 训练目录吃**任意** AR 权重, 不绑定某个 base。
+
+| SPEC 2.3 格子 | A 版 (`example/`) | B 版 (你写) |
+|---|---|---|
+| Qwen-mini-HF · dLLM-A2D | `base/hf/a2d_dllm.py` | `training/a2d_dllm/` |
+| Qwen-mini-HF · MiniMind-A2D | `base/hf/a2d_minimind.py` | `training/a2d_minimind/` |
+| Qwen-mini-HF · Direct-DLM | `base/hf/direct_dlm.py` | `training/direct_dlm/` |
+| Qwen-mini-MiniMind · dLLM-A2D | `base/native/a2d_dllm.py` | `training/ar_native/` 产权重 + `training/a2d_dllm/` |
+| Qwen-mini-MiniMind · MiniMind-A2D | `base/native/a2d_minimind.py` | `training/ar_native/` 产权重 + `training/a2d_minimind/` |
+| Qwen-mini-MiniMind · Direct-DLM | `base/native/direct_dlm.py` | `models/minimind_qwen/` + `training/direct_dlm/` |
+| Qwen3-0.6B · dLLM-A2D (LoRA) | `base/qwen3_0p6b/lora_dllm_a2d.py` | `training/a2d_dllm/` |
+| Qwen3-0.6B · MiniMind-A2D (LoRA) | `base/qwen3_0p6b/lora_minimind_a2d.py` | `training/a2d_minimind/` |
+
+两个 AR baseline (`hf-ar-example` / `minimind-ar-example`) 是所有 DLM 格的前置,
+不属于矩阵格子。
+
 A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版本, 在同一 batch
-同一权重下输出必须一致。对应表见 `example/README.md`。
+同一权重下输出必须一致。对应表见 `example/README.md`, 执行计划见 `example/PLAN.md`。
 
 ## 我能写什么
 
-- **`example/` 里的任何东西** — 参考实现, 正确性基准
+- **`example/` 里的任何东西** —— **包括纯 torch 的原生模型实现**。
+  `example/` 覆盖 SPEC 2.3 全部 10 格, 是你 B 版的正确性基准。
 - **B 版目录里只有注释** (docstring / `#` 注释)
 - 对话里的代码片段
 
 ## 我不能写什么
 
 - **B 版目录里的任何实现代码**。哪怕一行。
-  包括 `training/ar_hf/` 和 `training/a2d_dllm/` —— 需要参考实现时我在 `example/` 写一份给你对照。
+  包括 `models/minimind_qwen/`、`training/ar_hf/`、`training/a2d_dllm/` ——
+  需要参考实现时我在 `example/` 写一份给你对照。
 
 ## 知识沉淀规则 (最重要)
 
