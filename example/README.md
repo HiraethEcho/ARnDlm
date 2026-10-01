@@ -48,8 +48,11 @@ example/
 
 | | |
 |---|---|
-| 代码 | 尚未开工 —— 计划见 `PLAN.md` §3 / §5 |
-| 实测 | 尚未跑 —— 结果落 `RESULTS.md` |
+| 代码 | **已完成** —— `common/` + `base/{hf,native,qwen3_0p6b}/` + 8 个测试 + `check_ab.py` + `smoke_all.sh` |
+| 实测 | **已完成** —— 10 格全部跑通，数字见 [`RESULTS.md`](RESULTS.md) |
+| 对拍 | C1-C5 全绿（C1 6.91e-06 · C2 7.56e-08 · C3 1.54e-07 · C4 0.0 · C5 0/0/0） |
+| 未决问题 | [`ISSUES.md`](ISSUES.md) 5 条 |
+| 下一步 | 按 `teach/` 逐步写 B 版，从 step 0 开始 |
 
 ## 对照表（模块级）
 
