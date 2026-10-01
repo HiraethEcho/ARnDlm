@@ -63,17 +63,21 @@ def a2d_loss(logits: torch.Tensor, x0: torch.Tensor, masked: torch.Tensor,
     return per_token.sum() / valid.sum().clamp_min(1)
 
 
-def gumbel_argmax(logits: torch.Tensor, temperature: float = 1.0) -> tuple[torch.Tensor, torch.Tensor]:
+def gumbel_argmax(logits: torch.Tensor, temperature: float = 1.0,
+                  generator: torch.Generator | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     """Gumbel-max sampling: returns (token, confidence).
 
     Numerically stabler than softmax+multinomial at low precision
-    (notes/03 §7). temperature=0 degenerates to argmax and returns confidence 1.
+    (notes/03 §7). temperature=0 degenerates to argmax. `generator` makes the
+    draw reproducible, which C2 needs when two implementations sample the same
+    prompt. Note a CUDA tensor needs a CUDA generator.
     """
     if temperature <= 0:
         conf, token = F.softmax(logits, dim=-1).max(dim=-1)
         return token, conf
     logits = logits.to(torch.float64)
-    u = torch.rand(logits.shape, device=logits.device, dtype=torch.float64).clamp_(1e-20, 1.0)
+    u = torch.rand(logits.shape, device=logits.device, dtype=torch.float64,
+                   generator=generator).clamp_(1e-20, 1.0)
     gumbel = -torch.log(-torch.log(u))
     perturbed = logits / temperature + gumbel
     conf, token = perturbed.max(dim=-1)
@@ -122,7 +126,7 @@ def sample_dlm(logits_fn, prompt_ids: torch.Tensor, gen_len: int, *,
                 break
 
             logits = top_k_filter(logits_fn(x), top_k)
-            token, confidence = gumbel_argmax(logits, temperature)
+            token, confidence = gumbel_argmax(logits, temperature, generator)
 
             # Only the current block may be revealed this step, and the budget
             # is per sequence: "remaining / remaining_steps" from notes/03 §5.

@@ -33,6 +33,11 @@ def main() -> int:
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--init-random", action="store_true",
                     help="skip the AR checkpoint (ablation: A2D without pretraining)")
+    ap.add_argument("--block-size", type=int, default=8)
+    ap.add_argument("--dlm-steps", type=int, default=8,
+                    help="denoising steps per block (--steps is the training count)")
+    ap.add_argument("--temperature", type=float, default=0.3)
+    ap.add_argument("--top-k", dest="top_k", type=int, default=50)
     args = ap.parse_args()
 
     train_cfg, data, eval_batches = resolve(args, C.DLM_TRAIN)
@@ -57,9 +62,13 @@ def main() -> int:
     summary = finish_cell(
         loop, data, cell=CELL, base=BASE, method=METHOD,
         ckpt_dir=CKPT, run_dir=C.run_dir(CELL), config=config,
-        sample_fn=lambda lp: sample_dlm_row(lp.model),
+        sample_fn=lambda lp: sample_dlm_row(lp.model, block_size=args.block_size,
+                                            steps=args.dlm_steps,
+                                            temperature=args.temperature,
+                                            top_k=args.top_k),
         eval_batches=eval_batches,
-        notes=f"from {source}, A2D lr {train_cfg.lr:.0e}")
+        notes=f"from {source}, A2D lr {train_cfg.lr:.0e}, block {args.block_size}, "
+              f"steps {args.dlm_steps}")
 
     ok = True
     if not args.no_verify:
@@ -69,8 +78,10 @@ def main() -> int:
               f"max|dlogit| {report.get('max_logit_delta', float('nan')):.2e}")
         ok &= report["ok"]
 
-    for row in summary["repetition"]["prompts"]:
-        print(f"\n--- {row['prompt']!r}  rep4 {row['rep4']}\n{row['text'][:200]}")
+    for i, row in enumerate(summary["repetition"]["prompts"]):
+        print(f"\n--- {row['prompt']!r}  rep4 {row['rep4']}\n{row['text'][:200]!r}")
+        if not row["text"]:
+            print(f"    (EOS-truncated to empty; raw: {summary['sample']['raw_texts'][i][:120]!r})")
     return 0 if ok else 1
 
 
