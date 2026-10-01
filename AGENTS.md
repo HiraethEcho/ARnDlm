@@ -5,16 +5,16 @@
 | | 谁写 | 位置 | 用什么 |
 |---|---|---|---|
 | **A 版 (参考实现)** | **AI 写** | `example/` | `transformers` / `dllm` 包 |
-| **B 版 (正式实现)** | **你自己写** | `src/` 的七个目录 | 见下 |
+| **B 版 (正式实现)** | **你自己写** | 根目录下的 `models/`、`training/`、`diffusion/` 等目录 | 见下 |
 
-`src/` 的七条路线见 `src/README.md`。简言之: `base` `utils` 是公用底座,
+七条路线和依赖见 `SPEC.md`。简言之: `data/` 和 `utils/` 是公用底座,
 剩下五个是路线 —— 同一个功能走两条路 (用包 / 不用包):
 
 | | 不用包 | 用包 |
 |---|---|---|
-| AR 训练 | `minimind/` (原生 pytorch) | `transformer/` |
-| A2D | `a2d/` (minimind-dlm 思路) | `dllm-a2d/` |
-| 从零训 DLM | — | `dllm/` |
+| AR 训练 | `models/minimind_qwen/` + `training/ar_native/` | `models/hf_qwen/` + `training/ar_hf/` |
+| A2D | `training/a2d_minimind/` | `training/a2d_dllm/` |
+| 从零训 DLM | — | `training/direct_dlm/` |
 
 A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版本, 在同一 batch
 同一权重下输出必须一致。对应表见 `example/README.md`。
@@ -22,15 +22,13 @@ A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版�
 ## 我能写什么
 
 - **`example/` 里的任何东西** — 参考实现, 正确性基准
-- **`src/` 里只有注释** (docstring / `#` 注释)
+- **B 版目录里只有注释** (docstring / `#` 注释)
 - 对话里的代码片段
 
 ## 我不能写什么
 
-- **`src/` 里的任何实现代码**。哪怕一行。
-  包括 `src/transformer/` 和 `src/dllm-a2d/` —— 它们名字上像是「调包」,
-  但写在 `src/` 里就按 `src/` 的规矩办。需要参考实现时我在 `example/`
-  写一份给你对照。
+- **B 版目录里的任何实现代码**。哪怕一行。
+  包括 `training/ar_hf/` 和 `training/a2d_dllm/` —— 需要参考实现时我在 `example/` 写一份给你对照。
 
 ## 知识沉淀规则 (最重要)
 
@@ -58,7 +56,7 @@ A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版�
 
 ## 写代码
 
-- **注释写在 `src/`。** 每个文件的 docstring 写: 作用 / 要写什么 / 注意 / 依赖 / 验收。
+- **注释写在 B 版目录。** 每个文件的 docstring 写: 作用 / 要写什么 / 注意 / 依赖 / 验收。
 - **`test/` 的注释解释 Python 用法** (import 形式、`nn.Module`、
   `view` vs `reshape`、推导式、`try/except`、`del` + `empty_cache`),
   因为这是学 Python 的项目。**但要精简** —— 只写「这行为什么这么写」,
@@ -135,5 +133,5 @@ DLM 失败最典型的表现就是**复读**, 而 loss 照样下降。
 
 ## 当前路线
 
-见 `ROADMAP.md`。**必须有 AR baseline。** A2D 之前先有可用权重,
+见 `PLAN.md`。**必须有 AR baseline。** A2D 之前先有可用权重,
 否则无法判断 DLM 的输出是「变差了」还是「本来就差」。

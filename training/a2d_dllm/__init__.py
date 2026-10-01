@@ -1,6 +1,6 @@
 """dllm-a2d — 用 dllm 包的工具做 A2D。
 
-对应 ROADMAP.md 的 T2b。跟 a2d/ 做同一件事, 只是不手写。
+对应 PLAN.md 的 T2b。跟 a2d/ 做同一件事, 只是不手写。
 
     convert.py           调 dllm/pipelines/a2d/convert.py
     train.py             调 dllm 的 Trainer (MDLM objective)

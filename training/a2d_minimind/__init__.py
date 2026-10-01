@@ -1,6 +1,6 @@
 """a2d — 用 minimind-dlm 的思路手动实现 A2D。
 
-对应 ROADMAP.md 的 T2a。原理全在 notes/03-minimind-dlm.md。
+对应 PLAN.md 的 T2a。原理全在 notes/03-minimind-dlm.md。
 
 A2D = AR-to-Diffusion, 两步:
     1. is_causal: True -> False        关掉因果约束

@@ -14,7 +14,7 @@ T1a 的后训练用 peft。挂错模块的典型症状是「loss 降了但什么
 import re
 import sys
 
-# 目标参数量 ~50M, 和 ROADMAP.md 的候选形状一致
+# 目标参数量 ~50M, 和 PLAN.md 的候选形状一致
 HIDDEN, LAYERS, Q_HEADS, KV_HEADS, HEAD_DIM, INTER, VOCAB = 576, 12, 8, 4, 72, 1728, 6400
 
 # LoRA 惯例: 只注入 attention 的投影层, 不碰 MLP 也不碰 embedding。

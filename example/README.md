@@ -1,37 +1,37 @@
 # example/ — 参考实现 (A 版, AI 写)
 
-**这里的代码是 AI 写的。`src/` 里的代码是你写的。**
+**这里的代码是 AI 写的。根目录下 B 版目录里的代码是你写的。**
 
 ## 为什么有两版
 
 | | 位置 | 谁写 | 用途 |
 |---|---|---|---|
 | **A 版** | `example/` | AI | 用 `transformers` / `dllm` 包, 当**正确性基准** |
-| **B 版** | `src/` | **你** | 同一功能, 自己实现 |
+| **B 版** | `models/`、`training/`、`diffusion/` 等 | **你** | 同一功能, 自己实现 |
 
 B 版的每个模块都应该在这里找得到对应物, **输出应该一致**。
 不一致的地方就是你 B 版写错了。
 
 ## 状态
 
-⬜ **还没有代码。** A 版分别在 T1a / T2a / T2b / T3 开工时写进来
-（见 `ROADMAP.md`）。本文件先定契约。
+PENDING **还没有代码。** A 版分别在 T1a / T2a / T2b / T3 开工时写进来
+（见 `PLAN.md`）。本文件先定契约。
 
-## 为什么不把 A 版放在 src/ 里
+## 为什么不把 A 版放在 B 版目录里
 
-`src/` 已经有七条路线（`base` `utils` `transformer` `minimind` `a2d`
-`dllm-a2d` `dllm`），但**它们全部是 B 版**。A 版只存在于这里。
+根目录已经有七条路线（`base` `utils` `transformer` `minimind` `a2d`
+`dllm-a2d` `dllm`），但它们全部是 B 版。A 版只存在于这里。
 
-`src/transformer/` 和 `src/dllm-a2d/` 看起来像「AI 写的参考实现」——
-不是。`src/` 里的一切都是你写的，只是**用不用某个包**的区别：
+`training/ar_hf/` 和 `training/a2d_dllm/` 看起来像「AI 写的参考实现」——
+不是。B 版目录里的一切都是你写的，只是**用不用某个包**的区别：
 
 | | 不用包 | 用包 |
 |---|---|---|
-| AR 训练 | `src/minimind/` | `src/transformer/` |
-| A2D | `src/a2d/` | `src/dllm-a2d/` |
+| AR 训练 | `models/minimind_qwen/` + `training/ar_native/` | `models/hf_qwen/` + `training/ar_hf/` |
+| A2D | `training/a2d_minimind/` | `training/a2d_dllm/` |
 
 A/B 对照是**同一路线内部**的对照：用 `transformers` 写的和你手写的
-`src/minimind/`，在同一 batch 同一权重下 logits 要对齐到 1e-5。
+`models/minimind_qwen/`，在同一 batch 同一权重下 logits 要对齐到 1e-5。
 
 ## 约束: transformers 4.57.0
 
@@ -52,7 +52,7 @@ BIDIR_MASK = {"full_attention": None}     # ← 5.x 的 Qwen3Model.forward 才�
 
 ## 对应表
 
-⬜ 待 T1b / T2a 开工时填。列名固定为 `src/ 模块` / `A 版参考` / `notes/`。
+PENDING 待 T1b / T2a 开工时填。列名固定为 `B 版模块` / `A 版参考` / `notes/`。
 
 预期形状：
 

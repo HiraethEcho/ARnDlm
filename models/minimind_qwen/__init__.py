@@ -1,6 +1,6 @@
 """minimind — 原生 pytorch 训练 / 后训练, 不依赖 transformers。
 
-对应 ROADMAP.md 的 T1b。参考 ~/Public/minimind 的训练循环、packing、dataset。
+对应 PLAN.md 的 T1b。参考 ~/Public/minimind 的训练循环、packing、dataset。
 
     config.py           Qwen3 的 config (hidden / layers / heads / head_dim ...)
     attention.py        Qwen3Attention: GQA + QK-Norm

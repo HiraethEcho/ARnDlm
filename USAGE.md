@@ -113,7 +113,7 @@ data/prepared/minimind3-6400/
   meta.json                          vocab=6400, n_docs=1270238
 ```
 
-tokenizer 在 `src/base/tokenizer.json` (BPE, vocab 6400, 6108 merges)。
+tokenizer 在 `tokenizer/tokenizer.json` (BPE, vocab 6400, 6108 merges)。
 
 | | id | token |
 |---|---|---|
@@ -160,23 +160,23 @@ export SWANLAB_API_KEY=...
 
 ## 训练
 
-还没写。各路线的模块等做到那一步再填 (见 `src/README.md` 的开工顺序):
+还没写。各路线的模块等做到那一步再填 (见 `PLAN.md`):
 
 ```sh
 # T1a  transformers 包
-.venv/bin/python -m src.transformer.pretrain --config configs/t1_pretrain.yaml
-.venv/bin/python -m src.transformer.lora     --ckpt checkpoints/t1/final.pt
+.venv/bin/python -m training.ar_hf.pretrain --config configs/t1_pretrain.yaml
+.venv/bin/python -m training.ar_hf.lora     --ckpt checkpoints/t1/final.pt
 
 # T1b  原生 pytorch
-.venv/bin/python -m src.minimind.pretrain   --config configs/t1_pretrain_native.yaml
-.venv/bin/python -m src.minimind.sample      --ckpt checkpoints/t1_native/final.pt
+.venv/bin/python -m training.ar_native.pretrain   --config configs/t1_pretrain_native.yaml
+.venv/bin/python -m training.ar_native.sample      --ckpt checkpoints/t1_native/final.pt
 
 # T2   A2D (两条路必须对拍)
-.venv/bin/python -m src.a2d.train            --ckpt checkpoints/t1_native/final.pt
-.venv/bin/python -m src.dllm_a2d.train       --ckpt checkpoints/t1_native/final.pt
+.venv/bin/python -m training.a2d_minimind.train            --ckpt checkpoints/t1_native/final.pt
+.venv/bin/python -m training.a2d_dllm.train       --ckpt checkpoints/t1_native/final.pt
 
 # T3   直接用 dllm 包训
-.venv/bin/python -m src.dllm.pretrain        --config configs/t3_dllm_pretrain.yaml
+.venv/bin/python -m training.direct_dlm.pretrain        --config configs/t3_dllm_pretrain.yaml
 ```
 
 **长任务用非阻断 subagent 启动, 让 subagent 监督进程并在完成时回报。**

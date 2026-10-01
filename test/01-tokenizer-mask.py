@@ -2,7 +2,7 @@
 """test 01 — tokenizer 和 mask token 能不能用。
 
 回答四件事:
-  1. src/base/tokenizer.json 是不是 vocab 6400 的 BPE
+  1. tokenizer/tokenizer.json 是不是 vocab 6400 的 BPE
   2. 特殊 token 的 id 对不对 (训练循环要按 id 引用, 写死在这里做回归)
   3. mask token (id 27) 是不是真的空闲 —— 自然文本里绝不能出现
   4. tokenizer 够不够快 (它在 dataloader 热路径上, 慢 2x 就是全局慢 2x)

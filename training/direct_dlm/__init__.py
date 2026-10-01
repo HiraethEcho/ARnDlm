@@ -1,6 +1,6 @@
 """dllm — 直接用 dllm 包训练 DLM。
 
-对应 ROADMAP.md 的 T3。这条线不自己写任何模型代码。
+对应 PLAN.md 的 T3。这条线不自己写任何模型代码。
 
     pretrain.py          用 dllm 的 Trainer 从零训 (或从开源权重续)
     sample.py            dllm 的采样

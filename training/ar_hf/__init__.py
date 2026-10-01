@@ -1,6 +1,6 @@
 """transformer — 调用 transformers 包做训练 / 后训练。
 
-对应 ROADMAP.md 的 T1a。产出是 AR baseline。
+对应 PLAN.md 的 T1a。产出是 AR baseline。
 
     pretrain.py         AutoModelForCausalLM + 自己的 loop 或 Trainer
     sft.py              chat template + 只在 assistant 区算 loss

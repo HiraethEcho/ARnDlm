@@ -36,7 +36,7 @@ def repetition_rate(text, n=DEFAULT_N):
 
     先按空白切词再切 n-gram, 不做真正的 subword tokenize ——
     这里要的是「文本在复读没有」, 不是精确的 token 级指标。
-    真实评测应该用模型自己的 tokenizer, 见 src/utils/metrics.py。
+    真实评测应该用模型自己的 tokenizer, 见 utils/metrics.py。
     """
     words = re.findall(r"\w+|[^\w\s]", text.lower())
     if len(words) < n:
@@ -104,7 +104,7 @@ def main():
         import torch  # noqa: F401
         import src.transformer, src.minimind, src.a2d, src.dllm  # noqa: F401
     except ImportError as e:
-        sys.exit(f"SKIP  src/ 还没实现 ({e})")
+        sys.exit(f"SKIP  implementation not ready ({e})")
 
     torch.manual_seed(42)
     print(f"prompt : {args.prompt!r}")

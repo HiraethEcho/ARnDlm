@@ -12,18 +12,18 @@ base 只放「所有实验都一样」的东西: 优化器、调度、频率、�
 
 ## 实验配置清单
 
-对应 `ROADMAP.md` 的三条线。
+对应 `PLAN.md` 的三条线。
 
 | 文件 | 用途 | 状态 |
 |---|---|---|
-| `base.yaml` | 全局默认 | ✅ |
-| `t1_pretrain.yaml` | T1 AR 预训练 (transformers 版) | ⬜ |
-| `t1_pretrain_native.yaml` | T1b AR 预训练 (torch 原生版) | ⬜ |
-| `t1_sft_lora.yaml` | T1 LoRA / SFT 后训练 | ⬜ |
-| `t2_a2d_native.yaml` | T2a A2D 微调 (手动实现) | ⬜ |
-| `t2_a2d_dllm.yaml` | T2b A2D 微调 (dllm 包) | ⬜ |
-| `t2_a2d_qwen3b.yaml` | T2c 对 Qwen3-0.6B 做 A2D | ⬜ |
-| `t3_dllm_pretrain.yaml` | T3 用 dllm 包从零训 DLM | ⬜ |
+| `base.yaml` | 全局默认 | DONE |
+| `t1_pretrain.yaml` | T1 AR 预训练 (transformers 版) | PENDING |
+| `t1_pretrain_native.yaml` | T1b AR 预训练 (torch 原生版) | PENDING |
+| `t1_sft_lora.yaml` | T1 LoRA / SFT 后训练 | PENDING |
+| `t2_a2d_native.yaml` | T2a A2D 微调 (手动实现) | PENDING |
+| `t2_a2d_dllm.yaml` | T2b A2D 微调 (dllm 包) | PENDING |
+| `t2_a2d_qwen3b.yaml` | T2c 对 Qwen3-0.6B 做 A2D | PENDING |
+| `t3_dllm_pretrain.yaml` | T3 用 dllm 包从零训 DLM | PENDING |
 
 ## 写配置时的规矩
 
@@ -32,7 +32,7 @@ base 只放「所有实验都一样」的东西: 优化器、调度、频率、�
 自训 (T1) 和改造现成模型 (T2c) 的模型形状不同, 但优化器、调度、
 日志频率这些是共享的 —— 这就是 base 存在的意义。
 
-**参数量先不钉死。** 冒烟测试 (见 `ROADMAP.md`) 测出实际吞吐后再填
+**参数量先不钉死。** 冒烟测试 (见 `PLAN.md`) 测出实际吞吐后再填
 `hidden_size` / `n_layers` / `max_seq_len` / `batch_size`。
 这四个数是耦合的, 先拍数字再测是本末倒置。
 
@@ -41,7 +41,7 @@ base 只放「所有实验都一样」的东西: 优化器、调度、频率、�
 > 几个月后你会忘了 `t2_a2d_dllm.yaml` 是干嘛的。
 
 所以每套配置**跑完之后**, 在这个文件里补一行: 跑了什么、结果如何、
-有什么坑。**没跑过的配置标 ⬜, 别让它看起来像能用的。**
+有什么坑。**没跑过的配置标 PENDING, 别让它看起来像能用的。**
 
 ## mask token 不同
 

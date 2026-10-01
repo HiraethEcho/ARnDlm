@@ -1,6 +1,6 @@
 # 大文件和产物
 #
-# ⚠️ 软链接必须是**不带尾部斜杠**的写法。
+# 软链接必须是**不带尾部斜杠**的写法。
 # git 的 `/data/` (带斜杠) 只匹配**目录**; 而对 git 来说软链接是个文件,
 # 所以 `/data/` 匹配不到它 —— 结果软链接本身会被提交进仓库。
 # 正确写法: `/data` 无斜杠, 同时覆盖目录和软链接两种情况。
@@ -26,6 +26,16 @@ samples/**
 *.npz
 *.ckpt
 *.csv.gz
+*.jsonl
+*.arrow
+*.parquet
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.tar
+*.tar.gz
+*.zip
 
 # Python 虚拟环境 —— 绝对不进 git
 # .venv/ 里 ROCm torch wheel 几个 GB, 重建比提交现实得多
