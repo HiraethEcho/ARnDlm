@@ -31,8 +31,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from common import config as C
 from common.ckpt import describe, load_state_dict, save_model
 from common.metrics import repetition_rates
+from common.losses import ar_loss
 from common.model import build_qwen3_config
-from base.hf.model import ar_loss, build_model, sample_ar
+from base.hf.model import build_model, sample_ar
 
 FAILS: list[str] = []
 

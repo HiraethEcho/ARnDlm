@@ -9,7 +9,7 @@ from __future__ import annotations
 import torch
 from transformers import Qwen3ForCausalLM
 
-from common.config import BOS, EOS, ModelCfg, PROMPTS
+from common.config import BOS, EOS, PROMPTS, ModelCfg
 from common.model import build_qwen3_config
 from common.seeds import seed_all
 from common.tokenizer import decode, encode
@@ -22,20 +22,6 @@ METHOD = "AR"
 def build_model(cfg: ModelCfg, seed: int = 42) -> Qwen3ForCausalLM:
     seed_all(seed)
     return Qwen3ForCausalLM(build_qwen3_config(cfg))
-
-
-def ar_loss(model: Qwen3ForCausalLM, batch: torch.Tensor) -> tuple[torch.Tensor, dict]:
-    """Next-token cross entropy on a packed block.
-
-    The block is [BOS] doc [EOS] [BOS] doc [EOS] ... , so shifting by one keeps
-    every document self-contained: the token after each EOS is the next BOS,
-    and the loss at the EOS position teaches the model to stop.
-    """
-    inputs, targets = batch[:, :-1], batch[:, 1:]
-    logits = model(inputs).logits
-    loss = torch.nn.functional.cross_entropy(
-        logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
-    return loss, {"target_tokens": int(targets.numel())}
 
 
 @torch.no_grad()
