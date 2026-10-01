@@ -109,6 +109,15 @@ def build_packed(
         meta = dict(meta, n_docs=int(lengths.shape[0]))
 
     stream = _stream(tokens, lengths)
+    # meta.json can disagree with the binary, and a corpus containing the MASK
+    # id would be indistinguishable from a masked slot during A2D training.
+    if int(stream.max()) >= C.VOCAB:
+        raise ValueError(f"{prepared_dir}: token id {int(stream.max())} >= {C.VOCAB}")
+    n_mask_ids = int((stream == C.MASK).sum())
+    if n_mask_ids:
+        raise ValueError(f"{prepared_dir}: MASK id {C.MASK} appears in the corpus "
+                         f"({n_mask_ids} positions)")
+
     n_blocks = stream.shape[0] // block_size          # drop_last: fixed batch shapes
     if max_blocks:
         n_blocks = min(n_blocks, max_blocks)
@@ -148,9 +157,20 @@ class BlockStream:
         return idx
 
     def state(self) -> dict:
-        return {"epoch": self.epoch, "pos": self.pos}
+        # Geometry travels with the position: resuming with a different
+        # --batch-size or --max-blocks makes `pos` mean something else entirely,
+        # and the run looks normal while walking a different data order.
+        return {"epoch": self.epoch, "pos": self.pos,
+                "n_blocks": self.n_blocks, "batch_size": self.batch_size}
 
     def load_state(self, state: dict) -> None:
+        if state.get("n_blocks") not in (None, self.n_blocks) or \
+                state.get("batch_size") not in (None, self.batch_size):
+            raise ValueError(
+                f"resume geometry differs: saved {state.get('n_blocks')} blocks "
+                f"of {state.get('batch_size')}, now {self.n_blocks} of "
+                f"{self.batch_size}. Resume with the same --max-blocks and "
+                f"--batch-size, or it is not a continuation.")
         self.epoch, self.pos = int(state["epoch"]), int(state["pos"])
         self._order = self._perm()
 

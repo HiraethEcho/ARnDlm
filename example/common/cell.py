@@ -69,8 +69,11 @@ def finish_cell(loop: Loop, data: PackedData, *, cell: str, base: str, method: s
                   eval_loss=summary.get("eval_loss"), rep4=rep4, notes=notes)
 
     print(f"\n[{cell}] done  ckpt -> {ckpt_dir}")
-    print(f"  loss   {summary['loss']['first']:.4f} -> {summary['loss']['last']:.4f}"
-          + (f"  eval {summary['eval_loss']:.4f}" if summary.get("eval_loss") is not None else ""))
+    first, last = summary["loss"].get("first"), summary["loss"].get("last")
+    loss_str = (f"{first:.4f} -> {last:.4f}" if first is not None else "no steps")
+    eval_str = (f"  eval {summary['eval_loss']:.4f}"
+                if summary.get("eval_loss") is not None else "")
+    print(f"  loss   {loss_str}{eval_str}")
     print(f"  tok/s  train-only {summary['throughput']['train_only_tps']:,.0f}"
           f"  wall {summary['throughput']['wall_tps']:,.0f}")
     print(f"  peak   {summary['peak_gb']} GB   rep-4 "

@@ -68,8 +68,8 @@ def c1(args) -> dict:
     data, batches = _eval_batches(batch=args.batch_size)
     delta = logits_delta(nat, hf, data, batches, device)
 
-    result = {"status": "PASS" if delta <= TOL else "FAIL", "max_logit_delta": delta,
-              "tol": TOL, "weights": weights}
+    result = {"status": "PASS" if delta <= args.tol else "FAIL", "max_logit_delta": delta,
+              "tol": args.tol, "weights": weights}
     if args.layer_report:
         result["layers"] = layer_report(hf, nat, data, batches, device)
     return result
@@ -104,11 +104,13 @@ def layer_report(hf, nat, data, batches, device) -> list[dict]:
 
 
 def bench_losses(ours_fn, dllm_fn, repeats: int = 20) -> dict:
-    """ms/step of each loss implementation on the *same* batch.
+    """ms/step of one full loss computation, per implementation.
 
-    Cell 3 runs at 45k tok/s and cell 4 at 27k, and "the library is slower" is
-    not an actionable statement. notes/05 asks for the number that names the
-    component, so this times the loss alone, forward excluded.
+    Cell 3 runs at 46k tok/s and cell 4 at 29k, and "the library is slower" is
+    not an actionable statement. What is timed here is *everything the loss
+    function does*, which is not the same as the loss alone: our side re-uses a
+    frozen corruption while dllm redraws t and the mask on every call, so this
+    is an upper bound on dllm's overhead, not an attribution of it.
     """
     import time
 
@@ -191,22 +193,39 @@ def c2(args) -> dict:
 
 
 def c5(args) -> dict:
-    """A2D conversion must not lose or invent a single weight."""
+    """A2D conversion must not lose, invent, or reshape a single weight.
+
+    Compares a *freshly built* A2D model against the AR checkpoint before any
+    load. An earlier version compared after the load, i.e. compared the values
+    it had just written with themselves, which can never fail.
+    """
     from base.hf.a2d_dllm import TIED_ALIASES, build_a2d_model
 
     if not (HF_AR / "model.safetensors").exists():
         return {"status": "SKIP", "detail": "no AR checkpoint; run cell 1"}
 
     state = load_state_dict(HF_AR)
-    model = build_a2d_model(C.TIER0, ar_ckpt=HF_AR)
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    missing = [k for k in missing if k not in TIED_ALIASES]
-    mismatched = [k for k, v in state.items()
-                  if k in dict(model.state_dict()) and not torch.equal(v, model.state_dict()[k])]
-    ok = not missing and not unexpected and not mismatched
-    return {"status": "PASS" if ok else "FAIL", "missing": len(missing),
-            "unexpected": len(unexpected), "mismatched": len(mismatched),
-            "tensors": len(state)}
+    fresh = build_a2d_model(C.TIER0)                 # no AR weights loaded yet
+    fresh_state = dict(fresh.state_dict())
+
+    # lm_head.weight is a tied alias: the A2D model has the entry, the
+    # checkpoint does not store it (safetensors keeps one tensor per storage).
+    extra = sorted(set(fresh_state) - set(state) - set(TIED_ALIASES))
+    absent = sorted(set(state) - set(fresh_state))
+    reshaped = [k for k in set(state) & set(fresh_state)
+                if tuple(state[k].shape) != tuple(fresh_state[k].shape)]
+
+    loaded_missing, loaded_unexpected = fresh.load_state_dict(state, strict=False)
+    loaded_missing = [k for k in loaded_missing if k not in TIED_ALIASES]
+    drifted = [k for k in state
+               if k in fresh_state and not torch.equal(state[k], fresh_state[k])]
+
+    ok = not (extra or absent or reshaped or loaded_missing or loaded_unexpected
+              or drifted)
+    return {"status": "PASS" if ok else "FAIL", "extra": len(extra),
+            "absent": len(absent), "reshaped": len(reshaped),
+            "missing": len(loaded_missing), "unexpected": len(loaded_unexpected),
+            "drifted": len(drifted), "tensors": len(state)}
 
 
 def decode_bench(args) -> dict:
@@ -296,9 +315,18 @@ def c3(args) -> dict:
     torch.cuda.manual_seed_all(args.seed)
     theirs = make_dllm_loss(nat, epsilon=eps)(nat, batch)[0].detach()
 
+    # Verify both sides saw the same corruption rather than trusting two similar
+    # loss numbers: two different masks can still agree inside 1%.
+    torch.manual_seed(args.seed)
+    t_ref = sample_t(b, device, epsilon=eps)
+    same_t = bool(torch.equal(t, t_ref))
+    probs = torch.rand(batch.shape, device=device)
+    same_mask = bool(torch.equal(probs < t_ref[:, None], masked))
+
     rel = abs(float(ours) - float(theirs)) / max(abs(float(theirs)), 1e-9)
-    return {"status": "PASS" if rel < 0.01 else "FAIL", "rel_diff": rel,
-            "loss_ours": float(ours), "loss_dllm": float(theirs), "tol": 0.01}
+    return {"status": "PASS" if rel < 0.01 and same_t and same_mask else "FAIL",
+            "rel_diff": rel, "loss_ours": float(ours), "loss_dllm": float(theirs),
+            "same_corruption": same_t and same_mask, "tol": 0.01}
 
 
 def c4(args) -> dict:
@@ -307,6 +335,10 @@ def c4(args) -> dict:
     Runs on the real Tier 0 model, not a toy: the toy in test_common.py passes
     and still missed this once, because the resumed run restarted the epoch's
     batch order and nothing raised.
+
+    Tolerance is 1e-6 rather than 0: SDPA backward kernels on CUDA are not
+    bit-reproducible across runs, so an exact comparison fails intermittently
+    on noise and hides a real regression.
     """
     import dataclasses
 
@@ -315,8 +347,16 @@ def c4(args) -> dict:
     from common.losses import ar_loss
     from base.hf.model import build_model as build_hf
 
+    if args.steps < 20:
+        # With steps - 10 <= 0 the "partial" run trains nothing and the
+        # continuation replays from scratch: the check passes without ever
+        # resuming anything.
+        return {"status": "FAIL", "steps": args.steps,
+                "detail": "--steps must be >= 20 so the partial run has steps"}
+
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
-    cfg = dataclasses.replace(C.AR_TRAIN, steps=args.steps, log_every=10 ** 9)
+    cfg = dataclasses.replace(C.AR_TRAIN, steps=args.steps, log_every=10 ** 9,
+                              batch_size=args.batch_size, seed=args.seed)
     data = build_packed(C.DATA_DIR, block_size=C.BLOCK_SIZE, max_blocks=4096)
 
     straight = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, ar_loss, device=device)
@@ -328,6 +368,8 @@ def c4(args) -> dict:
         # max_steps, not a smaller cfg.steps: changing steps changes the cosine
         # schedule and the two runs stop being comparable (this bit me twice).
         part.fit(data, max_steps=args.steps - 10)
+        if part.step != args.steps - 10:
+            return {"status": "FAIL", "detail": f"partial run reached step {part.step}"}
         part.save(tmp, {})
 
         cont = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, ar_loss, device=device)
@@ -339,8 +381,8 @@ def c4(args) -> dict:
 
     worst = max((abs(a - b) for a, b in zip(straight.losses, cont.losses)), default=0.0)
     same_len = len(straight.losses) == len(cont.losses) == args.steps
-    return {"status": "PASS" if worst == 0.0 and same_len else "FAIL",
-            "worst_step_delta": worst, "steps": args.steps,
+    return {"status": "PASS" if worst <= 1e-6 and same_len else "FAIL",
+            "worst_step_delta": worst, "tol": 1e-6, "steps": args.steps,
             "matched": same_len}
 
 

@@ -21,6 +21,9 @@ from .data import PackedData
 def logits_delta(model_a: torch.nn.Module, model_b: torch.nn.Module,
                  data: PackedData, batches, device) -> float:
     """Largest absolute logit difference over `batches`. Both models in eval."""
+    if len(batches) == 0:
+        raise ValueError("logits_delta called with no batches -- it would "
+                         "return 0.0 and read as 'identical'")
     worst = 0.0
     for idx in batches:
         batch = data.batch(idx).to(device)

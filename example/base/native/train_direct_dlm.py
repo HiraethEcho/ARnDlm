@@ -21,7 +21,8 @@ from common.cli import add_common_args, resolve
 from common.loop import Loop
 from common.verify import verify_checkpoint
 from base.hf.direct_dlm import make_direct_loss
-from base.native.a2d_minimind import (BASE, DIRECT_CELL, DIRECT_METHOD,
+from base.native.model import BASE
+from base.native.a2d_minimind import (DIRECT_CELL, DIRECT_METHOD,
                                        build_bidirectional, native_forward,
                                        sample_native_dlm)
 

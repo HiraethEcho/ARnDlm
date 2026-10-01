@@ -39,6 +39,12 @@ def resolve(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, PackedData, list]:
     data = build_packed(args.data_dir, block_size=C.BLOCK_SIZE,
                         max_blocks=args.max_blocks)
     batches = fixed_batches(args.eval_batches, cfg.batch_size, len(data))
+    if not batches:
+        # An empty batch set makes eval_loss return 0.0, which reads as a
+        # perfect model and makes the checkpoint verifier report OK.
+        raise ValueError(
+            f"no eval batches: corpus has {len(data)} blocks, batch size is "
+            f"{cfg.batch_size}. Raise --max-blocks or lower --batch-size.")
     return cfg, data, batches
 
 

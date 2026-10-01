@@ -21,7 +21,8 @@ from common.cli import add_common_args, resolve
 from common.ckpt import load_into, load_state_dict
 from common.loop import Loop
 from common.verify import verify_checkpoint
-from base.native.a2d_minimind import (A2D_CELL, BASE, METHOD, build_bidirectional,
+from base.native.model import BASE
+from base.native.a2d_minimind import (A2D_CELL, METHOD, build_bidirectional,
                                        make_a2d_loss, sample_native_dlm)
 
 AR_CKPT = C.cell_dir("qwen-mini/minimind-ar-example")

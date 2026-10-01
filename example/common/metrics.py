@@ -79,6 +79,9 @@ def loss_windows(losses, k: int = 20) -> dict:
     losses = [float(x) for x in losses]
     if not losses:
         return {"first": None, "last": None, "min": None, "mean": None}
+    # With fewer losses than k the two windows would overlap and RESULTS would
+    # print "first -> last" as the same number twice.
+    k = max(1, min(k, len(losses) // 2 or 1))
     head = losses[:k]
     tail = losses[-k:]
     return {

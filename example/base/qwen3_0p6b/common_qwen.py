@@ -85,8 +85,15 @@ def build_a2d_lora(seed: int = 42, trainable: str = "all"):
 
     tokenizer = load_tokenizer()
     model.resize_token_embeddings(len(tokenizer))     # adds the MASK row
-    assert torch.equal(model.get_input_embeddings().weight[:-1],
-                       pretrained_embedding[:-1]), "resize must keep loaded rows"
+    # The resize drops the tail rows the tokenizer can never emit (see
+    # ISSUES.md OPEN-1); every row the tokenizer *can* emit -- ids 0..len-2,
+    # with len-1 being the MASK row just appended -- must be untouched.
+    keep = len(tokenizer) - 1
+    assert keep <= pretrained_embedding.shape[0], \
+        "resize would drop rows the tokenizer still uses"
+    assert torch.equal(model.get_input_embeddings().weight[:keep].detach(),
+                       pretrained_embedding[:keep].detach()), \
+        "resize must keep every row the tokenizer can reach"
 
     modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
     if trainable == "qk":

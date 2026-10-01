@@ -23,7 +23,8 @@ from common.ckpt import load_into, load_state_dict
 from common.loop import Loop
 from common.verify import verify_checkpoint
 from base.native.a2d_dllm import METHOD, make_dllm_loss
-from base.native.a2d_minimind import (BASE, DLLM_CELL, build_bidirectional,
+from base.native.model import BASE
+from base.native.a2d_minimind import (DLLM_CELL, build_bidirectional,
                                        sample_native_dlm)
 
 AR_CKPT = C.cell_dir("qwen-mini/minimind-ar-example")

@@ -82,6 +82,7 @@ class Loop:
         self.rows: list[dict] = []
         self.stream: BlockStream | None = None
         self._stream_state: dict | None = None
+        self._rng_after_train: dict | None = None
         seed_all(cfg.seed)
 
     # ---------------------------------------------------------------- training
@@ -101,6 +102,11 @@ class Loop:
         n_tokens = self.cfg.batch_size * data.block_size
         limit = self.cfg.steps if max_steps is None else min(self.cfg.steps, self.step + max_steps)
         extra: dict = {}
+        # Snapshot the RNG the moment training stops. Evaluation and sampling
+        # below both draw from it, and for a DLM cell the *loss* draws from it
+        # too -- saving the state after them would resume with a different
+        # corruption sequence, which is exactly the equivalence C4 checks.
+        self._rng_after_train = rng_state()
         if self.device.type == "cuda":
             torch.cuda.reset_peak_memory_stats()
 
@@ -230,8 +236,14 @@ class Loop:
             step=self.step,
             optimizer=self.opt.state_dict(),
             losses=self.losses,
-            rng=rng_state(),
             stream=stream.state() if stream is not None else None,
+            config=as_dict(self.cfg),
+            rows=self.rows,
+            # The post-training snapshot, not the current one: evaluation and
+            # sampling have consumed randomness since, and for a DLM cell the
+            # loss draws from the same stream.
+            rng=(self._rng_after_train if self._rng_after_train is not None
+                 else rng_state()),
         )
         return out_dir
 
@@ -248,6 +260,14 @@ class Loop:
         train_state = ckpt_io.load_train_state(out_dir)
         self.step = int(train_state["step"])
         self.losses = list(train_state.get("losses", []))
+        self.rows = list(train_state.get("rows", []))
+        saved_cfg = train_state.get("config")
+        if saved_cfg and saved_cfg != as_dict(self.cfg):
+            # A changed lr or steps silently rewrites the cosine schedule, so a
+            # "resume" is not a continuation. Say so instead of diverging quietly.
+            changed = {k: (saved_cfg.get(k), v) for k, v in as_dict(self.cfg).items()
+                       if saved_cfg.get(k) != v}
+            print(f"[resume] config differs from the checkpoint: {changed}")
         if load_optimizer:
             self.opt.load_state_dict(train_state["optimizer"])
             load_rng_state(train_state["rng"])
