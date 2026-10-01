@@ -40,8 +40,12 @@ samples/**
 # Python 虚拟环境 —— 绝对不进 git
 # .venv/ 里 ROCm torch wheel 几个 GB, 重建比提交现实得多
 # 重建: ./scripts/setup_env.sh
-.venv/
-venv/
+#
+# 注意写法: 必须**无斜杠**。`/.venv/` 只匹配目录, 而 workspace 里的 .venv
+# 是指向主仓库 .venv 的**软链接**, 对 git 是个文件, 匹配不到 —— 结果软链接
+# 本身会被提交。同 /data/ 那个坑, 已在第 4-6 行记过。
+/.venv
+/venv
 __pycache__/
 *.py[cod]
 *.egg-info/
