@@ -13,3 +13,5 @@
 ## 大文件约定
 
 数据和 checkpoint 不写入仓库本地磁盘；先运行 `setup_symlinks.sh`，再通过 `data/` 和 `checkpoints/` 访问 `/mnt/extra`。训练日志保留在 `logs/run/`，不需要软链接。
+
+- `scripts/patches/`：保存 dllm 等第三方依赖所需的可复现补丁。

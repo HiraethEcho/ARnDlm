@@ -79,7 +79,7 @@ if hasattr(model_class, "config_class") and model_class.config_class.__name__ !=
 继承来的 `config_class` 是 `LlamaConfig`/`Qwen2Config`/`Qwen3Config`,
 和 `A2D*Config` 对不上 → `import dllm.pipelines.a2d` 直接炸。
 
-修法是 `patches/dllm-0001-a2d-config-class.patch`: 给三个类各补一行
+修法是 `scripts/patches/dllm-0001-a2d-config-class.patch`: 给三个类各补一行
 `config_class = A2D*Config`。`install_dllm.sh` 自动打上。
 
 **为什么 patch 而不是直接改 `~/Public/dllm`:** 那样这个仓库就只能在你自己
@@ -90,7 +90,7 @@ if hasattr(model_class, "config_class") and model_class.config_class.__name__ !=
 而且 patch 可能套不上。
 
 ```
-patches/dllm-0001-a2d-config-class.patch    ← 进 git, 可复现
+scripts/patches/dllm-0001-a2d-config-class.patch    ← 进 git, 可复现
 缓存位置: ~/.cache/ARnDlm/dllm              ← 不进 git
 ```
 

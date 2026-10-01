@@ -156,7 +156,7 @@ diffusion/               # corruption、scheduler、loss、sampler
 evaluation/              # generation、benchmark、repetition rate
 utils/                   # logger、device、seed、checkpoint、metrics
 example/                 # 参考实现
-notes/ logs/ patches/    # 知识、开发记录、运行产物、dllm patch
+notes/ logs/ scripts/patches/ # 知识、开发记录、运行产物、dllm patch
 ```
 
 路线依赖单向：公共数据和工具被模型、训练和评测使用；A2D 可以读取 AR 权重，但不导入 AR 训练循环。

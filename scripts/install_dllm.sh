@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # 装 dllm 包: 从**上游仓库** clone 到固定 commit, 打本项目的 patch, 再 editable 装。
 #
-# 为什么不直接用本机的 ~/Public/dllm:
-#   那样这个仓库就只能在你自己这台机器上复现。clone + pin + patch 的流程
-#   换台机器跑一遍就行, 结果完全一致。
-#
-# 为什么需要 patch (patches/dllm-0001-a2d-config-class.patch):
+# 为什么需要 patch (scripts/patches/dllm-0001-a2d-config-class.patch):
 #   dllm 的 pyproject pin 了 transformers==4.57.0, 但它的三个 A2D 模型类
 #   (llama / qwen2 / qwen3) 都没定义 `config_class`。而 4.57 的
 #   AutoModel.register (auto_factory.py:624) 新增了一致性校验:
@@ -55,11 +51,11 @@ echo "    commit: $(git -C "$SRC" rev-parse --short HEAD)  $(git -C "$SRC" log -
 # --- 2. 打 patch ---
 # 用 git apply --check 先试: 已经打过就跳过, 没打过就打上。
 # 用 --3way 让 patch 在上游有小改动时也能尽量套上。
-if git -C "$SRC" apply --check -R "$ROOT/patches/dllm-0001-a2d-config-class.patch" 2>/dev/null; then
+if git -C "$SRC" apply --check -R "$ROOT/scripts/patches/dllm-0001-a2d-config-class.patch" 2>/dev/null; then
     echo "==> patch 已经打过, 跳过"
 else
     echo "==> 打 patch (A2D config_class)"
-    git -C "$SRC" apply --3way "$ROOT/patches/dllm-0001-a2d-config-class.patch"
+    git -C "$SRC" apply --3way "$ROOT/scripts/patches/dllm-0001-a2d-config-class.patch"
     # 注意: --3way 是把改动放进**暂存区**, 所以在那个 clone 里 `git diff`
     # 看着是空的 —— 要 `git diff --cached` 才看得到。幂等检测走的是
     # `git apply --check -R`, 不受影响, 但别拿 `git diff` 判断 patch 打没打上。
@@ -132,14 +128,4 @@ print(f"OK   版本未被动: torch={torch.__version__} transformers={transforme
       f"datasets={datasets.__version__} numpy={numpy.__version__}")
 
 sys.exit(0 if ok else 1)
-EOF
-
-cat <<'EOF'
-
-下一步:
-  .venv/bin/python test/04-dllm-loss-check.py     # Part B 现在应该真跑, 不再 SKIP
-  .venv/bin/python test/03-lora-inject.py
-
-dllm 的 A2D 只实现了三个架构:
-  ~/.cache/ARnDlm/dllm/dllm/pipelines/a2d/models/{llama,qwen2,qwen3}/
 EOF

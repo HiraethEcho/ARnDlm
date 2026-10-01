@@ -135,7 +135,7 @@ if hasattr(model_class, "config_class") and model_class.config_class.__name__ !=
 继承来的 `config_class` 是 `LlamaConfig` / `Qwen2Config` / `Qwen3Config`,
 和 `A2D*Config` 对不上 → `import dllm.pipelines.a2d` 在**模块顶层**就炸。
 
-修法: `patches/dllm-0001-a2d-config-class.patch`, 三个类各加一行
+修法: `scripts/patches/dllm-0001-a2d-config-class.patch`, 三个类各加一行
 `config_class = A2D*Config`。已实测打上后 import 通过。
 
 **为什么不直接改 `~/Public/dllm`**: 那样这个仓库只能在你自己机器上复现。
@@ -143,7 +143,7 @@ if hasattr(model_class, "config_class") and model_class.config_class.__name__ !=
 patch → editable 装」。
 
 ```
-patches/dllm-0001-a2d-config-class.patch    进 git
+scripts/patches/dllm-0001-a2d-config-class.patch    进 git
 ~/.cache/ARnDlm/dllm                        缓存, 不进 git
 上游: https://github.com/ZHZisZZ/dllm.git
 钉在: ca176752fbceec49c6b4777a2c18ae88e4eb10ed
@@ -218,3 +218,23 @@ pin 的是 `4.2.0`。已验证压回 4.2.0 后 `trl` 和 `dllm` 都照常 import
 
 1. **冒烟测试测吞吐** —— 参数量 / batch / seq_len 都等这个结果再定
 2. T1a: `src/transformer/pretrain.py`
+
+## 2026-10-01 环境极小冒烟检查
+
+使用现有 `.venv/bin/python`，未安装或升级依赖，未下载模型。
+
+| 项目 | 实测 |
+|---|---|
+| Python | 3.14.7 |
+| torch | 2.12.0+rocm10.0.0 |
+| torch.version.hip | 7.15.26333 |
+| GPU | AMD Radeon 880M Graphics，CUDA API 可用 |
+| transformers / tokenizers | 4.57.0 / 0.22.2 |
+| peft / accelerate | 0.17.1 / 1.15.0 |
+| datasets / numpy / safetensors | 4.2.0 / 2.5.3 / 0.8.0 |
+| dllm | import、A2D 注册、MDLMTrainer import 通过 |
+| LinearAlphaScheduler | weight(0.5) = 1.999996 |
+
+Qwen3 AR 和 dllm A2DQwen3 均使用 vocab=64、hidden=32、intermediate=64、1 layer、2 Q heads、1 KV head、head_dim=16、tied embeddings、eager attention。各模型 11,392 参数，输入 batch=1、长度=6；CPU/GPU forward 均得到有限的 (1, 6, 64) logits。
+
+验证范围仅覆盖导入、scheduler 和 forward。未运行 backward、optimizer、完整 Trainer、采样器或 checkpoint 恢复，不据此宣称完整训练 pipeline 已验证。当前环境无需为上述能力重装；后续阶段见 PLAN.md。

@@ -8,7 +8,7 @@
 |---|---|
 | 合并 SPEC 与目录设计 | DONE |
 | 根目录 scaffold | DONE |
-| uv/ROCm 环境 | PENDING |
+| uv/ROCm 环境 | 现有版本和 dllm CPU/GPU 极小 forward 通过；训练与恢复待验证 |
 | T1a HF AR | PENDING |
 | T1b Native AR | PENDING |
 | T2a MiniMind-DLM A2D | PENDING |
