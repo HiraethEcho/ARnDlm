@@ -33,9 +33,17 @@ from .config import MASK
 EPS = 1e-6          # dllm/core/schedulers/alpha.py hardcodes the same value
 
 
-def sample_t(batch_size: int, device, generator: torch.Generator | None = None) -> torch.Tensor:
-    """One corruption level per sample, uniform in [0, 1)."""
-    return torch.rand(batch_size, device=device, generator=generator)
+def sample_t(batch_size: int, device, generator: torch.Generator | None = None,
+             epsilon: float = 0.0) -> torch.Tensor:
+    """One corruption level per sample, uniform in [0, 1).
+
+    `epsilon` shifts the range to [epsilon, 1), which is what dllm's
+    MDLMTrainer does (`t = time_epsilon + (1 - time_epsilon) * rand`). The two
+    differ by ~0.1% in E[1/t], but for the C2 comparison the *draw order* has to
+    match as well, so C2 passes the same epsilon and reseeds.
+    """
+    t = torch.rand(batch_size, device=device, generator=generator)
+    return epsilon + (1.0 - epsilon) * t
 
 
 def corrupt(x0: torch.Tensor, t: torch.Tensor, mask_id: int = MASK,

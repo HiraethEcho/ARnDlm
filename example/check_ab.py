@@ -100,7 +100,82 @@ def layer_report(hf, nat, data, batches, device) -> list[dict]:
     return rows
 
 
-CHECKS = {"c1": c1}
+def c2(args) -> dict:
+    """Hand-written A2D loss vs dllm's MDLMTrainer.compute_loss. < 1% (SPEC §6).
+
+    The comparison only means something if both sides see the same corruption.
+    dllm draws `rand(B)` for t and then `rand(B, L)` for the mask; the
+    hand-written path draws in the same order, so reseeding torch immediately
+    before each call makes the two corruptions identical. (Seed the *global*
+    RNG on purpose -- a private generator would desynchronise them.)
+    """
+    import torch as _torch
+
+    from common.a2d import a2d_loss, corrupt, sample_t
+    from base.hf.a2d_dllm import DLLMLoss, build_a2d_model
+    from base.hf.a2d_minimind import dlm_forward
+    from base.hf.model import build_model as build_hf
+
+    if not (HF_AR / "model.safetensors").exists():
+        return {"status": "SKIP", "detail": "no AR checkpoint; run cell 1"}
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    hf = build_hf(C.TIER0).to(device).float().eval()
+    load_into(hf, load_state_dict(HF_AR))
+    dllm_model = build_a2d_model(C.TIER0, ar_ckpt=HF_AR).to(device).float().eval()
+
+    data, batches = _eval_batches(batch=args.batch_size)
+    batch = data.batch(batches[0]).to(device)
+    b = batch.shape[0]
+
+    epsilon = 1e-3                      # dllm's MDLMConfig.time_epsilon
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    t = sample_t(b, device, epsilon=epsilon)
+    x_t, masked = corrupt(batch, t, C.MASK)
+
+    with torch.no_grad():
+        loss_ours = a2d_loss(dlm_forward(hf)(x_t), batch, masked, t)
+
+    dllm_loss = DLLMLoss()
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    loss_dllm = dllm_loss(dllm_model, batch).detach()
+
+    # Confirm both sides really did see the same corruption, not merely similar
+    # losses: re-draw with the same seed and compare t and the mask directly.
+    torch.manual_seed(args.seed)
+    t_ref = sample_t(b, device, epsilon=epsilon)
+    same_t = bool(torch.equal(t, t_ref))
+    probs = torch.rand(batch.shape, device=device)
+    same_mask = bool(torch.equal(probs < t_ref[:, None], masked))
+
+    rel = abs(float(loss_ours) - float(loss_dllm)) / max(abs(float(loss_dllm)), 1e-9)
+    return {"status": "PASS" if rel < 0.01 and same_t and same_mask else "FAIL",
+            "rel_diff": rel, "loss_ours": float(loss_ours), "loss_dllm": float(loss_dllm),
+            "same_corruption": same_t and same_mask, "tol": 0.01}
+
+
+def c5(args) -> dict:
+    """A2D conversion must not lose or invent a single weight."""
+    from base.hf.a2d_dllm import TIED_ALIASES, build_a2d_model
+
+    if not (HF_AR / "model.safetensors").exists():
+        return {"status": "SKIP", "detail": "no AR checkpoint; run cell 1"}
+
+    state = load_state_dict(HF_AR)
+    model = build_a2d_model(C.TIER0, ar_ckpt=HF_AR)
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    missing = [k for k in missing if k not in TIED_ALIASES]
+    mismatched = [k for k, v in state.items()
+                  if k in dict(model.state_dict()) and not torch.equal(v, model.state_dict()[k])]
+    ok = not missing and not unexpected and not mismatched
+    return {"status": "PASS" if ok else "FAIL", "missing": len(missing),
+            "unexpected": len(unexpected), "mismatched": len(mismatched),
+            "tensors": len(state)}
+
+
+CHECKS = {"c1": c1, "c2": c2, "c5": c5}
 
 
 def main() -> int:
