@@ -23,7 +23,8 @@ from common.cli import add_common_args, resolve
 from common.cli import resume as resume_from
 from common.loop import Loop
 from common.verify import verify_checkpoint
-from base.hf.model import BASE, CELL, METHOD, ar_loss, build_model, sample_ar
+from common.losses import ar_loss
+from base.hf.model import BASE, CELL, METHOD, build_model, sample_ar
 
 CKPT = C.cell_dir("qwen-mini/hf-ar-example")
 
