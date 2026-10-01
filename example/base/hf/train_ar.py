@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import config as C
 from common.cell import finish_cell
-from common.data import BlockStream, build_packed, fixed_batches
+from common.data import build_packed, fixed_batches
 from common.loop import Loop
 from base.hf.model import BASE, CELL, METHOD, ar_loss, build_model, sample_ar
 
@@ -45,7 +45,7 @@ def main() -> int:
               "model": C.as_dict(C.TIER0), "train": C.as_dict(train_cfg)}
 
     def sample_fn(loop: Loop) -> dict:
-        return sample_ar(loop.model, C.TIER0)
+        return sample_ar(loop.model)
 
     summary = finish_cell(
         loop, data, cell=CELL, base=BASE, method=METHOD,

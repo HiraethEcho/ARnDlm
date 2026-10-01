@@ -142,7 +142,7 @@ def section_ckpt() -> None:
 def section_sample() -> None:
     print("\n[4] sample")
     model = build_model(C.TIER0, seed=3)
-    out = sample_ar(model, C.TIER0, max_new_tokens=16)
+    out = sample_ar(model, max_new_tokens=16)
     check("two prompts sampled", len(out["ids"]) == 2, f"{out['prompts']}")
     check("length matches max_new_tokens",
           all(len(i) == 16 for i in out["ids"]), f"{[len(i) for i in out['ids']]}")
@@ -152,7 +152,7 @@ def section_sample() -> None:
     rates = repetition_rates(out["ids"], ns=(4,))
     check("rep-4 computable", 0.0 <= rates[4] <= 1.0, f"rep4 {rates[4]:.4f}")
 
-    greedy = sample_ar(model, C.TIER0, prompts=("Once upon a time",), temperature=0.0,
+    greedy = sample_ar(model, prompts=("Once upon a time",), temperature=0.0,
                        max_new_tokens=16)
     check("temperature=0 still samples", len(greedy["ids"][0]) == 16)
 

@@ -22,7 +22,8 @@ def _fmt(value) -> str:
     if value is None:
         return "-"
     if isinstance(value, float):
-        return f"{value:,.2f}"
+        # Two decimals on a throughput is noise; one on a loss is the point.
+        return f"{value:,.0f}" if abs(value) >= 100 else f"{value:.4f}"
     return str(value)
 
 
