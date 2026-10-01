@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT / "example"))
 
 from common import config as C
 from common.a2d import a2d_loss, corrupt, sample_t
-from common.ckpt import load_into, load_state_dict
+from common.ckpt import load_state_dict
 from base.hf.a2d_dllm import (TIED_ALIASES, DLLMLoss, build_a2d_model, sample_dllm)
 from base.hf.a2d_minimind import dlm_forward
 from base.hf.model import build_model as build_hf

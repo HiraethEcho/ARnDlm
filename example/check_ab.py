@@ -100,6 +100,30 @@ def layer_report(hf, nat, data, batches, device) -> list[dict]:
     return rows
 
 
+def bench_losses(ours_fn, dllm_fn, repeats: int = 20) -> dict:
+    """ms/step of each loss implementation on the *same* batch.
+
+    Cell 3 runs at 45k tok/s and cell 4 at 27k, and "the library is slower" is
+    not an actionable statement. notes/05 asks for the number that names the
+    component, so this times the loss alone, forward excluded.
+    """
+    import time
+
+    def timed(fn):
+        for _ in range(3):                       # warmup
+            fn()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        for _ in range(repeats):
+            fn()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        return (time.perf_counter() - t0) / repeats * 1e3
+
+    return {"ours_ms": timed(ours_fn), "dllm_ms": timed(dllm_fn)}
+
+
 def c2(args) -> dict:
     """Hand-written A2D loss vs dllm's MDLMTrainer.compute_loss. < 1% (SPEC §6).
 
@@ -109,8 +133,6 @@ def c2(args) -> dict:
     before each call makes the two corruptions identical. (Seed the *global*
     RNG on purpose -- a private generator would desynchronise them.)
     """
-    import torch as _torch
-
     from common.a2d import a2d_loss, corrupt, sample_t
     from base.hf.a2d_dllm import DLLMLoss, build_a2d_model
     from base.hf.a2d_minimind import dlm_forward
@@ -151,9 +173,18 @@ def c2(args) -> dict:
     same_mask = bool(torch.equal(probs < t_ref[:, None], masked))
 
     rel = abs(float(loss_ours) - float(loss_dllm)) / max(abs(float(loss_dllm)), 1e-9)
-    return {"status": "PASS" if rel < 0.01 and same_t and same_mask else "FAIL",
-            "rel_diff": rel, "loss_ours": float(loss_ours), "loss_dllm": float(loss_dllm),
-            "same_corruption": same_t and same_mask, "tol": 0.01}
+    out = {"status": "PASS" if rel < 0.01 and same_t and same_mask else "FAIL",
+           "rel_diff": rel, "loss_ours": float(loss_ours), "loss_dllm": float(loss_dllm),
+           "same_corruption": same_t and same_mask, "tol": 0.01}
+
+    if args.bench:
+        with torch.no_grad():
+            ours_ms = bench_losses(
+                lambda: a2d_loss(dlm_forward(hf)(x_t), batch, masked, t),
+                lambda: dllm_loss(dllm_model, batch))
+        out.update({k: round(v, 3) for k, v in ours_ms.items()})
+        out["dllm_overhead_x"] = round(ours_ms["dllm_ms"] / max(ours_ms["ours_ms"], 1e-9), 2)
+    return out
 
 
 def c5(args) -> dict:
@@ -188,6 +219,8 @@ def main() -> int:
     ap.add_argument("--random", action="store_true", help="compare freshly initialised weights")
     ap.add_argument("--layer-report", action="store_true",
                     help="print per-layer logit deltas (C1)")
+    ap.add_argument("--bench", action="store_true",
+                    help="time each loss implementation on the same batch (C2)")
     ap.add_argument("--cpu", action="store_true")
     args = ap.parse_args()
 

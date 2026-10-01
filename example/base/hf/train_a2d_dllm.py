@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import config as C
 from common.cell import finish_cell
 from common.cli import add_common_args, resolve
-from common.ckpt import load_into, load_state_dict
 from common.loop import Loop
 from common.verify import verify_checkpoint
 from base.hf.a2d_dllm import (BASE, CELL, METHOD, DLLMLoss, build_a2d_model,

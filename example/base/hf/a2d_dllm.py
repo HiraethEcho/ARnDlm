@@ -96,17 +96,6 @@ class DLLMLoss:
         # and A2DQwen3Model turns a missing mask into "all valid, bidirectional".
         return self.trainer.compute_loss(model, {"input_ids": batch, "labels": batch})
 
-    def on_fixed(self, model, batch: torch.Tensor, t: torch.Tensor,
-                 masked: torch.Tensor) -> torch.Tensor:
-        """Loss on a *pre-drawn* t and mask, for the C2 comparison.
-
-        MDLMTrainer.compute_loss draws t and the mask itself, so comparing it
-        against a hand-written loss requires pinning both. Feeding a batch with
-        every position already masked at a chosen t makes dllm's own draws
-        irrelevant: the inputs it computes on are ours.
-        """
-        raise NotImplementedError("C2 uses the fixed-corruption path in check_ab")
-
 
 def make_a2d_loss(loss: DLLMLoss):
     def loss_fn(model, batch: torch.Tensor):
