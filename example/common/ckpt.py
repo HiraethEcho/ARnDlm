@@ -49,6 +49,29 @@ def load_config(path: Path | str) -> dict:
     return json.loads((Path(path) / "config.json").read_text())
 
 
+def describe(model: torch.nn.Module) -> dict:
+    """Parameter census for meta.json.
+
+    `params_unique` de-duplicates tied storage defensively: `parameters()`
+    already collapses shared Parameters, but `state_dict()` does not -- it keeps
+    both `model.embed_tokens.weight` and `lm_head.weight`. That difference is
+    exactly what safetensors would refuse to serialise, so both numbers are
+    reported and `tied` says whether they disagree.
+    """
+    seen, unique = set(), 0
+    for p in model.parameters():
+        if id(p) not in seen:
+            seen.add(id(p))
+            unique += p.numel()
+    return {
+        "params_unique": unique,
+        "params_trainable": sum(p.numel() for p in model.parameters() if p.requires_grad),
+        "state_dict_entries": len(model.state_dict()),
+        "stored_tensors": len(_unique_state_dict(model)),
+        "tied": len(_unique_state_dict(model)) < len(model.state_dict()),
+    }
+
+
 def save_train_state(path: Path | str, **state) -> Path:
     """step / optimizer / batch-stream position / RNG -- everything resume needs.
 

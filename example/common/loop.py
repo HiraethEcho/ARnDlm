@@ -86,7 +86,7 @@ class Loop:
     # ---------------------------------------------------------------- training
 
     def fit(self, data: PackedData, stream: BlockStream | None = None, sample_fn=None,
-            max_steps: int | None = None) -> dict:
+            max_steps: int | None = None, eval_batches=None) -> dict:
         """Run until `max_steps` (or cfg.steps) updates have been done.
 
         `max_steps` stops a run early *without* touching the LR schedule, which
@@ -100,6 +100,8 @@ class Loop:
         n_tokens = self.cfg.batch_size * data.block_size
         limit = self.cfg.steps if max_steps is None else min(self.cfg.steps, self.step + max_steps)
         extra: dict = {}
+        if self.device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats()
 
         while self.step < limit:
             idx = stream.next()
@@ -147,14 +149,39 @@ class Loop:
             "tokens": meter.tokens,
             "loss": loss_windows(self.losses, self.cfg.loss_window),
             "throughput": meter.as_dict(),
+            "peak_gb": (round(torch.cuda.max_memory_allocated() / 1e9, 3)
+                        if self.device.type == "cuda" else None),
             "config": as_dict(self.cfg),
             "extra": extra if isinstance(extra, dict) else {},
         }
+        if eval_batches is not None:
+            summary["eval_loss"] = self.eval_loss(data, eval_batches)
         if sample_fn is not None:
             summary["sample"] = sample_fn(self)
         if self.out_dir:
             self._write_logs(summary)
         return summary
+
+    @torch.no_grad()
+    def eval_loss(self, data: PackedData, batches) -> float:
+        """Mean loss over a frozen batch set. Always run in fp32.
+
+        Under autocast the bf16 rounding differs between two implementations
+        far more than the difference we are trying to measure, so a loss
+        comparison that skips this is not a comparison.
+        """
+        was_training = self.model.training
+        self.model.eval()
+        total, count = 0.0, 0
+        for idx in batches:
+            batch = data.batch(idx).to(self.device)
+            with autocast(self.device, "float32"):
+                loss, _ = self.loss_fn(self.model, batch)
+            total += float(loss)
+            count += 1
+        if was_training:
+            self.model.train()
+        return total / max(count, 1)
 
     def _write_logs(self, summary: dict) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)

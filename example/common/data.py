@@ -153,3 +153,16 @@ class BlockStream:
     def load_state(self, state: dict) -> None:
         self.epoch, self.pos = int(state["epoch"]), int(state["pos"])
         self._order = self._perm()
+
+
+def fixed_batches(n_batches: int, batch_size: int, n_blocks: int, seed: int = 1234) -> list[torch.Tensor]:
+    """A frozen batch set for cross-implementation loss comparison (C2/C3).
+
+    Two implementations must be scored on the *same* tokens or the comparison
+    measures the data sampler. This is a separate generator from BlockStream's,
+    so evaluation batches never correlate with the training order.
+    """
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(n_blocks, generator=g)
+    usable = min(n_batches * batch_size, n_blocks)
+    return [perm[i * batch_size : (i + 1) * batch_size] for i in range(usable // batch_size)]

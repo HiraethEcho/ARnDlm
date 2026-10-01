@@ -31,8 +31,8 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common import config as C
-from common.ckpt import load_state_dict, save_model
-from common.data import BlockStream, PackedData, build_packed
+from common.ckpt import describe, load_state_dict, save_model
+from common.data import BlockStream, PackedData, build_packed, fixed_batches
 from common.loop import Loop
 from common.metrics import TpsMeter, loss_windows, repetition_rates
 from common.model import build_qwen3_config, count_params
@@ -128,6 +128,14 @@ def section_data() -> None:
         wrapped.next()
     check("epoch rolls over", wrapped.epoch == 1, f"epoch {wrapped.epoch}, pos {wrapped.pos}")
 
+    fixed = fixed_batches(4, 8, len(data), seed=99)
+    again = fixed_batches(4, 8, len(data), seed=99)
+    check("fixed eval batches are stable", len(fixed) == 4
+          and all(torch.equal(a, b) for a, b in zip(fixed, again)))
+    check("fixed batches do not repeat rows", len(set(fixed[0].tolist())) == 8)
+    other = fixed_batches(4, 8, len(data), seed=100)
+    check("different seed -> different batches", not torch.equal(fixed[0], other[0]))
+
 
 # ------------------------------------------------------------------ 3. ckpt
 
@@ -156,10 +164,15 @@ def section_ckpt() -> None:
         hf_model = Qwen3ForCausalLM(cfg)
         save_model(hf_model, tmp / "hf", {"model": "qwen3"})
         hf_sd = load_state_dict(tmp / "hf")
-        n_unique = count_params(hf_model)
         n_stored = sum(v.numel() for v in hf_sd.values())
+        n_unique = count_params(hf_model)
+        info = describe(hf_model)
         check("tied lm_head not duplicated", n_stored == n_unique,
               f"stored {n_stored:,} == params {n_unique:,}")
+        check("describe() flags tying", info["tied"] and
+              info["stored_tensors"] == info["state_dict_entries"] - 1,
+              f"{info['params_unique']:,} params, {info['state_dict_entries']} state_dict "
+              f"entries -> {info['stored_tensors']} stored")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -250,7 +263,8 @@ def section_loop() -> None:
         data = _tiny_data()
 
         straight = _make_loop(cfg, tmp / "straight")
-        s1 = straight.fit(data)
+        ev = fixed_batches(3, 4, len(data), seed=5)
+        s1 = straight.fit(data, eval_batches=ev)
 
         part = _make_loop(half, tmp / "part")
         part.fit(data, max_steps=6)          # the stream it used is remembered by fit()
@@ -272,6 +286,14 @@ def section_loop() -> None:
               f"train {s1['throughput']['train_only_tps']:,.0f} / "
               f"wall {s1['throughput']['wall_tps']:,.0f} tok/s")
         check("metrics.csv written", (tmp / "straight" / "metrics.csv").exists())
+        check("eval loss on frozen batches", s1.get("eval_loss", -1) > 0,
+              f"{s1.get('eval_loss')}")
+
+        # eval_loss must be independent of train/eval mode and of batch order.
+        a = straight.eval_loss(data, ev)
+        b = straight.eval_loss(data, ev)
+        check("eval_loss deterministic", abs(a - b) < 1e-12, f"{a:.9f}")
+        check("model left in train mode", straight.model.training)
         print(f"  note  losses {straight.losses[0]:.4f} -> {straight.losses[-1]:.4f}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
