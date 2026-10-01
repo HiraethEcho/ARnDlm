@@ -11,6 +11,7 @@ Answers five questions, one per section, each with a measured number:
   4 metrics  -- is train-only throughput really measured apart from wall time,
                 and does repetition rate react to looped text?
   5 loop     -- does `save at N + continue` reproduce one continuous run?
+  6 text     -- does the tokenizer round trip, and does the RESULTS row land?
 
 Section 5 is the one that matters most: acceptance test C4 in example/PLAN.md
 is exactly this property, and it is cheap to check with a 20-step CPU model.
@@ -36,7 +37,9 @@ from common.data import BlockStream, PackedData, build_packed, fixed_batches
 from common.loop import Loop
 from common.metrics import TpsMeter, loss_windows, repetition_rates
 from common.model import build_qwen3_config, count_params
+from common.report import COLUMNS, RESULTS, append_result
 from common.seeds import resolve_dtype, seed_all
+from common.tokenizer import decode, encode, load_tokenizer
 
 FAILS: list[str] = []
 
@@ -299,6 +302,35 @@ def section_loop() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def section_tokenizer_report() -> None:
+    print("\n[6] tokenizer + results table")
+    tok = load_tokenizer()
+    check("vocab is 6400", tok.get_vocab_size() == C.VOCAB, str(tok.get_vocab_size()))
+    ids = encode("Once upon a time")
+    check("encode round trip", decode(ids).strip() == "Once upon a time", decode(ids))
+    check("no specials by default", C.BOS not in ids or len(ids) > 3)
+    wrapped = encode("hi", bos=True, eos=True)
+    check("bos/eos on request", wrapped[0] == C.BOS and wrapped[-1] == C.EOS)
+    check("tokenizer is cached", load_tokenizer() is tok)
+
+    saved = RESULTS.read_text() if RESULTS.exists() else None
+    try:
+        append_result("test-cell", "hf", "ar", 3_213_056, 12,
+                      loss={"first": 5.5, "last": 4.2}, train_tps=7000.0,
+                      wall_tps=6500.0, eval_loss=4.3, rep4=0.12, notes="probe")
+        text = RESULTS.read_text()
+        check("row appended", "| test-cell |" in text)
+        header = next((ln for ln in text.split("\n") if ln.startswith("| cell |")), "")
+        check("header has every column", all(c in header for c in COLUMNS),
+              f"{len(COLUMNS)} columns")
+        check("rep-4 column present", "rep-4" in text)
+    finally:
+        if saved is None:
+            RESULTS.unlink(missing_ok=True)
+        else:
+            RESULTS.write_text(saved)
+
+
 def main() -> int:
     seed_all(0)
     section_config()
@@ -306,6 +338,7 @@ def main() -> int:
     section_ckpt()
     section_metrics()
     section_loop()
+    section_tokenizer_report()
     print()
     if FAILS:
         print(f"FAIL  {len(FAILS)} check(s): {', '.join(FAILS)}")
