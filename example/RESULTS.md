@@ -8,4 +8,4 @@ Tier 0 · 200 steps · tinystories-6400 · 只验 pipeline，不看模型能力�
 |---|---|---|---|---|---|---|---|---|---|---|
 | hf-ar-example | Qwen-mini-HF | AR | 3213056 | 200 | 8.4414 -> 4.6970 | 46,192 | 40,650 | 4.6356 | 0.1724 | 524,288 tok, Tier 0 |
 | minimind-ar-example | Qwen-mini-MiniMind | AR | 3213056 | 200 | 8.4165 -> 4.6932 | 46,649 | 41,837 | 4.6283 | 0.3276 | 524,288 tok, Tier 0, native torch |
-| minimind-ar-example | Qwen-mini-MiniMind | AR | 3213056 | 200 | 8.4165 -> 4.6932 | 46,822 | 41,941 | 4.6283 | 0.3276 | 524,288 tok, Tier 0, native torch |
+| hf-minimind-a2d-example | Qwen-mini-HF | MiniMind-DLM-A2D | 3213056 | 200 | 5.8107 -> 5.2759 | 45,304 | 39,295 | 4.9723 | 0.5172 | from hf-ar-example, A2D lr 1e-04 |
