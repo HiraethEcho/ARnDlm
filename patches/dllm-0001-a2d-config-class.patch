@@ -1,0 +1,36 @@
+diff --git a/dllm/pipelines/a2d/models/llama/modeling_llama.py b/dllm/pipelines/a2d/models/llama/modeling_llama.py
+index d87fc54..749f5f8 100644
+--- a/dllm/pipelines/a2d/models/llama/modeling_llama.py
++++ b/dllm/pipelines/a2d/models/llama/modeling_llama.py
+@@ -116,6 +116,7 @@ class A2DLlamaModel(transformers.LlamaModel):
+ 
+ class A2DLlamaLMHeadModel(transformers.LlamaForCausalLM):
+     config: A2DLlamaConfig
++    config_class = A2DLlamaConfig
+ 
+     def __init__(self, config):
+         transformers.LlamaPreTrainedModel.__init__(self, config)
+diff --git a/dllm/pipelines/a2d/models/qwen2/modeling_qwen2.py b/dllm/pipelines/a2d/models/qwen2/modeling_qwen2.py
+index 2324631..01f6b6b 100644
+--- a/dllm/pipelines/a2d/models/qwen2/modeling_qwen2.py
++++ b/dllm/pipelines/a2d/models/qwen2/modeling_qwen2.py
+@@ -136,6 +136,7 @@ class A2DQwen2Model(transformers.Qwen2Model):
+ 
+ class A2DQwen2LMHeadModel(transformers.Qwen2ForCausalLM):
+     config: A2DQwen2Config
++    config_class = A2DQwen2Config
+ 
+     def __init__(self, config):
+         transformers.Qwen2PreTrainedModel.__init__(self, config)
+diff --git a/dllm/pipelines/a2d/models/qwen3/modeling_qwen3.py b/dllm/pipelines/a2d/models/qwen3/modeling_qwen3.py
+index 7615c99..e106f42 100644
+--- a/dllm/pipelines/a2d/models/qwen3/modeling_qwen3.py
++++ b/dllm/pipelines/a2d/models/qwen3/modeling_qwen3.py
+@@ -136,6 +136,7 @@ class A2DQwen3Model(transformers.Qwen3Model):
+ 
+ class A2DQwen3LMHeadModel(transformers.Qwen3ForCausalLM):
+     config: A2DQwen3Config
++    config_class = A2DQwen3Config
+ 
+     def __init__(self, config):
+         transformers.Qwen3PreTrainedModel.__init__(self, config)

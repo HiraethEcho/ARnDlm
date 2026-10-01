@@ -11,6 +11,7 @@ T1a 的后训练用 peft。挂错模块的典型症状是「loss 降了但什么
 
 需要 peft + torch。
 """
+import re
 import sys
 
 # 目标参数量 ~50M, 和 ROADMAP.md 的候选形状一致
@@ -58,13 +59,24 @@ def main():
     model.print_trainable_parameters()
 
     # --- 1. 命中的模块 ---
-    hit = sorted({n.split(".")[-1] for n, p in model.named_parameters() if p.requires_grad})
+    # LoRA 参数名形如 ...self_attn.q_proj.lora_A.default.weight
+    # 模块名在 **.lora_A. / .lora_B. 之前**。
+    # 不能用 split(".")[-1] —— 那是 "weight"；也不能只切 lora_A ——
+    # lora_B.default.weight 里没有 ".lora_A.", 会被原样留下同样取到 "weight"。
+    # 用正则同时处理 A/B, 以后 peft 改内部命名也不会失效。
+    hit = sorted({
+        re.split(r"\.lora_[AB]\.", n)[0].split(".")[-1]
+        for n, p in model.named_parameters() if p.requires_grad
+    })
     print(f"\n命中 target_modules : {hit}")
     if hit != sorted(TARGET_MODULES):
         print(f"FAIL  命中的模块和配置不符: {hit}")
         sys.exit(1)
 
-    # --- 2. 可训参数占比 ---
+    # 这个脚本只验正确性, 不验速度 —— 所以刻意留在 CPU 上跑,
+    # 免得跟别的 GPU 任务抢显存。吞吐另测 (见 logs/dev/02-hardware-perf.md)。
+    device = next(model.parameters()).device
+    print(f"device    : {device}   (正确性测试, 故意不上 GPU)")
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     pct = 100 * trainable / base_params
     print(f"可训参数 : {trainable / 1e6:.3f}M  ({pct:.2f}%)")
