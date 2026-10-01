@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Cell 8 of 10 -- Qwen-mini-MiniMind, Direct-DLM.
 
-The native counterpart of cell 3: same objective, same data, same schedule,
-model = example/base/native/model.py switched to bidirectional, weights loaded
-from the cell-2 AR checkpoint.
+The native counterpart of cell 5: same objective as cell 7 (imported, not
+copied), no AR checkpoint, lr 3e-4. Model =
+example/base/native/model.py switched to bidirectional.
 
     .venv/bin/python example/base/native/train_direct_dlm.py
 """
