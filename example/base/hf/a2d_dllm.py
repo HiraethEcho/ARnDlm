@@ -63,10 +63,12 @@ def build_a2d_model(cfg=C.TIER0, ar_ckpt=None, seed: int = 42):
 class _ProcessingStub:
     """The four attributes MDLMTrainer.compute_loss reads off the tokenizer."""
 
-    padding_side = "right"
-    mask_token_id = C.MASK
-    bos_token_id = C.BOS
-    eos_token_id = C.EOS
+    def __init__(self, mask_token_id: int = C.MASK, bos_token_id: int = C.BOS,
+                 eos_token_id: int = C.EOS):
+        self.padding_side = "right"
+        self.mask_token_id = mask_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
 
 class _MeterStub:
@@ -78,7 +80,7 @@ class DLLMLoss:
     """dllm's own MDLMTrainer.compute_loss, without constructing a Trainer."""
 
     def __init__(self, time_epsilon: float = 1e-3, loss_weight_type: str = "scheduler",
-                 loss_norm_type: str = "token"):
+                 loss_norm_type: str = "token", special_ids: dict | None = None):
         from dllm.core.schedulers import LinearAlphaScheduler
         from dllm.core.trainers.mdlm import MDLMTrainer
 
@@ -88,7 +90,10 @@ class DLLMLoss:
         self.trainer.loss_weight_type = loss_weight_type
         self.trainer.loss_norm_type = loss_norm_type
         self.trainer.right_shift_logits = False
-        self.trainer.processing_class = _ProcessingStub()
+        # Row 3 runs on the Qwen tokenizer, whose mask id is 151669 rather than
+        # the project's 27 -- the stub is parameterised so dllm's loss does not
+        # have to be told which track it is on.
+        self.trainer.processing_class = _ProcessingStub(**(special_ids or {}))
         self.trainer.meter = _MeterStub()
 
     def __call__(self, model, batch: torch.Tensor) -> torch.Tensor:
@@ -105,12 +110,17 @@ def make_a2d_loss(loss: DLLMLoss):
 
 @torch.no_grad()
 def sample_dllm(model, prompts=C.PROMPTS, max_new_tokens: int = 32, block_size: int = 8,
-                steps: int = 8, temperature: float = 0.3) -> dict:
+                steps: int = 8, temperature: float = 0.3,
+                mask_token_id: int | None = None,
+                eos_token_id: int = C.EOS) -> dict:
     """MDLMSampler over the project's prompts."""
     from dllm.core.samplers.mdlm import MDLMSampler, MDLMSamplerConfig
 
-    sampler = MDLMSampler(model=model, tokenizer=_ProcessingStub())
-    prompt_ids = [torch.tensor(encode(p, bos=True), device=model.device) for p in prompts]
+    sampler = MDLMSampler(model=model, tokenizer=_ProcessingStub(*(
+        (mask_token_id,) if mask_token_id is not None else ())))
+    device = next(model.parameters()).device
+    prompt_ids = [torch.tensor(p, device=device) if not isinstance(p, str)
+                  else torch.tensor(encode(p, bos=True), device=device) for p in prompts]
     cfg = MDLMSamplerConfig(max_new_tokens=max_new_tokens, block_size=block_size,
                             steps=steps, temperature=temperature)
     out = sampler.sample(prompt_ids, config=cfg)
@@ -118,10 +128,11 @@ def sample_dllm(model, prompts=C.PROMPTS, max_new_tokens: int = 32, block_size: 
 
     ids, texts = [], []
     for i, prompt in enumerate(prompts):
-        plen = len(encode(prompt, bos=True))
+        plen = len(encode(prompt, bos=True)) if isinstance(prompt, str) else len(prompt)
+        prompt_ids = prompt if not isinstance(prompt, str) else encode(prompt, bos=True)
         gen = sequences[i, plen: plen + max_new_tokens]
-        if C.EOS in gen:
-            gen = gen[: int((gen == C.EOS).nonzero()[0])]
+        if eos_token_id in gen:
+            gen = gen[: int((gen == eos_token_id).nonzero()[0])]
         ids.append(gen.tolist())
         texts.append(decode(gen))
     return {"prompts": list(prompts), "ids": ids, "texts": texts,

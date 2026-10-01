@@ -14,3 +14,5 @@ Tier 0 · 200 steps · tinystories-6400 · 只验 pipeline，不看模型能力�
 | native-minimind-a2d-example | Qwen-mini-MiniMind | MiniMind-DLM-A2D | 3213056 | 200 | 5.7642 -> 5.2846 | 47,491 | 42,203 | 4.9692 | 0.4655 | from minimind-ar-example, lr 1e-04, block 8, steps 8 |
 | native-dllm-a2d-example | Qwen-mini-MiniMind | dLLM-A2D | 3213056 | 200 | 5.7136 -> 5.2850 | 27,831 | 25,856 | 4.9728 | 0.4828 | from minimind-ar-example, dllm loss on native torch, block 8 |
 | native-direct-dlm-example | Qwen-mini-MiniMind | Direct-DLM | 3213056 | 200 | 8.4655 -> 5.8544 | 47,602 | 42,381 | 5.6351 | 0.6897 | random init, lr 3e-04, block 8, steps 8 |
+| qwen3-0.6b-minimind-a2d-lora-example | Qwen3-0.6B | MiniMind-DLM-A2D | 598071296 | 200 | 12.2210 -> 10.0533 | 687 | 657 | 10.1203 | 0.9828 | LoRA r8 q/k/v/o, 0.3835% trainable, 401,280 tok |
+| qwen3-0.6b-dllm-a2d-lora-example | Qwen3-0.6B | dLLM-A2D | 598071296 | 200 | 11.9521 -> 10.0386 | 476 | 460 | 10.0984 | 0.9828 | LoRA r8 q/k/v/o, 0.3835% trainable, 401,280 tok, dllm loss |
