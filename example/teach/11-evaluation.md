@@ -45,12 +45,14 @@ A 版实测（Tier 0, 200 步）：
 |---|---|
 | hf-ar-example | 0.1724 |
 | minimind-ar-example | 0.3276 |
-| hf-minimind-a2d-example | 0.5172 |
+| hf-minimind-a2d-example | 0.7586 |
 | hf-direct-dlm-example | 0.7931 |
-| qwen3-0.6b-*-lora | 0.9828 |
+| qwen3-0.6b-*-lora | 0.9138 |
 
-读法：**Direct-DLM（0.79）比 A2D（0.52）复读更严重**，
-**Qwen3-0.6B + LoRA 几乎全在复读（0.98）**。
+读法：**Direct-DLM（0.79）比 A2D（0.76）复读略严重**，
+**Qwen3-0.6B + LoRA 几乎全在复读（0.91）**。
+行2 的 A2D 是 0.4655 —— 同一条路线换一个 base，差异就有 0.29，
+这个量级的分散度本身就说明 32 token 的样本不能用来给实现排名。
 方向和 `notes/03` 一致：A2D 继承机制，从零训要自己学机制，
 LoRA 只有 0.38% 的参数可动。
 

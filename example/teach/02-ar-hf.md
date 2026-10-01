@@ -102,4 +102,5 @@ no_decay  = [p for p in ... if p.dim() <  2]   # RMSNorm / bias
 ```
 
 A 版 Tier 0 实测：loss `8.4414 -> 4.6970`，eval `4.6356`，
-train-only `46,192` / wall `40,650` tok/s，峰值 `0.214 GB`，rep-4 `0.1724`。
+train-only `46,942` / wall `40,633` tok/s，峰值 `0.214 GB`，rep-4 `0.1724`。
+完整表见 `RESULTS.md`（吞吐逐次会变，loss 类数字逐位可复现）。

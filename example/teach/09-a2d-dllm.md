@@ -78,7 +78,7 @@ A 版测试直接验了这一点：改最后一个 token，
 
 ```
 [hf-dllm-a2d-example] loss 5.7631 -> 5.2761   eval 4.9765
-                        27,233 / 25,746 tok/s   rep-4 0.0000
+                        28,708 / 27,061 tok/s   rep-4 0.0000
 C5  conversion: 0 missing, 0 unexpected, 0 altered
 C2  vs hand-written loss: rel_diff 7.6e-08
 ```
