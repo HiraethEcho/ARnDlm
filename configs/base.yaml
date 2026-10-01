@@ -1,0 +1,114 @@
+# base.yaml — 全局默认配置
+#
+# 规则: **这里不写模型结构维度** (hidden_size / n_layers / n_heads ...)。
+# 那些属于各实验配置, 放 t1_*.yaml / t2_*.yaml / t3_*.yaml。
+# base 只放「所有实验都一样的」东西: 优化器、调度、日志频率、路径。
+#
+# 加载顺序:  base.yaml  →  <实验>.yaml  (后者覆盖前者)
+
+# ---------------------------------------------------------------------------
+# 运行模式
+# ---------------------------------------------------------------------------
+# ar       : 自回归训练/推理 (CausalLM)
+# dllm     : 扩散训练/推理 (masked diffusion)
+#
+# 同一个模型类, 靠这个开关决定 is_causal 和 loss 目标。
+mode: ar
+
+# ---------------------------------------------------------------------------
+# 优化
+# ---------------------------------------------------------------------------
+optim:
+  lr: null                  # 必填, 各实验自己定
+  min_lr_ratio: null        # cosine 衰减到的下限比例
+  weight_decay: null
+  betas: null
+  grad_clip: null
+
+# ---------------------------------------------------------------------------
+# 调度
+# ---------------------------------------------------------------------------
+schedule:
+  warmup_steps: null
+  max_steps: null           # 用步数封顶, 不要用 epoch ——
+                            # 332M tokens 跑满是 19-25 小时,
+                            # 无限步 = 默认跑一整天
+  # 按 token 数封顶也可以, 二选一
+  # max_tokens: null
+
+# ---------------------------------------------------------------------------
+# 训练
+# ---------------------------------------------------------------------------
+train:
+  batch_size: null
+  grad_accum: 1
+  dtype: bfloat16
+  num_workers: null
+  seed: 42
+  prepared_dir: data/prepared
+  # 打包 (packing) 还是 padding ——
+  # 本机 packing 吞吐高 1.71x, 理由见 logs/dev/02-hardware-perf.md
+  packing: true
+
+# ---------------------------------------------------------------------------
+# 推理
+# ---------------------------------------------------------------------------
+inference:
+  max_new_tokens: null
+  block_size: null          # DLM 专用: 分块去噪的块长
+  steps: null               # DLM 专用: 每块的迭代步数
+  temperature: null
+  top_k: null
+  cfg_scale: null           # DLM 专用, 代价是两次 forward
+  # 采样参数的推荐区间见 notes/03-minimind-dlm.md
+
+# ---------------------------------------------------------------------------
+# 频次
+# ---------------------------------------------------------------------------
+freq:
+  log_every: null
+  eval_every: null
+  sample_every: null
+  save_every: null
+
+# ---------------------------------------------------------------------------
+# 路径 (全部是软链接或本地产物, 不进 git)
+# ---------------------------------------------------------------------------
+paths:
+  ckpt_dir: checkpoints
+  # 程序产物 → 不进 git
+  run_dir: logs/run
+  # 手写开发记录 → 进 git
+  dev_dir: logs/dev
+  sample_dir: samples
+
+# ---------------------------------------------------------------------------
+# 日志 / 监控
+# ---------------------------------------------------------------------------
+logging:
+  # 必须同时报两个吞吐: 训练循环污染了 wall-clock
+  # 参见 notes/05-measurement.md 的 Bug 1
+  report_train_only_tps: true
+  report_wall_tps: true
+
+  # 每次 log 追加两行: summary.json (唯一真相) + metrics.csv (表格)
+  write_summary_json: true
+  write_metrics_csv: true
+
+  # SwanLab: 可选。没 export SWANLAB_API_KEY 就跳过, 不报错。
+  # 令牌在 ~/.config/zsh/dev.zsh 里但被注释掉了, 用之前自己 export。
+  swanlab:
+    enabled: true
+    project: ARnDlm
+    # mode: online | offline
+
+  tensorboard: false        # 装了也写, 没装不报错; summary.json 已经够了
+
+# ---------------------------------------------------------------------------
+# 评测
+# ---------------------------------------------------------------------------
+eval:
+  # 核心指标。DLM 失败最典型的表现是复读而 loss 照样下降。
+  # 参见 notes/03-minimind-dlm.md
+  report_repetition_rate: true
+  repetition_ngram: 4

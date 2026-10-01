@@ -1,0 +1,57 @@
+# 大文件和产物
+#
+# ⚠️ 软链接必须是**不带尾部斜杠**的写法。
+# git 的 `/data/` (带斜杠) 只匹配**目录**; 而对 git 来说软链接是个文件,
+# 所以 `/data/` 匹配不到它 —— 结果软链接本身会被提交进仓库。
+# 正确写法: `/data` 无斜杠, 同时覆盖目录和软链接两种情况。
+/data
+/checkpoints
+
+# 训练运行产物 —— 程序吐的, 不进 git
+# 注意: logs/dev/ 是**手写**开发记录, 要进 git, 所以只挡 logs/run
+/logs/run
+/samples
+
+# 如果软链接断了退化成真目录, 这几行是第二层保险
+data/**
+checkpoints/**
+logs/run/**
+samples/**
+
+# 兜底: 按扩展名挡
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.npz
+*.ckpt
+*.csv.gz
+
+# Python 虚拟环境 —— 绝对不进 git
+# .venv/ 里 ROCm torch wheel 几个 GB, 重建比提交现实得多
+# 重建: ./scripts/setup_env.sh
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# matplotlib 缓存
+.matplotlib/
+
+# 环境与密钥
+*.env
+.env
+# SwanLab / wandb 本地缓存
+.swanlab/
+wandb/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 本地 agent 配置 (skill 定义等) —— 不进 git
+.agents/
