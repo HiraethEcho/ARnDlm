@@ -12,8 +12,8 @@ A 版在 `example/` 全部跑通之前，这些步骤只是骨架；跑通一个
 | 0 | `utils/` | `example/common/` | 全部（底座） | ✅ 已细化 |
 | 1 | `models/hf_qwen/` | `example/base/hf/model.py` | 行1 base | ✅ 已细化 |
 | 2 | `training/ar_hf/` | `example/base/hf/train_ar.py` | 行1 base | ✅ 已细化 |
-| 3 | `models/minimind_qwen/` | `example/base/native/model.py` | 行2 base | 待写 |
-| 4 | `training/ar_native/` | `example/base/native/train_ar.py` | 行2 base | 待写 |
+| 3 | `models/minimind_qwen/` | `example/base/native/model.py` | 行2 base | ✅ 已细化 |
+| 4 | `training/ar_native/` | `example/base/native/train_ar.py` | 行2 base | ✅ 已细化 |
 | 5 | `diffusion/` corruption + scheduler | `example/base/*/a2d_minimind.py` | 三格方法 | 待写 |
 | 6 | `diffusion/loss.py` | 同上 + `test/04` | 三格方法 | 待写 |
 | 7 | `diffusion/sampler.py` | 同上 | 三格方法 | 待写 |
