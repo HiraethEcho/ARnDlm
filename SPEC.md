@@ -131,6 +131,10 @@ ar-3.2m-hf-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 | `ar-3.2m-native-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0410|
 | `ar-3.2m-hf-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0685|
 | `ar-3.2m-native-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0283|
+| `ar-3.2m-hf-sft-mini_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.1029 |
+| `ar-3.2m-native-sft-mini_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0851 |
+| `ar-3.2m-hf-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0851 |
+| `ar-3.2m-native-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0485 |
 | `dlm-3.2m-hf` | G2 | ✅ eval 5.6427 |
 | `dlm-3.2m-dllm` | G2 | ✅ eval 5.6460|
 | `dlm-3.2m-hf-sft` | G2 | ⬜ P2 |
@@ -193,6 +197,22 @@ ar-3.2m-hf-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 | **格子** | 原路线：`ar-sft` → A2D → DLM-SFT · 新路线：`ar-a2d` → DLM-SFT |
 | **验收** | 两条线的「能 chat」四条门槛（§6.3）都能报；差值就是顺序的代价 |
 | **注意** | **AR-SFT 是必需的对照组**。没有它，无法判断 DLM 的输出是「变差了」还是「本来就差」 |
+
+**2026-10-02 实测结论（Tier 0）**。两条路线都终止于「assistant 段上的 A2D loss」，
+同一份 SFT 语料、同一个目标，因此四对实现可直接比较：
+
+| 路线 | hf/mini | hf/dllm | native/mini | native/dllm |
+|---|---:|---:|---:|---:|
+| 新路线 A2D → SFT | 6.4958 | 6.4880 | 6.5279 | 6.5088 |
+| 原路线 SFT → A2D → SFT | **6.1029** | **6.0851** | **6.0851** | **6.0485** |
+| 差（原 − 新） | −0.393 | −0.403 | −0.443 | −0.460 |
+
+**原路线稳定优约 0.40 nat，四个实现对全部同向。** 与 SPEC 把原路线排在前面
+（业界已有的 A2D 全部落在原路线上）一致。
+
+⚠️ **AR-SFT 对照组（`ar-3.2m-{hf,native}-sft`，eval 6.3639 / 6.3462）不能和上表直接比**——
+它是 AR 的 next-token CE，上表是 A2D 的加权 masked CE，两者不是同一个量。
+跨模型族的比较要靠 §6.3 的「能 chat」四条门槛或 DPO 的偏好准确率，不能靠 loss 数值。
 
 ### G4 · 不同基模做 A2D
 
@@ -427,7 +447,7 @@ notes/ logs/ scripts/patches/
 
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
-| **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ✅ · `{mini,dllm}_a2d-sft` ✅ · `sft-{mini,dllm}_a2d` ✅ | `…-sft-dpo` ⬜ P2 |
+| **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ✅ · `{mini,dllm}_a2d-sft` ✅ · `sft-{mini,dllm}_a2d` ✅ · `sft-{mini,dllm}_a2d-sft` ✅ | `…-sft-dpo` ⬜ P2 |
 | **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ✅ | ⬜ P2 |
 | **dlm**（直接预训练 DLM） | `dlm-3.2m-hf` ✅<br>`dlm-3.2m-dllm` ✅ | — 本来就是 DLM | `dlm-3.2m-{hf,dllm}-sft` ⬜ P2 | — DLM 无序列 logprob |
 

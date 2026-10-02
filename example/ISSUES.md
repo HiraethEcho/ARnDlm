@@ -103,7 +103,7 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 
 ---
 
-## OPEN-8 · G3 的「尾部 DLM-SFT」缺失，**G3 目前无法给出结论**
+## DONE-8 · G3 的「尾部 DLM-SFT」已补齐，**G3 已有结论**
 
 **SPEC 内部矛盾**：
 
@@ -134,9 +134,17 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 | **O1** | 补 4 格尾部 DLM-SFT（`ar-3.2m-{hf,native}-sft-{mini,dllm}_a2d` 再 SFT 一次），SPEC §2.3 加这 4 格 | 4 × 200 步，Tier 0 约 2 分钟 |
 | **O2** | 不补，G3 标记为「pipeline 跑通但结论待定」 | 矩阵里 4 个 ⬜ 变 ✅ 但 G3 无结论 |
 
-**当前代码状态**：M5 实现了 §2.3 表里列的 4 格（止于 A2D），M4 实现了 4 格新路线。
-`example/base/hf/train_dlm_sft.py` 已能对任意 DLM checkpoint 做 SFT，
-**补 O1 只需给它再开 4 个格名**，代码已就位。
+**已按 O1 结清**（2026-10-02）：`train_dlm_sft.py` 的 `CELLS` 从 4 格扩到 8 格，
+新增 `ar-3.2m-{hf,native}-sft-{mini,dllm}_a2d-sft` 四格，上游分别是 M5 的四格。
+
+**结论**（两条路线终止于同一评测：assistant 段上的 A2D loss，同语料同目标）：
+
+| 路线 | hf/mini | hf/dllm | native/mini | native/dllm |
+|---|---:|---:|---:|---:|
+| 新路线 A2D → SFT | 6.4958 | 6.4880 | 6.5279 | 6.5088 |
+| 原路线 SFT → A2D → SFT | **6.1029** | **6.0851** | **6.0851** | **6.0485** |
+
+**原路线优约 0.40 nat，四对全部同向。** 结论写进 `SPEC.md` G3。
 
 ## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
 

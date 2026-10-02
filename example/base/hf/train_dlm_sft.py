@@ -50,11 +50,25 @@ from base.hf.model import SFT_PROMPTS
 # SPEC 2.3's SFT column: cell -> (row, objective). `--cell` must be one of
 # these; an unknown name is an error rather than a new row in RESULTS.md,
 # because a typo would otherwise create a cell no SPEC review ever looks at.
+# cell -> (row, objective, upstream cell name). `--cell` must be one of these; an
+# unknown name is an error rather than a new row in RESULTS.md, because a typo
+# would otherwise create a cell no SPEC review ever looks at.
+#
+# The eight entries are the two directions of G3. `{mini,dllm}_a2d-sft` is the
+# **A2D first** arm: pretrain, A2D, then SFT on chat. `sft-{mini,dllm}_a2d-sft` is
+# the **original** arm: pretrain, SFT, A2D, then SFT again -- the trailing stage is
+# what G3's cell row asks for ("ar-sft -> A2D -> DLM-SFT") and it is what puts both
+# routes on the same evaluation (assistant spans, same objective), so that the
+# difference between them is the order and nothing else. ISSUES.md OPEN-8.
 CELLS = {
-    "ar-3.2m-hf-mini_a2d-sft": ("hf", "minimind"),
-    "ar-3.2m-hf-dllm_a2d-sft": ("hf", "dllm"),
-    "ar-3.2m-native-mini_a2d-sft": ("native", "minimind"),
-    "ar-3.2m-native-dllm_a2d-sft": ("native", "dllm"),
+    "ar-3.2m-hf-mini_a2d-sft": ("hf", "minimind", "ar-3.2m-hf-mini_a2d"),
+    "ar-3.2m-hf-dllm_a2d-sft": ("hf", "dllm", "ar-3.2m-hf-dllm_a2d"),
+    "ar-3.2m-native-mini_a2d-sft": ("native", "minimind", "ar-3.2m-native-mini_a2d"),
+    "ar-3.2m-native-dllm_a2d-sft": ("native", "dllm", "ar-3.2m-native-dllm_a2d"),
+    "ar-3.2m-hf-sft-mini_a2d-sft": ("hf", "minimind", "ar-3.2m-hf-sft-mini_a2d"),
+    "ar-3.2m-hf-sft-dllm_a2d-sft": ("hf", "dllm", "ar-3.2m-hf-sft-dllm_a2d"),
+    "ar-3.2m-native-sft-mini_a2d-sft": ("native", "minimind", "ar-3.2m-native-sft-mini_a2d"),
+    "ar-3.2m-native-sft-dllm_a2d-sft": ("native", "dllm", "ar-3.2m-native-sft-dllm_a2d"),
 }
 
 
@@ -119,11 +133,11 @@ def main() -> int:
                     help="skip the upstream checkpoint (ablation)")
     args = ap.parse_args()
 
-    row, objective = CELLS[args.cell]
+    row, objective, upstream_cell = CELLS[args.cell]
     builder, sampler, loss_factory, loss_note, base_label = build_parts(row, objective)
     method = f"{objective.upper()}-A2D-SFT"
 
-    upstream = args.init_from or C.cell_dir(args.cell.replace("-sft", ""))
+    upstream = args.init_from or C.cell_dir(upstream_cell)
     train_cfg, data, eval_batches = resolve_sft(args, C.DLM_TRAIN)
 
     model = builder(C.TIER0, seed=args.seed)
