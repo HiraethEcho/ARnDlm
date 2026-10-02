@@ -340,25 +340,46 @@ notes/ logs/ scripts/patches/ # 知识、开发记录、运行产物、dllm patc
 **A 版跑通 ≠ B 版可以写。** B 版在写之前，用 `example/teach/` 里那一步的
 「验收命令」自己先跑一遍 A 版，拿到基准数。
 
-### 8.2 主任务表
+### 8.2 任务网格：base × 阶段
 
-| 任务 | 内容 | A 版（AI 写） | B 版（你写） | 验收 |
+**行 = 模型对象**，**列 = 训练阶段**。每个格子是一份代码；A 版一份、B 版一份。
+
+```
+              pretrain          a2d              sft              rl
+              从零训基座         AR→DLM 转换+微调    对话微调          偏好/强化
+```
+
+### 8.2.1 A 版（AI 写，`example/`，Tier 0 3.2M）
+
+| base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
-| **T0** | 公用底座：数据、存盘、指标、日志 | `example/common/` ✅ | `utils/` `data/` | 两套实现行为一致；B 版跑 `test/01`-`test/05` |
-| **T1a** | AR 训练 · 行1（用包） | `example/base/hf/train_ar.py` ✅ | `models/hf_qwen/` + `training/ar_hf/` | 存/恢复/生成；报双吞吐 |
-| **T1b** | AR 训练 · 行2（不用包） | `example/base/native/` ✅ | `models/minimind_qwen/` + `training/ar_native/` | **C1：logits `1e-5`**（A 版实测 6.91e-06） |
-| **T2a** | MiniMind-DLM A2D | `example/base/{hf,native}/a2d_minimind.py` ✅ | `training/a2d_minimind/` | **C2/C3：loss 差 `< 1%`**（实测 7.6e-08 / 1.5e-07） |
-| **T2b** | dLLM-A2D（上游路径） | `example/base/{hf,native}/a2d_dllm.py` ✅ | `training/a2d_dllm/` | **C5：转换 0 丢失 0 漂移** |
-| **T2c** | Qwen3-0.6B A2D（LoRA） | `example/base/qwen3_0p6b/` ✅ | `training/a2d_{dllm,minimind}/` 的行3 分支 | 两格跑通 + **报 repetition rate** |
-| **T3** | Direct-DLM（从零训） | `example/base/{hf,native}/direct_dlm.py` ✅ | `training/direct_dlm/` | 跑通 + 报 repetition rate |
-| **T4-1/2** | SFT · AR（行1 / 行2） | `example/base/{hf,native}/sft_ar.py` ⬜ | `training/sft_ar_{hf,native}/` | T4a-T4e + “能 chat”四条门槛 |
-| **T4-3/4** | SFT · DLM（行1 / 行2） | `example/base/{hf,native}/sft_a2d.py` ⬜ | `training/sft_a2d_{hf,native}/` | **T4f：区间外永不加噪** + “能 chat” |
-| **T4-5** | SFT · DLM（dllm objective） | 同上 `--loss dllm` ⬜ P1 | 同目录 | T4g：两种 objective 仍一致 |
-| **T4-6** | SFT · Direct-DLM | 同上 P2 | 同目录 | 能 chat |
-| **T4-7** | DPO（只在 AR 上） | ⬜ P2 | `training/dpo_ar_native/` | chosen/rejected 排序正确 |
-| **—** | Tier 1 定档 | `example/teach/13-tier1.md` ✅ | 同左（写在 `logs/dev/02`） | 先测吞吐再定参数量 |
+| **ar-hf**<br>`transformers` Qwen3 | ✅ `base/hf/train_ar.py`<br>格1 · eval 4.6356 | ✅ `base/hf/a2d_minimind.py`<br>`a2d_dllm.py` · 格3/4 | ⬜ `base/hf/sft_ar.py`<br>P0 | ⬜ P2 |
+| **ar-native**<br>纯 torch Qwen3 | ✅ `base/native/train_ar.py`<br>格2 · eval 4.6283 | ✅ `base/native/a2d_minimind.py`<br>`a2d_dllm.py` · 格6/7 | ⬜ `base/native/sft_ar.py`<br>P0 | ⬜ P2 |
+| **qwen3-0.6b**<br>现成权重 + LoRA | — 用现成 checkpoint<br>不训 | ✅ `base/qwen3_0p6b/` · 格9/10<br>eval 4.80 / 4.82 | ⬜ P1 | ⬜ P2 |
+| **direct-dlm**<br>随机初始化 DLM | ✅ `base/{hf,native}/direct_dlm.py`<br>格5/8 · eval 5.64 | — 本来就是 DLM<br>无 AR 可转 | ⬜ P2 | — DPO 需序列 logprob<br>DLM 无定义 |
 
-✅ = A 版已完成（在 main） · ⬜ = 未写 · P1/P2 = 排在 P0 之后
+### 8.2.2 B 版（你写，根目录，Tier 1 ~50M / ctx 512）
+
+| base | pretrain | a2d | sft | rl |
+|---|---|---|---|---|
+| **ar-hf** | `models/hf_qwen/`<br>`training/ar_hf/` | `training/a2d_minimind/`（不用包）<br>`training/a2d_dllm/`（用包） | `training/sft_ar_hf/` | `training/dpo_ar_hf/` |
+| **ar-native** | `models/minimind_qwen/`<br>`training/ar_native/` | ↑ **同一对目录**，`--base` 切换 | `training/sft_ar_native/` | `training/dpo_ar_native/` |
+| **qwen3-0.6b** | — | ↑ 同一对目录，行3 分支（LoRA） | 同 sft 目录，LoRA | ⬜ P2 |
+| **direct-dlm** | `training/direct_dlm/` | — | 同 sft 目录 | — |
+
+**a2d / sft 三个 base 共用同一份 B 版代码**：`training/a2d_*/` 吃任意 AR checkpoint，
+`training/sft_*/` 也一样。A/B 的轴是**用不用包**（minimind vs dllm），不是 base 本身。
+
+### 8.2.3 每格验收
+
+| 阶段 | 验收 | A 版实测 |
+|---|---|---|
+| pretrain | 存/恢复/生成 + 双吞吐 | ✅ 两 base eval 差 0.007 |
+| a2d | **C1 `1e-5`** · **C2/C3 `<1%`** · **C5 0 丢失** | 6.91e-06 / 7.6e-08 / 0 |
+| sft | T4a-T4h + 「能 chat」四条门槛（§6） | 未做 |
+| rl | chosen 排序正确 | 未做 |
+
+✅ = 已完成并在 main · ⬜ = 未写 · P0/P1/P2 = 优先级
 
 ### 8.3 依赖顺序
 
