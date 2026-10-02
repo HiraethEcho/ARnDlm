@@ -128,14 +128,21 @@ class Loop:
             self.losses.append(value)
             meter.add(n_tokens, step_seconds)      # only the update, never validation
             lr = self.opt.param_groups[0]["lr"]
-            self.rows.append({
+            row = {
                 "step": self.step,
                 "loss": round(value, 6),
                 "lr": round(lr, 8),
                 "tokens": meter.tokens,
                 "train_only_tps": round(meter.train_tps, 1),
                 "wall_tps": round(meter.wall_tps, 1),
-            })
+            }
+            # Fold any scalar the objective reports into the row (DPO's preference
+            # accuracy and margin, A2D's t_mean). Additive: the pretraining rows
+            # carry exactly the six keys above, unchanged.
+            for k, v in (extra if isinstance(extra, dict) else {}).items():
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    row[k] = round(float(v), 6)
+            self.rows.append(row)
             if self.step % self.cfg.log_every == 0 or self.step == 1:
                 print(f"step {self.step:>4}/{limit}  loss {value:.4f}  "
                       f"lr {lr:.2e}  train {meter.train_tps:,.0f} tok/s  "

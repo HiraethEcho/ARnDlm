@@ -146,6 +146,21 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 
 **原路线优约 0.40 nat，四对全部同向。** 结论写进 `SPEC.md` G3。
 
+## OPEN-10 · DPO 只能在 AR 行上跑，DLM 没有序列 logprob
+
+**事实**：DPO 的目标是 `log pi(y|x)`（自回归因子的乘积）的差。掩码扩散模型
+**同时对所有位置去噪**，不定义这个量。SPEC 自己的矩阵就写了「DLM 无序列 logprob」。
+
+**现状**：`ar-3.2m-hf-sft-dpo` 已跑通，偏好准确率 **0.0 → 0.75**（200 步）。
+其余三格（`ar-3.2m-native-sft-dpo`、dlm 行的两格）**未做**。
+
+**两个未解决的问题**：
+
+| | 问题 |
+|---|---|
+| **10.1** | native 版的 DPO 格没跑。代码路径与 hf 版相同（`train_dpo.py` 需要按 `--cell` 参数化），约 5 分钟 |
+| **10.2** | **dlm 行的 DPO 需要一个 ELBO 形式化的 `log pi(y|x)`，这是研究问题不是配置开关。** 在那之前 dlm 行的 DPO 格不能声称「跑通」 |
+
 ## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
 
 `lambda: minimind_loss` 求值得到**函数对象**，于是 Loop 把工厂当 loss 调

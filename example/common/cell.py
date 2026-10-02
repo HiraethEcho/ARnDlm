@@ -36,9 +36,15 @@ def repetition_from_sample(sample: dict | None) -> tuple[float | None, list[dict
 
 def finish_cell(loop: Loop, data: PackedData, *, cell: str, base: str, method: str,
                 ckpt_dir: Path, run_dir: Path, config: dict, sample_fn=None,
-                eval_batches=None, notes: str = "") -> dict:
-    """Train, score, sample, checkpoint, report. Returns the run summary."""
-    summary = loop.fit(data, sample_fn=sample_fn, eval_batches=eval_batches)
+                eval_batches=None, notes: str = "", stream=None) -> dict:
+    """Train, score, sample, checkpoint, report. Returns the run summary.
+
+    `stream` is a passthrough for cells whose corpus is not a plain block stream
+    (the DPO cell builds its own, because its rows are pairs). None keeps the
+    existing behaviour of letting Loop derive one from `data`.
+    """
+    summary = loop.fit(data, sample_fn=sample_fn, eval_batches=eval_batches,
+                       stream=stream)
 
     rep4, sample_rows = repetition_from_sample(summary.get("sample"))
     summary["repetition"] = {"rep4": rep4, "prompts": sample_rows}
