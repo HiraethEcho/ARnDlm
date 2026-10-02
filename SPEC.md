@@ -117,22 +117,22 @@ ar-3.2m-hf-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 |---|---|---|
 | `ar-3.2m-hf` | G1 | ✅ eval 4.6356 |
 | `ar-3.2m-native` | G1 | ✅ eval 4.6283 |
-| `ar-3.2m-hf-sft` | G3 对照 | ⬜ P0 |
-| `ar-3.2m-native-sft` | G3 对照 | ⬜ P0 |
+| `ar-3.2m-hf-sft` | G3 对照 | ✅ eval 6.3639|
+| `ar-3.2m-native-sft` | G3 对照 | ✅ eval 6.3462|
 | `ar-3.2m-hf-mini_a2d` | G2/G3 新 | ✅ eval 4.9723 |
 | `ar-3.2m-native-mini_a2d` | G2/G3 新 | ✅ eval 4.9692 |
 | `ar-3.2m-hf-dllm_a2d` | G5 | ✅ eval 4.9765 |
 | `ar-3.2m-native-dllm_a2d` | G5 | ✅ eval 4.9728 |
-| `ar-3.2m-hf-mini_a2d-sft` | G3 新路线 | ⬜ P0 |
-| `ar-3.2m-native-mini_a2d-sft` | G3 新路线 | ⬜ P0 |
-| `ar-3.2m-hf-dllm_a2d-sft` | G3/G5 | ⬜ P1 |
-| `ar-3.2m-native-dllm_a2d-sft` | G3/G5 | ⬜ P1 |
-| `ar-3.2m-hf-sft-mini_a2d` | G3 原路线 | ⬜ P0 |
-| `ar-3.2m-native-sft-mini_a2d` | G3 原路线 | ⬜ P0 |
-| `ar-3.2m-hf-sft-dllm_a2d` | G3/G5 原路线 | ⬜ P1 |
-| `ar-3.2m-native-sft-dllm_a2d` | G3/G5 原路线 | ⬜ P1 |
+| `ar-3.2m-hf-mini_a2d-sft` | G3 新路线 | ✅ eval 6.4958|
+| `ar-3.2m-native-mini_a2d-sft` | G3 新路线 | ✅ eval 6.5279|
+| `ar-3.2m-hf-dllm_a2d-sft` | G3/G5 | ✅ eval 6.4880|
+| `ar-3.2m-native-dllm_a2d-sft` | G3/G5 | ✅ eval 6.5088|
+| `ar-3.2m-hf-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0425|
+| `ar-3.2m-native-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0410|
+| `ar-3.2m-hf-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0685|
+| `ar-3.2m-native-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0283|
 | `dlm-3.2m-hf` | G2 | ✅ eval 5.6427 |
-| `dlm-3.2m-dllm` | G2 | ⬜ 取代原 `native` 版 |
+| `dlm-3.2m-dllm` | G2 | ✅ eval 5.6460|
 | `dlm-3.2m-hf-sft` | G2 | ⬜ P2 |
 | `dlm-3.2m-dllm-sft` | G2 | ⬜ P2 |
 | `qwen3-0.6b-mini_a2d` | G4 | ✅ eval 4.8166 |
@@ -427,9 +427,9 @@ notes/ logs/ scripts/patches/
 
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
-| **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ⬜ **P0** | `…-sft-dpo` ⬜ P2 |
-| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ⬜ P1 | ⬜ P2 |
-| **dlm**（直接预训练 DLM） | `dlm-3.2m-hf` ✅<br>`dlm-3.2m-dllm` ⬜ | — 本来就是 DLM | `dlm-3.2m-{hf,dllm}-sft` ⬜ P2 | — DLM 无序列 logprob |
+| **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ✅ · `{mini,dllm}_a2d-sft` ✅ · `sft-{mini,dllm}_a2d` ✅ | `…-sft-dpo` ⬜ P2 |
+| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ⬜ P1（M7） | ⬜ P2 |
+| **dlm**（直接预训练 DLM） | `dlm-3.2m-hf` ✅<br>`dlm-3.2m-dllm` ✅ | — 本来就是 DLM | `dlm-3.2m-{hf,dllm}-sft` ⬜ P2 | — DLM 无序列 logprob |
 
 ### 8.2 实践版（你写，根目录，Tier 1 ~50M / ctx 512）
 

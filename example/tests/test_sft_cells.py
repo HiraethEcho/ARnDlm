@@ -98,7 +98,7 @@ def section_rows() -> None:
         check(f"{cell} names the {row} row", row in cell,
               "a native cell that runs the transformers model produces numbers "
               "for the wrong implementation")
-        builder, _, _, base_label, _ = dlmsft.build_parts(row, obj)
+        builder, _, _, _, base_label = dlmsft.build_parts(row, obj)
         module = builder.__module__
         check(f"{cell} builds its row's model",
               ("base.hf" in module) if row == "hf" else ("base.native" in module),
