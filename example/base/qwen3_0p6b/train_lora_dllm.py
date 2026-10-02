@@ -31,7 +31,7 @@ from base.qwen3_0p6b.common_qwen import (BASE, CELL_DLLM, LORA_R, build_a2d_lora
 from base.qwen3_0p6b.lora_common import packed, prompts_for, sample_lora_dlm
 
 METHOD = "dLLM-A2D"
-CKPT = C.cell_dir("qwen3-0.6b/dllm-a2d-lora-example")
+CKPT = C.cell_dir("qwen3-0.6b-dllm_a2d")
 
 
 def main() -> int:

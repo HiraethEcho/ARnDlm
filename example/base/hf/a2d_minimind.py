@@ -22,7 +22,7 @@ from common import config as C
 from common.a2d import a2d_loss, corrupt, sample_dlm, sample_t
 from common.tokenizer import decode, encode
 
-CELL = "hf-minimind-a2d-example"
+CELL = "ar-3.2m-hf-mini_a2d"
 BASE = "Qwen-mini-HF"
 METHOD = "MiniMind-DLM-A2D"
 

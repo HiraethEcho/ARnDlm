@@ -43,10 +43,10 @@ looped = list(range(8)) * 8      # 61 个 4-gram 窗口，8 个不同
 
 | 格 | rep-4 |
 |---|---|
-| hf-ar-example | 0.1724 |
-| minimind-ar-example | 0.3276 |
-| hf-minimind-a2d-example | 0.7586 |
-| hf-direct-dlm-example | 0.7931 |
+| ar-3.2m-hf | 0.1724 |
+| ar-3.2m-native | 0.3276 |
+| ar-3.2m-hf-mini_a2d | 0.7586 |
+| dlm-3.2m-hf | 0.7931 |
 | qwen3-0.6b-*-lora | 0.9138 |
 
 读法：**Direct-DLM（0.79）比 A2D（0.76）复读略严重**，

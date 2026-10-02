@@ -15,16 +15,16 @@ SPEC 2.3 的矩阵是 **3 个 base model × 3 种 DLM 方法**（Direct-DLM 在 
 
 | # | 格子 | base 权重从哪来 | 实验版文件（我写） | 实践版目录（你写） | smoke 产物 |
 |---|---|---|---|---|---|
-| 1 | **AR baseline · 行1**（矩阵前置） | 随机初始化 | `base/hf/train_ar.py` | `models/hf_qwen/` + `training/ar_hf/` | `qwen-mini/hf-ar-example/` |
-| 2 | **AR baseline · 行2**（矩阵前置） | 随机初始化 | `base/native/train_ar.py` | `models/minimind_qwen/` + `training/ar_native/` | `qwen-mini/minimind-ar-example/` |
-| 3 | Qwen-mini-HF · **dLLM-A2D** | 格 1 的权重 | `base/hf/a2d_dllm.py` | `training/a2d_dllm/` | `qwen-mini/hf-dllm-a2d-example/` |
-| 4 | Qwen-mini-HF · **MiniMind-A2D** | 格 1 的权重 | `base/hf/a2d_minimind.py` | `training/a2d_minimind/` | `qwen-mini/hf-minimind-a2d-example/` |
-| 5 | Qwen-mini-HF · **Direct-DLM** | 随机初始化（**不吃 AR 权重**） | `base/hf/direct_dlm.py` | `training/direct_dlm/` | `qwen-mini/hf-direct-dlm-example/` |
-| 6 | Qwen-mini-MiniMind · **dLLM-A2D** | 格 2 的权重 | `base/native/a2d_dllm.py` | `models/minimind_qwen/` + `training/a2d_dllm/` | `qwen-mini/native-dllm-a2d-example/` |
-| 7 | Qwen-mini-MiniMind · **MiniMind-A2D** | 格 2 的权重 | `base/native/a2d_minimind.py` | `models/minimind_qwen/` + `training/a2d_minimind/` | `qwen-mini/native-minimind-a2d-example/` |
-| 8 | Qwen-mini-MiniMind · **Direct-DLM** | 随机初始化（**不吃 AR 权重**） | `base/native/direct_dlm.py` | `models/minimind_qwen/` + `training/direct_dlm/` | `qwen-mini/native-direct-dlm-example/` |
-| 9 | Qwen3-0.6B · **dLLM-A2D**（LoRA） | 已有 checkpoint + LoRA | `base/qwen3_0p6b/lora_dllm_a2d.py` | `training/a2d_dllm/` | `qwen3-0.6b/dllm-a2d-lora-example/` |
-| 10 | Qwen3-0.6B · **MiniMind-A2D**（LoRA） | 已有 checkpoint + LoRA | `base/qwen3_0p6b/lora_minimind_a2d.py` | `training/a2d_minimind/` | `qwen3-0.6b/minimind-a2d-lora-example/` |
+| 1 | **AR baseline · 行1**（矩阵前置） | 随机初始化 | `base/hf/train_ar.py` | `models/hf_qwen/` + `training/ar_hf/` | `ar-3.2m-hf/` |
+| 2 | **AR baseline · 行2**（矩阵前置） | 随机初始化 | `base/native/train_ar.py` | `models/minimind_qwen/` + `training/ar_native/` | `ar-3.2m-native/` |
+| 3 | Qwen-mini-HF · **dLLM-A2D** | 格 1 的权重 | `base/hf/a2d_dllm.py` | `training/a2d_dllm/` | `ar-3.2m-hf-dllm_a2d/` |
+| 4 | Qwen-mini-HF · **MiniMind-A2D** | 格 1 的权重 | `base/hf/a2d_minimind.py` | `training/a2d_minimind/` | `ar-3.2m-hf-mini_a2d/` |
+| 5 | Qwen-mini-HF · **Direct-DLM** | 随机初始化（**不吃 AR 权重**） | `base/hf/direct_dlm.py` | `training/direct_dlm/` | `dlm-3.2m-hf/` |
+| 6 | Qwen-mini-MiniMind · **dLLM-A2D** | 格 2 的权重 | `base/native/a2d_dllm.py` | `models/minimind_qwen/` + `training/a2d_dllm/` | `ar-3.2m-native-dllm_a2d/` |
+| 7 | Qwen-mini-MiniMind · **MiniMind-A2D** | 格 2 的权重 | `base/native/a2d_minimind.py` | `models/minimind_qwen/` + `training/a2d_minimind/` | `ar-3.2m-native-mini_a2d/` |
+| 8 | Qwen-mini-MiniMind · **Direct-DLM** | 随机初始化（**不吃 AR 权重**） | `base/native/direct_dlm.py` | `models/minimind_qwen/` + `training/direct_dlm/` | `native-direct-dlm-example/` |
+| 9 | Qwen3-0.6B · **dLLM-A2D**（LoRA） | 已有 checkpoint + LoRA | `base/qwen3_0p6b/lora_dllm_a2d.py` | `training/a2d_dllm/` | `qwen3-0.6b-dllm_a2d/` |
+| 10 | Qwen3-0.6B · **MiniMind-A2D**（LoRA） | 已有 checkpoint + LoRA | `base/qwen3_0p6b/lora_minimind_a2d.py` | `training/a2d_minimind/` | `qwen3-0.6b-mini_a2d/` |
 
 两个轴是**独立**的：base 决定权重从哪来，method 决定怎么转成 DLM。
 所以三个 DLM 训练目录吃**任意** AR 权重，格 3-8 只是「换了个 base 再跑一遍」。
@@ -112,16 +112,16 @@ example/
 | # | 做什么 | 产出 checkpoint | 验收 |
 |---|---|---|---|
 | 1 | `common/` 六个模块 | — | dataloader 出 batch, 数值合理 |
-| 2 | `base/hf/model.py` + `train_ar.py` | `qwen-mini/hf-ar-example` | 6 项 + C3 基线 |
-| 3 | `base/native/model.py` + `train_ar.py` | `qwen-mini/minimind-ar-example` | 6 项 + **C1** |
-| 4 | `base/hf/a2d_minimind.py` | `qwen-mini/hf-minimind-a2d-example` | 6 项 |
-| 5 | `base/hf/a2d_dllm.py` | `qwen-mini/hf-dllm-a2d-example` | 6 项 + **C2** |
-| 6 | `base/hf/direct_dlm.py` | `qwen-mini/hf-direct-dlm-example` | 6 项 |
-| 7 | `base/native/a2d_minimind.py` | `qwen-mini/native-minimind-a2d-example` | 6 项 + **C3** |
-| 8 | `base/native/a2d_dllm.py` | `qwen-mini/native-dllm-a2d-example` | 6 项 |
-| 9 | `base/native/direct_dlm.py` | `qwen-mini/native-direct-dlm-example` | 6 项 |
-| 10 | `base/qwen3_0p6b/lora_dllm_a2d.py` | `qwen3-0.6b/dllm-a2d-lora-example` | 6 项 |
-| 11 | `base/qwen3_0p6b/lora_minimind_a2d.py` | `qwen3-0.6b/minimind-a2d-lora-example` | 6 项 |
+| 2 | `base/hf/model.py` + `train_ar.py` | `ar-3.2m-hf` | 6 项 + C3 基线 |
+| 3 | `base/native/model.py` + `train_ar.py` | `ar-3.2m-native` | 6 项 + **C1** |
+| 4 | `base/hf/a2d_minimind.py` | `ar-3.2m-hf-mini_a2d` | 6 项 |
+| 5 | `base/hf/a2d_dllm.py` | `ar-3.2m-hf-dllm_a2d` | 6 项 + **C2** |
+| 6 | `base/hf/direct_dlm.py` | `dlm-3.2m-hf` | 6 项 |
+| 7 | `base/native/a2d_minimind.py` | `ar-3.2m-native-mini_a2d` | 6 项 + **C3** |
+| 8 | `base/native/a2d_dllm.py` | `ar-3.2m-native-dllm_a2d` | 6 项 |
+| 9 | `base/native/direct_dlm.py` | `native-direct-dlm-example` | 6 项 |
+| 10 | `base/qwen3_0p6b/lora_dllm_a2d.py` | `qwen3-0.6b-dllm_a2d` | 6 项 |
+| 11 | `base/qwen3_0p6b/lora_minimind_a2d.py` | `qwen3-0.6b-mini_a2d` | 6 项 |
 | 12 | `smoke_all.sh` + `RESULTS.md` | — | 表填满 |
 
 ## 6. 每格验收 6 项
@@ -151,13 +151,13 @@ example/
 
 ```
 checkpoints/example/
-  qwen-mini/
-    hf-ar-example/                     minimind-ar-example/
-    hf-dllm-a2d-example/               native-dllm-a2d-example/
-    hf-minimind-a2d-example/           native-minimind-a2d-example/
-    hf-direct-dlm-example/             native-direct-dlm-example/
-  qwen3-0.6b/
-    dllm-a2d-lora-example/             minimind-a2d-lora-example/
+  
+    ar-3.2m-hf/                     ar-3.2m-native/
+    ar-3.2m-hf-dllm_a2d/               ar-3.2m-native-dllm_a2d/
+    ar-3.2m-hf-mini_a2d/           ar-3.2m-native-mini_a2d/
+    dlm-3.2m-hf/             native-direct-dlm-example/
+  
+    qwen3-0.6b-dllm_a2d/             qwen3-0.6b-mini_a2d/
 ```
 
 每个目录: `config.json` + `model.safetensors` (+ `adapter_model.safetensors` for LoRA)

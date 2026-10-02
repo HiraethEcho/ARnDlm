@@ -30,8 +30,8 @@ from common.verify import logits_delta
 from base.hf.model import build_model as build_hf
 from base.native.model import build_native_model
 
-HF_AR = C.cell_dir("qwen-mini/hf-ar-example")
-NATIVE_AR = C.cell_dir("qwen-mini/minimind-ar-example")
+HF_AR = C.cell_dir("ar-3.2m-hf")
+NATIVE_AR = C.cell_dir("ar-3.2m-native")
 TOL = 1e-5
 
 

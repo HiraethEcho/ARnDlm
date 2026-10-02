@@ -26,7 +26,7 @@ from base.native.a2d_minimind import (DIRECT_CELL, DIRECT_METHOD,
                                        build_bidirectional, native_forward,
                                        sample_native_dlm)
 
-CKPT = C.cell_dir("qwen-mini/native-direct-dlm-example")
+CKPT = C.cell_dir("native-direct-dlm-example")
 
 
 def main() -> int:

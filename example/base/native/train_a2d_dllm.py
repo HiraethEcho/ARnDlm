@@ -27,8 +27,8 @@ from base.native.model import BASE
 from base.native.a2d_minimind import (DLLM_CELL, build_bidirectional,
                                        sample_native_dlm)
 
-AR_CKPT = C.cell_dir("qwen-mini/minimind-ar-example")
-CKPT = C.cell_dir("qwen-mini/native-dllm-a2d-example")
+AR_CKPT = C.cell_dir("ar-3.2m-native")
+CKPT = C.cell_dir("ar-3.2m-native-dllm_a2d")
 
 
 def main() -> int:

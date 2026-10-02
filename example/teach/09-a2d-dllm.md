@@ -77,7 +77,7 @@ loss = trainer.compute_loss(model, {"input_ids": batch, "labels": batch})
 ## 9.5 实验版实测
 
 ```
-[hf-dllm-a2d-example] loss 5.7631 -> 5.2761   eval 4.9765
+[ar-3.2m-hf-dllm_a2d] loss 5.7631 -> 5.2761   eval 4.9765
                         28,708 / 27,061 tok/s   rep-4 0.0000
 C5  conversion: 0 missing, 0 unexpected, 0 altered
 C2  vs hand-written loss: rel_diff 7.6e-08

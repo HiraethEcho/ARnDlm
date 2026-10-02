@@ -24,7 +24,7 @@ from base.hf.direct_dlm import (BASE, CELL, METHOD, make_direct_loss, sample_dir
                                 trainable_fingerprint)
 from base.hf.model import build_model
 
-CKPT = C.cell_dir("qwen-mini/hf-direct-dlm-example")
+CKPT = C.cell_dir("dlm-3.2m-hf")
 
 
 def main() -> int:

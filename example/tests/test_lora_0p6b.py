@@ -102,7 +102,7 @@ def main() -> int:
     from common.config import cell_dir
 
     for cell in (CELL_DLLM, CELL_MINIMIND):
-        path = cell_dir(f"qwen3-0.6b/{cell.removeprefix('qwen3-0.6b-')}")
+        path = cell_dir(f"{cell.removeprefix('qwen3-0.6b-')}")
         if not (path / "model.safetensors").exists():
             print(f"  SKIP  {cell} has not been run")
         else:

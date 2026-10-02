@@ -13,7 +13,7 @@ from common import config as C
 from common.a2d import a2d_loss, corrupt, sample_t
 from base.hf.a2d_minimind import dlm_forward          # identical for both cells
 
-CELL = "hf-direct-dlm-example"
+CELL = "dlm-3.2m-hf"
 BASE = "Qwen-mini-HF"
 METHOD = "Direct-DLM"
 

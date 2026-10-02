@@ -13,8 +13,13 @@ ROOT = Path(__file__).resolve().parents[2]          # example/common/ -> repo ro
 
 TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
 DATA_DIR = ROOT / "data" / "prepared" / "tinystories-6400"
-CKPT_ROOT = ROOT / "checkpoints" / "example"
-RUN_ROOT = ROOT / "logs" / "run" / "example"
+# SPEC 1.2: the layout is flat and the experimental version is distinguished by a
+# suffix, so `ar-3.2m-hf` and `ar-3.2m-hf-example` sit next to each other with the
+# rest of the name byte-identical. The suffix is appended here rather than at
+# every call site, which is where it would eventually be forgotten.
+CKPT_ROOT = ROOT / "checkpoints"
+RUN_ROOT = ROOT / "logs" / "run"
+EXPERIMENT_SUFFIX = "-example"
 
 # Special ids. MASK reuses a reserved buffer token instead of growing the vocab
 # (SPEC 3.2): a new row would change the embedding shape and silently break
@@ -78,9 +83,9 @@ def as_dict(obj) -> dict:
 
 
 def cell_dir(name: str) -> Path:
-    """checkpoints/example/<name> -- the `-example` suffix keeps A/B apart."""
-    return CKPT_ROOT / name
+    """checkpoints/<name>-example (SPEC 1.2 rule 7)."""
+    return CKPT_ROOT / f"{name}{EXPERIMENT_SUFFIX}"
 
 
 def run_dir(name: str) -> Path:
-    return RUN_ROOT / name
+    return RUN_ROOT / f"{name}{EXPERIMENT_SUFFIX}"

@@ -14,7 +14,7 @@ from common.model import build_qwen3_config
 from common.seeds import seed_all
 from common.tokenizer import decode, encode
 
-CELL = "hf-ar-example"
+CELL = "ar-3.2m-hf"
 BASE = "Qwen-mini-HF"
 METHOD = "AR"
 

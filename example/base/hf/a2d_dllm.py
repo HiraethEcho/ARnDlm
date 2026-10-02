@@ -27,7 +27,7 @@ from common.ckpt import load_state_dict, save_model
 from common.model import build_qwen3_config
 from common.tokenizer import decode, encode
 
-CELL = "hf-dllm-a2d-example"
+CELL = "ar-3.2m-hf-dllm_a2d"
 BASE = "Qwen-mini-HF"
 METHOD = "dLLM-A2D"
 

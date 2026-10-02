@@ -31,8 +31,8 @@ from base.hf.model import build_model as build_hf
 from base.native.model import (BASE, CELL, METHOD, build_native_model,
                                   sample_native)
 
-CKPT = C.cell_dir("qwen-mini/minimind-ar-example")
-HF_CKPT = C.cell_dir("qwen-mini/hf-ar-example")
+CKPT = C.cell_dir("ar-3.2m-native")
+HF_CKPT = C.cell_dir("ar-3.2m-hf")
 
 
 def main() -> int:
@@ -76,7 +76,7 @@ def main() -> int:
             load_into(hf, load_state_dict(HF_CKPT))
             worst = logits_delta(native, hf, data, eval_batches, loop.device)
             passed = worst <= 1e-5
-            print(f"  C1  {'OK' if passed else 'FAIL'}  hf-ar-example vs minimind-ar-example"
+            print(f"  C1  {'OK' if passed else 'FAIL'}  ar-3.2m-hf vs ar-3.2m-native"
                   f"  max|dlogit| {worst:.2e}  (tol 1e-5)")
             ok &= passed
 

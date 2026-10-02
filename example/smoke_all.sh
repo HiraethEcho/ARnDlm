@@ -44,29 +44,29 @@ for t in test_common test_hf_ar test_native_c1 test_a2d test_dllm_a2d \
 done
 
 # --- row 1: AR baseline, then the three DLM methods ---
-run "cell 1  hf-ar-example" \
+run "cell 1  ar-3.2m-hf" \
     "$PY" example/base/hf/train_ar.py $STEPS_FLAG
-run "cell 2  minimind-ar-example" \
+run "cell 2  ar-3.2m-native" \
     "$PY" example/base/native/train_ar.py $STEPS_FLAG --compare-hf
-run "cell 3  hf-minimind-a2d-example" \
+run "cell 3  ar-3.2m-hf-mini_a2d" \
     "$PY" example/base/hf/train_a2d_minimind.py $STEPS_FLAG
-run "cell 4  hf-dllm-a2d-example" \
+run "cell 4  ar-3.2m-hf-dllm_a2d" \
     "$PY" example/base/hf/train_a2d_dllm.py $STEPS_FLAG
-run "cell 5  hf-direct-dlm-example" \
+run "cell 5  dlm-3.2m-hf" \
     "$PY" example/base/hf/train_direct_dlm.py $STEPS_FLAG
 
 # --- row 2: the same three on the native torch base ---
-run "cell 6  native-dllm-a2d-example" \
+run "cell 6  ar-3.2m-native-dllm_a2d" \
     "$PY" example/base/native/train_a2d_dllm.py $STEPS_FLAG
-run "cell 7  native-minimind-a2d-example" \
+run "cell 7  ar-3.2m-native-mini_a2d" \
     "$PY" example/base/native/train_a2d_minimind.py $STEPS_FLAG
 run "cell 8  native-direct-dlm-example" \
     "$PY" example/base/native/train_direct_dlm.py $STEPS_FLAG
 
 # --- row 3: real 0.6B with LoRA (slow; --quick still runs 20 steps) ---
-run "cell 9  qwen3-0.6b-dllm-a2d-lora-example" \
+run "cell 9  qwen3-0.6b-qwen3-0.6b-dllm_a2d" \
     "$PY" example/base/qwen3_0p6b/train_lora_dllm.py --n-docs 400
-run "cell 10 qwen3-0.6b-minimind-a2d-lora-example" \
+run "cell 10 qwen3-0.6b-qwen3-0.6b-mini_a2d" \
     "$PY" example/base/qwen3_0p6b/train_lora_minimind.py --n-docs 400
 
 # --- cross-checks ---

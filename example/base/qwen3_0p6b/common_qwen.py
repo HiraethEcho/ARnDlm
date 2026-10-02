@@ -29,8 +29,8 @@ import torch
 
 from common.config import ROOT
 
-CELL_DLLM = "qwen3-0.6b-dllm-a2d-lora-example"
-CELL_MINIMIND = "qwen3-0.6b-minimind-a2d-lora-example"
+CELL_DLLM = "qwen3-0.6b-qwen3-0.6b-dllm_a2d"
+CELL_MINIMIND = "qwen3-0.6b-qwen3-0.6b-mini_a2d"
 BASE = "Qwen3-0.6B"
 MODEL_ID = "Qwen/Qwen3-0.6B"
 MASK_TOKEN = "<|diff-mask|>"

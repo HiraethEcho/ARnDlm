@@ -29,7 +29,7 @@ from torch import nn
 from common.config import PROMPTS, ModelCfg
 from common.tokenizer import decode, encode
 
-CELL = "minimind-ar-example"
+CELL = "ar-3.2m-native"
 BASE = "Qwen-mini-MiniMind"
 METHOD = "AR"
 

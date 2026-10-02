@@ -100,9 +100,9 @@ def section_sampling() -> None:
 
 def section_matrix() -> None:
     print("\n[4] the three native checkpoints")
-    for cell in ("native-minimind-a2d-example", "native-dllm-a2d-example",
+    for cell in ("ar-3.2m-native-mini_a2d", "ar-3.2m-native-dllm_a2d",
                  "native-direct-dlm-example"):
-        path = C.cell_dir(f"qwen-mini/{cell}")
+        path = C.cell_dir(f"{cell}")
         if not (path / "model.safetensors").exists():
             print(f"  SKIP  {cell} has not been run")
             continue

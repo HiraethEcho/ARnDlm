@@ -24,8 +24,8 @@ from common.verify import verify_checkpoint
 from base.hf.a2d_dllm import (BASE, CELL, METHOD, DLLMLoss, build_a2d_model,
                               make_a2d_loss, sample_dllm)
 
-AR_CKPT = C.cell_dir("qwen-mini/hf-ar-example")
-CKPT = C.cell_dir("qwen-mini/hf-dllm-a2d-example")
+AR_CKPT = C.cell_dir("ar-3.2m-hf")
+CKPT = C.cell_dir("ar-3.2m-hf-dllm_a2d")
 
 
 def main() -> int:

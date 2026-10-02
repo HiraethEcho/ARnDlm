@@ -30,7 +30,7 @@ from base.qwen3_0p6b.lora_common import (make_minimind_loss, packed, prompts_for
                                          sample_lora_dlm)
 
 METHOD = "MiniMind-DLM-A2D"
-CKPT = C.cell_dir("qwen3-0.6b/minimind-a2d-lora-example")
+CKPT = C.cell_dir("qwen3-0.6b-mini_a2d")
 
 
 def main() -> int:

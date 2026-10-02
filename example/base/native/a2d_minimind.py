@@ -15,8 +15,8 @@ from common.a2d import a2d_loss, corrupt, sample_dlm, sample_t
 from common.tokenizer import decode, encode
 from base.native.model import build_native_model
 
-A2D_CELL = "native-minimind-a2d-example"
-DLLM_CELL = "native-dllm-a2d-example"
+A2D_CELL = "ar-3.2m-native-mini_a2d"
+DLLM_CELL = "ar-3.2m-native-dllm_a2d"
 DIRECT_CELL = "native-direct-dlm-example"
 METHOD = "MiniMind-DLM-A2D"
 DIRECT_METHOD = "Direct-DLM"

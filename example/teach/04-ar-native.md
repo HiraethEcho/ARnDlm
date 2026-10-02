@@ -94,5 +94,5 @@ for _ in range(max_new_tokens):
 
 ```
 verify  OK  max|dlogit| 0.00e+00
-C1      OK  hf-ar-example vs minimind-ar-example  max|dlogit| 6.91e-06  (tol 1e-5)
+C1      OK  ar-3.2m-hf vs ar-3.2m-native  max|dlogit| 6.91e-06  (tol 1e-5)
 ```

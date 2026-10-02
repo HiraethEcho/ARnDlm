@@ -77,7 +77,7 @@ def section_objective() -> None:
 
 def section_pipeline() -> None:
     print("\n[3] pipeline")
-    ckpt = C.cell_dir("qwen-mini/hf-direct-dlm-example")
+    ckpt = C.cell_dir("dlm-3.2m-hf")
     if not (ckpt / "model.safetensors").exists():
         print("  SKIP  cell 5 has not been run; "
               ".venv/bin/python example/base/hf/train_direct_dlm.py")

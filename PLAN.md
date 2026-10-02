@@ -94,13 +94,13 @@ SPEC 2.3 的 10 格全部跑通，Tier 0 规模，200 步，实测数字见 `exa
 
 ```text
 checkpoints/
-  qwen-mini/
+  
     hf-ar/
     native-ar/
     dllm-a2d/
     minimind-a2d/
     direct-dlm/
-  qwen3-0.6b/
+  
     dllm-a2d-lora/
     minimind-a2d-lora/
 ```

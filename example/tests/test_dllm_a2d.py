@@ -29,7 +29,7 @@ from base.hf.a2d_dllm import (TIED_ALIASES, DLLMLoss, build_a2d_model, sample_dl
 from base.hf.a2d_minimind import dlm_forward
 from base.hf.model import build_model as build_hf
 
-AR_CKPT = C.cell_dir("qwen-mini/hf-ar-example")
+AR_CKPT = C.cell_dir("ar-3.2m-hf")
 FAILS: list[str] = []
 
 

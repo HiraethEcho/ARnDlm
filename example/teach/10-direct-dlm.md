@@ -44,7 +44,7 @@ fingerprint = torch.cat([p.detach().reshape(-1)[:8] for p in model.parameters()]
 如果指纹不同，那它们根本不是同一个实验 —— 而这件事在 loss 曲线上完全看不出来。
 
 实验版记录的值（Tier 0, seed 42）就存在
-`checkpoints/example/qwen-mini/hf-direct-dlm-example/config.json`。
+`checkpoints/example/dlm-3.2m-hf/config.json`。
 
 ## 10.4 实验版实测：AR 权重值多少
 

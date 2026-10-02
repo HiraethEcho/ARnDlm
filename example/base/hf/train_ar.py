@@ -2,7 +2,7 @@
 """Cell 1 of 10 -- Qwen-mini-HF, autoregressive baseline.
 
 Trains Tier 0 for 200 steps on tinystories-6400, scores it on frozen batches,
-samples both fixed prompts, and writes checkpoints/example/qwen-mini/hf-ar-example/.
+samples both fixed prompts, and writes checkpoints/example/ar-3.2m-hf/.
 This checkpoint is the input to cells 3-5 (dLLM-A2D, MiniMind-A2D, Direct-DLM
 from scratch) and the logit reference for cell 2 (the native torch port).
 
@@ -26,7 +26,7 @@ from common.verify import verify_checkpoint
 from common.losses import ar_loss
 from base.hf.model import BASE, CELL, METHOD, build_model, sample_ar
 
-CKPT = C.cell_dir("qwen-mini/hf-ar-example")
+CKPT = C.cell_dir("ar-3.2m-hf")
 
 
 def main() -> int:

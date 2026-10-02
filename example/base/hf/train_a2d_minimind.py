@@ -24,8 +24,8 @@ from common.verify import verify_checkpoint
 from base.hf.a2d_minimind import BASE, CELL, METHOD, make_a2d_loss, sample_dlm_row
 from base.hf.model import build_model
 
-AR_CKPT = C.cell_dir("qwen-mini/hf-ar-example")
-CKPT = C.cell_dir("qwen-mini/hf-minimind-a2d-example")
+AR_CKPT = C.cell_dir("ar-3.2m-hf")
+CKPT = C.cell_dir("ar-3.2m-hf-mini_a2d")
 
 
 def main() -> int:
