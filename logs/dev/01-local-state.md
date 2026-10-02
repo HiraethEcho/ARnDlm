@@ -376,39 +376,84 @@ packing 把多篇文档首尾相接时没有 document mask, 模型能看见上�
 与 MiniMind 的做法一致, 但对 DLM 的 block 去噪可能有影响, 还没验。见上表
 「还没测的」。
 
+## Qwen3-0.6B tokenizer 实测 (2026-10-01)
+
+本地 checkpoint: `/mnt/extra/hf/hub/models--Qwen--Qwen3-0.6B/snapshots/c1899de289a04d12100db370d81485cdf75e47ca`
+
+| 项 | 实测 |
+|---|---|
+| `vocab_size` | **151,669** → 合法 id 0-151668 |
+| embedding 行数 (checkpoint) | **151,936** (比 tokenizer 多 266 行, 永远吐不出来) |
+| 151662 | `<|fim_pad|>` |
+
+**`SPEC.md` 原来写的 MASK id 151669 越界** (等于「新增一个 token 后的 id」)。
+
+### 语料里有没有 special token
+
+扫描两份已prepare 的语料, 统计 `id >= 151000` 的出现次数:
+
+| 语料 | token 数 | id ≥ 151000 |
+|---|---:|---|
+| `tinystories-6400` | 3,110,358 | **一个都没有** |
+| `minimind3-6400` | 332,495,324 | **一个都没有** |
+
+所以复用 `151662` 作 MASK 不会与语料相撞。这个检查 30 秒, 但不做就不知道 ——
+`<|fim_pad|>` 是个真实存在的special token, 不是能凭空拿来用的东西。
+
 ## 项目当前进度
 
-**scaffold 已建并提交 (`1ba36ca`), 训练未开始。** `src/` 七个目录全是空的
-(只有 docstring)。
+**A 版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
 
 ```
-已建:
-  AGENTS.md / USAGE.md / ROADMAP.md / README.md
-  requirements.txt / .gitignore
-  configs/{README.md, base.yaml}
-  notes/{01,02,03-minimind-dlm,04,05}
-  logs/{dev,run}/.gitkeep
-  scripts/{setup_env.sh, setup_symlinks.sh, install_dllm.sh, plot.py}
-  scripts/download_data.py            (加了 parquet backend)
-  scripts/download_minimind.py        (新, minimind_dataset 全量)
-  scripts/prepare_data.py
-  example/README.md                      (A/B 契约, 代码待 T1a/T2a)
-  test/{README.md, 01..05}               5 个全部冒烟通过
-  src/{base,utils,transformer,minimind,a2d,dllm-a2d,dllm}/__init__.py
-  src/base/tokenizer.json                6400 BPE (sha256 71f32c68…)
+example/                       47 个 py (5001 行) + 19 个 md
+  common/                      config seeds data model ckpt metrics loop
+                               tokenizer report cell cli verify losses a2d
+  base/hf/                     行1: train_ar / a2d_minimind / a2d_dllm / direct_dlm
+  base/native/                 行2: model.py (纯 torch Qwen3) + 同样四个
+  base/qwen3_0p6b/             行3: LoRA 两格 (真权重, r=8)
+  check_ab.py                  C1..C5 + decode-bench
+  smoke_all.sh                 一次跑完 10 格 + 全部对拍
+  tests/                       8 个测试文件, 失败非零退出
+  teach/                       step 0..13 全部细化
+  RESULTS.md / ISSUES.md
 ```
 
-**没做**: `configs/` 只有 base.yaml · `src/` 没有任何实现 ·
-没训过任何模型 · 没测过吞吐。
+**10 格全通**（Tier 0: 3.21M 参数 · ctx 128 · 200 步 · tinystories-6400）：
+
+| | eval loss | rep-4 |
+|---|---|---|
+| AR (hf / native) | 4.6356 / 4.6283 | 0.17 / 0.33 |
+| A2D minimind (hf / native) | 4.9723 / 4.9692 | 0.81 / 0.40 |
+| A2D dllm (hf / native) | 4.9765 / 4.9728 | 0.00 / 0.41 |
+| Direct-DLM (hf / native) | 5.6427 / 5.6351 | 0.78 / 0.69 |
+| Qwen3-0.6B LoRA (dllm / minimind) | 4.8013 / 4.8166 | 0.78 / 0.78 |
+
+**跨版本对拍全 PASS**：C1 6.914e-06 · C2 7.561e-08 · C3 1.543e-07 ·
+C4 0.0（40 步）· C5 0/0/0。
+
+**AR 权重在 Tier 0 上值 0.67 nat**（A2D 4.97 vs Direct-DLM 5.64，两个 base 一致）。
+
+**没做**: B 版七个目录（`models/` `training/` `diffusion/` `evaluation/`
+`utils/`）仍只有 docstring · **SFT / DPO / RL 全部没做**（A 版只到预训练）
+· Tier 1 正式规模未训。
 
 **数据已就位**: minimind3-6400 (332M tok, 主实验) +
 tinystories/openwebtext/wikipedia-zh 各 10,000 篇已 tokenize;
 minimind 全量 11 个 jsonl / 22 GiB 下载完成并校验。
+`sft_t2t.jsonl` (14 GiB) 在盘上但**未展平**——对话格式需先展成单条 text。
+
+**checkpoint**: `checkpoints/example/` 下 10 格各一个目录
+（与 B 版的 `checkpoints/` 用 `-example` 后缀区分）。
 
 ## 下一步
 
-1. **冒烟测试测吞吐** —— 参数量 / batch / seq_len 都等这个结果再定
-2. T1a: `src/transformer/pretrain.py`
+1. **B 版 step 0**：`utils/` —— 照 `example/teach/00-common-base.md` 写，
+   对齐 `example/common/`（七个已知的坑都在那一节里）
+2. **B 版 step 3**：`models/minimind_qwen/` —— C1 是整个项目的核心对拍，
+   `example/check_ab.py c1 --layer-report` 会在第一个偏离的层停下来
+3. **Tier 1 定档**：先测吞吐阶梯再定参数量（`example/teach/13-tier1.md`）
+4. 可选：**SFT 版 DLM 两格**（M12）。数据在盘上但需先展平
+   （`logs/dev/01` 上文记过：`conversations` 格式会被 `prepare_data.py` 静默跳过）
 
 ## 2026-10-01 环境极小冒烟检查
 

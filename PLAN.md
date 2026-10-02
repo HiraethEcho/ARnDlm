@@ -4,17 +4,33 @@
 
 ## 当前进度
 
+**A 版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
+SPEC 2.3 的 10 格全部跑通，Tier 0 规模，200 步，实测数字见 `example/RESULTS.md`。
+
 | 项目 | 状态 |
 |---|---|
 | 合并 SPEC 与目录设计 | DONE |
 | 根目录 scaffold | DONE |
-| uv/ROCm 环境 | 现有版本和 dllm CPU/GPU 极小 forward 通过；训练与恢复待验证 |
-| T1a HF AR | PENDING (吞吐已测: 28.45M / seq512 / B8 ≈ 7.7k tok/s, batch>8 无收益) |
-| T1b Native AR | PENDING |
-| T2a MiniMind-DLM A2D | PENDING |
-| T2b dllm A2D | PENDING |
-| T2c Qwen3-0.6B A2D | PENDING |
-| T3 Direct DLM | PENDING |
+| uv/ROCm 环境 | DONE（transformers 4.57.0 + dllm patch 已打，训练与恢复均已验证） |
+| T1a HF AR | **DONE** — `example/base/hf/train_ar.py` · loss 8.44→4.70 · eval 4.6356 |
+| T1b Native AR | **DONE** — `example/base/native/train_ar.py` · **C1 = 6.91e-06**（阈值 1e-5） |
+| T2a MiniMind-DLM A2D | **DONE** — hf + native 两格 · **C2/C3 = 7.6e-08 / 1.5e-07**（阈值 1%） |
+| T2b dllm A2D | **DONE** — hf + native 两格 · **C5 = 0 丢失 / 0 漂移** |
+| T2c Qwen3-0.6B A2D | **DONE** — LoRA r=8（0.38% 可训）两格 · eval 4.80 / 4.82 |
+| T3 Direct DLM | **DONE** — hf + native 两格 · eval 5.64（比 A2D 差 0.67 nat） |
+| C4 resume 等价性 | **DONE** — 40 步 vs 30+resume+10 逐步差 0.0 |
+| A 版教学计划 | **DONE** — `example/teach/` step 0-13 全部细化 |
+| B 版实现 | **PENDING** — 七个目录只有 docstring，按 `example/teach/` 逐步写 |
+| Tier 1 定档 | **PENDING** — 见 `example/teach/13-tier1.md`，先测吞吐再定参数量 |
+
+**三个方法在两个 base 上的相对关系一致**：A2D eval ≈ 4.97，Direct-DLM ≈ 5.64。
+即 AR 权重在 Tier 0 / 20 万 token 上值 **0.67 nat**，与 `notes/03` §11 的判断方向一致。
+
+**rep-4 不可用于排名**：同一方法换一个 base，A2D 在 0.40 ~ 0.81 之间跳
+（32 token 样本的噪声），详见 `example/ISSUES.md` OPEN-6。
+
+**A 版只做了预训练**：10 格都是裸文本，没有 chat template、没有 SFT、没有 RL。
+`notes/01` 的三阶段目前只用到第一阶段。
 
 ## Implementation phases
 
@@ -102,9 +118,11 @@ DLM 额外记录 sampling steps、generation speed、output quality 和 repetiti
 
 ## Priority order
 
-1. Qwen-mini HF AR
-2. Qwen-mini Native AR
-3. MiniMind-DLM A2D
-4. dllm A2D
-5. Qwen3-0.6B A2D
-6. Direct DLM
+1. ~~Qwen-mini HF AR~~ **DONE**
+2. ~~Qwen-mini Native AR~~ **DONE** (C1 = 6.91e-06)
+3. ~~MiniMind-DLM A2D~~ **DONE** (C2/C3 = 7.6e-08 / 1.5e-07)
+4. ~~dLLM A2D~~ **DONE** (C5 = 0 lost, 0 drifted)
+5. ~~Qwen3-0.6B A2D~~ **DONE** (LoRA 0.38%, eval 4.80)
+6. ~~Direct DLM~~ **DONE** (0.67 nat behind A2D)
+7. **B 版实现** — 按 `example/teach/` step 0→13 写, 每步对拍
+8. **Tier 1 定档** — 先测吞吐阶梯再定参数量 (`example/teach/13-tier1.md`)
