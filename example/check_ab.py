@@ -386,7 +386,52 @@ def c4(args) -> dict:
             "matched": same_len}
 
 
-CHECKS = {"c1": c1, "c2": c2, "c3": c3, "c4": c4, "c5": c5}
+def c6(args) -> dict:
+    """dlm-3.2m-hf vs dlm-3.2m-dllm: same corruption, two implementations.
+
+    The from-scratch arm of G5. Same shape as C2 -- reseed before each side so
+    both draw the same t and the same mask, then verify they really did -- but
+    starting from random weights instead of an AR checkpoint, which is the only
+    difference between the two Direct-DLM cells.
+    """
+    from common.a2d import a2d_loss, corrupt, sample_t
+    from base.hf.direct_dlm import make_direct_loss
+    from base.hf.direct_dlm_dllm import Bidirectional, make_dllm_loss
+    from base.hf.model import build_model as build_hf
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    eps = 1e-3
+    hf_model = build_hf(C.TIER0, seed=args.seed).to(device).float().eval()
+    dllm_model = Bidirectional(build_hf(C.TIER0, seed=args.seed)).to(device).float().eval()
+
+    data, batches = _eval_batches(batch=args.batch_size)
+    batch = data.batch(batches[0]).to(device)
+    b = batch.shape[0]
+
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    t = sample_t(b, device, epsilon=eps)
+    x_t, masked = corrupt(batch, t, C.MASK)
+    with torch.no_grad():
+        ours = make_direct_loss(hf_model, epsilon=eps)(hf_model, batch)[0]
+
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    theirs = make_dllm_loss(epsilon=eps)(dllm_model, batch)[0].detach()
+
+    torch.manual_seed(args.seed)
+    t_ref = sample_t(b, device, epsilon=eps)
+    same_t = bool(torch.equal(t, t_ref))
+    probs = torch.rand(batch.shape, device=device)
+    same_mask = bool(torch.equal(probs < t_ref[:, None], masked))
+
+    rel = abs(float(ours) - float(theirs)) / max(abs(float(theirs)), 1e-9)
+    return {"status": "PASS" if rel < 0.01 and same_t and same_mask else "FAIL",
+            "rel_diff": rel, "loss_hf": float(ours), "loss_dllm": float(theirs),
+            "same_corruption": same_t and same_mask, "tol": 0.01}
+
+
+CHECKS = {"c1": c1, "c2": c2, "c3": c3, "c4": c4, "c5": c5, "c6": c6}
 EXTRAS = {"decode-bench": decode_bench}
 
 

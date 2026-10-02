@@ -17,9 +17,7 @@ from base.native.model import build_native_model
 
 A2D_CELL = "ar-3.2m-native-mini_a2d"
 DLLM_CELL = "ar-3.2m-native-dllm_a2d"
-DIRECT_CELL = "native-direct-dlm-example"
 METHOD = "MiniMind-DLM-A2D"
-DIRECT_METHOD = "Direct-DLM"
 
 
 def native_forward(model, is_causal: bool = False):

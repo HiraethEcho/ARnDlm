@@ -22,7 +22,7 @@ SPEC 2.3 的矩阵是 **3 个 base model × 3 种 DLM 方法**（Direct-DLM 在 
 | 5 | Qwen-mini-HF · **Direct-DLM** | 随机初始化（**不吃 AR 权重**） | `base/hf/direct_dlm.py` | `training/direct_dlm/` | `dlm-3.2m-hf/` |
 | 6 | Qwen-mini-MiniMind · **dLLM-A2D** | 格 2 的权重 | `base/native/a2d_dllm.py` | `models/minimind_qwen/` + `training/a2d_dllm/` | `ar-3.2m-native-dllm_a2d/` |
 | 7 | Qwen-mini-MiniMind · **MiniMind-A2D** | 格 2 的权重 | `base/native/a2d_minimind.py` | `models/minimind_qwen/` + `training/a2d_minimind/` | `ar-3.2m-native-mini_a2d/` |
-| 8 | Qwen-mini-MiniMind · **Direct-DLM** | 随机初始化（**不吃 AR 权重**） | `base/native/direct_dlm.py` | `models/minimind_qwen/` + `training/direct_dlm/` | `native-direct-dlm-example/` |
+| 8 | Qwen-mini-HF · **Direct-DLM（dllm 包）** | 随机初始化（**不吃 AR 权重**） | `base/hf/direct_dlm_dllm.py` | `training/direct_dlm/` | `dlm-3.2m-dllm` |
 | 9 | Qwen3-0.6B · **dLLM-A2D**（LoRA） | 已有 checkpoint + LoRA | `base/qwen3_0p6b/lora_dllm_a2d.py` | `training/a2d_dllm/` | `qwen3-0.6b-dllm_a2d/` |
 | 10 | Qwen3-0.6B · **MiniMind-A2D**（LoRA） | 已有 checkpoint + LoRA | `base/qwen3_0p6b/lora_minimind_a2d.py` | `training/a2d_minimind/` | `qwen3-0.6b-mini_a2d/` |
 
@@ -119,7 +119,7 @@ example/
 | 6 | `base/hf/direct_dlm.py` | `dlm-3.2m-hf` | 6 项 |
 | 7 | `base/native/a2d_minimind.py` | `ar-3.2m-native-mini_a2d` | 6 项 + **C3** |
 | 8 | `base/native/a2d_dllm.py` | `ar-3.2m-native-dllm_a2d` | 6 项 |
-| 9 | `base/native/direct_dlm.py` | `native-direct-dlm-example` | 6 项 |
+| 9 | `base/hf/direct_dlm_dllm.py` | `dlm-3.2m-dllm` | 6 项 + **C6** |
 | 10 | `base/qwen3_0p6b/lora_dllm_a2d.py` | `qwen3-0.6b-dllm_a2d` | 6 项 |
 | 11 | `base/qwen3_0p6b/lora_minimind_a2d.py` | `qwen3-0.6b-mini_a2d` | 6 项 |
 | 12 | `smoke_all.sh` + `RESULTS.md` | — | 表填满 |
@@ -155,7 +155,7 @@ checkpoints/example/
     ar-3.2m-hf/                     ar-3.2m-native/
     ar-3.2m-hf-dllm_a2d/               ar-3.2m-native-dllm_a2d/
     ar-3.2m-hf-mini_a2d/           ar-3.2m-native-mini_a2d/
-    dlm-3.2m-hf/             native-direct-dlm-example/
+    dlm-3.2m-hf/             dlm-3.2m-dllm/
   
     qwen3-0.6b-dllm_a2d/             qwen3-0.6b-mini_a2d/
 ```
