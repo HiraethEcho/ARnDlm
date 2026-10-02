@@ -103,6 +103,50 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 
 ---
 
+## OPEN-8 · G3 的「尾部 DLM-SFT」缺失，**G3 目前无法给出结论**
+
+**SPEC 内部矛盾**：
+
+| 位置 | 说法 |
+|---|---|
+| §2.3 pipeline 列 | `ar-sft-mini_a2d` = `pretrain(AR) → SFT → A2D`（**无**尾部 SFT） |
+| G3 格子行 | 原路线：`ar-sft` → A2D → **DLM-SFT**（**有**尾部 SFT） |
+| G3 注意 | 「**变量：顺序**」 |
+
+**为什么这不是文字问题**。两条路线的当前终点**不可比**：
+
+| 组 | A2D 阶段语料 | eval 测的是 | 实测 eval |
+|---|---|---|---|
+| 新路线 `{mini,dllm}_a2d-sft`（M4） | SFT 语料 | assistant 段上的 A2D loss | 6.488 – 6.528 |
+| 原路线 `sft-{mini,dllm}_a2d`（M5） | **预训练**语料 | 全 token 上的 A2D loss | 5.028 – 5.068 |
+
+两边 eval 的 token 集合不同（assistant 段 ~62/128 vs 全部 128），**差值毫无意义**。
+5.03 比 6.50 好这个印象是假的。
+
+**G3 的验收是「两条线的『能 chat』四条门槛都能报；差值就是顺序的代价」**，
+而「能 chat」只能在 **SFT 语料** 上评。所以原路线**必须**再跑一次 SFT
+（DLM-SFT），两条路线才落在同一个可比点上。
+
+**两个选项**：
+
+| | 做法 | 代价 |
+|---|---|---|
+| **O1** | 补 4 格尾部 DLM-SFT（`ar-3.2m-{hf,native}-sft-{mini,dllm}_a2d` 再 SFT 一次），SPEC §2.3 加这 4 格 | 4 × 200 步，Tier 0 约 2 分钟 |
+| **O2** | 不补，G3 标记为「pipeline 跑通但结论待定」 | 矩阵里 4 个 ⬜ 变 ✅ 但 G3 无结论 |
+
+**当前代码状态**：M5 实现了 §2.3 表里列的 4 格（止于 A2D），M4 实现了 4 格新路线。
+`example/base/hf/train_dlm_sft.py` 已能对任意 DLM checkpoint 做 SFT，
+**补 O1 只需给它再开 4 个格名**，代码已就位。
+
+## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
+
+`lambda: minimind_loss` 求值得到**函数对象**，于是 Loop 把工厂当 loss 调
+`factory(model, batch)` 拿到闭包，报 `cannot unpack non-iterable function
+object`。本次在两个不同文件里各犯一次。
+
+正确形状是 `lambda m: minimind_loss(m)`。`train_a2d_from_sft.py` 的
+`build_parts` docstring 记了这条。
+
 ## OPEN-7 · 方案 A（监督 think）与 ctx 128 自相矛盾
 
 **发现**：2026-10-02 写 SFT 展平器时实测。
