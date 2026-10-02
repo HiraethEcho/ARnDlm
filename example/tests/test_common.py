@@ -256,12 +256,11 @@ def section_loop() -> None:
     print("\n[5] loop")
     import dataclasses
 
-    from common.config import TrainCfg
-
     tmp = Path(tempfile.mkdtemp())
     try:
-        cfg = TrainCfg(steps=12, batch_size=4, warmup_steps=2, log_every=6,
-                       loss_window=4, seed=11)
+        # derive from the real config so a new TrainCfg field does not break here
+        cfg = dataclasses.replace(C.AR_TRAIN, steps=12, batch_size=4, warmup_steps=2,
+                                  log_every=6, loss_window=4, seed=11)
         half = dataclasses.replace(cfg, log_every=6)
         data = _tiny_data()
 

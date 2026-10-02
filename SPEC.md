@@ -19,11 +19,32 @@
 | 步数 | 200 | 按吞吐阶梯定 |
 | 目的 | **pipeline 能不能跑通 + 代码对不对** | 正式实验，拿可引用的数字 |
 | 能力 | **不看**（loss 与 rep-4 只记录） | 看 |
-| checkpoint | `checkpoints/example/…-example/` | `checkpoints/…` |
 | 关系 | **实验版是实践版的正确性基准** | 实践版输出必须与实验版对齐 |
 
 **实验版跑通 ≠ 实践版可以写。** 写每一步之前，先用 `example/teach/<step>.md` 里的
 「验收命令」跑一遍实验版，拿到基准数。
+
+### 1.1.1 两个版本在哪里区分
+
+| 维度 | 实验版 | 实践版 | 规则 |
+|---|---|---|---|
+| **代码** | `example/` | 根目录 `models/` `training/` `diffusion/` `evaluation/` `utils/` `data/` | `AGENTS.md` 契约：B 版目录只有注释 |
+| **checkpoint** | `checkpoints/<name>-example/` | `checkpoints/<name>/` | 后缀由加载器统一加，不在各调用点拼 |
+| **run log** | `logs/run/<name>-example/` | `logs/run/<name>/` | 同上 |
+| **配置** | `configs/example/tier0.yaml` | `configs/practical/tier1.yaml` | 同一个加载器，两套文件 |
+| **结果** | `example/RESULTS.md` | `RESULTS.md` | 各自就近，文件名对称 |
+| **配置加载** | `load_config("example", "tier0")` | `load_config("practical", "tier1")` | 同一个 `example/common/version.py` |
+
+**为什么后缀由加载器加而不是写在调用点**：拼错的后果不是报错，是**静默覆盖另一个
+版本的权重**。两版算的是同一件事、跑同一个名字，读写错了看不出任何异常。
+
+**为什么配置也要分开**：如果实践版沿用 `example/common/config.py` 里的硬编码常量，
+那么「实验版能跑通」和「实践版配置是对的」就是两条从未互相验证过的代码路径。
+两套配置走**同一个加载器**，才能保证只有数值不同、路径相同。
+
+**为什么结果分两份文件**：实验版的数字来自 3.2M 参数 / 20 万 token，
+实践版来自 ~50M / 332M token，**两者不可比**。放进同一张表，最可能的结果是有人
+拿实验版的 eval loss 去引用。
 
 ### 1.2 模型命名规则
 
@@ -366,7 +387,10 @@ transformers 4.57 里「关掉因果 mask」的正确做法是**传一个 4D 全
 ## 7. 目录
 
 ```text
-configs/                 # 模型与实验配置
+configs/example/         # 实验版配置 tier0.yaml
+configs/practical/       # 实践版配置 tier1.yaml（待测吞吐后填）
+RESULTS.md               # 实践版实测
+example/                 # 实验版参考实现 + RESULTS.md + ISSUES.md + teach/
 scripts/                 # 环境、数据、训练、可视化
 data/                    # dataset、packing、tokenizer 适配
 tokenizer/               # 6400 BPE

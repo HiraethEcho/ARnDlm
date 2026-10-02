@@ -1,53 +1,19 @@
-# configs/ — 配置层
+# configs/
 
-## 加载顺序
+配置按**版本**分目录（SPEC 1.1.1）。两个版本走同一个加载器：
 
+```python
+from common.version import load_config, cell_path
+cfg = load_config("example", "tier0")        # configs/example/tier0.yaml
+ckpt = cell_path("ar-3.2m-hf", "example")   # checkpoints/ar-3.2m-hf-example
 ```
-base.yaml  →  <实验>.yaml   (后者覆盖前者)
-```
 
-`base.yaml` **不包含任何模型结构维度** (hidden_size / n_layers / n_heads /
-vocab_size / max_seq_len ...)。那些属于各实验配置。
-base 只放「所有实验都一样」的东西: 优化器、调度、频率、路径。
+| 目录 | 版本 | 加载 | 用途 |
+|---|---|---|---|
+| `example/` | 实验版 | `load_config("example", "tier0")` | pipeline 能不能跑通，Tier 0 / 3.2M |
+| `practical/` | 实践版 | `load_config("practical", "tier1")` | 正式实验，Tier 1 / ~50M |
 
-## 实验配置清单
+`-example` 后缀由 `cell_path()` 统一加，不在各调用点拼：拼错不报错，
+只会静默覆盖另一个版本的权重。
 
-对应 `PLAN.md` 的三条线。
-
-| 文件 | 用途 | 状态 |
-|---|---|---|
-| `base.yaml` | 全局默认 | DONE |
-| `t1_pretrain.yaml` | T1 AR 预训练 (transformers 版) | PENDING |
-| `t1_pretrain_native.yaml` | T1b AR 预训练 (torch 原生版) | PENDING |
-| `t1_sft_lora.yaml` | T1 LoRA / SFT 后训练 | PENDING |
-| `t2_a2d_native.yaml` | T2a A2D 微调 (手动实现) | PENDING |
-| `t2_a2d_dllm.yaml` | T2b A2D 微调 (dllm 包) | PENDING |
-| `t2_a2d_qwen3b.yaml` | T2c 对 Qwen3-0.6B 做 A2D | PENDING |
-| `t3_dllm_pretrain.yaml` | T3 用 dllm 包从零训 DLM | PENDING |
-
-## 写配置时的规矩
-
-**模型维度写在实验配置里, 不写在 `base.yaml`, 更不硬编码在代码里。**
-
-自训 (T1) 和改造现成模型 (T2c) 的模型形状不同, 但优化器、调度、
-日志频率这些是共享的 —— 这就是 base 存在的意义。
-
-**参数量先不钉死。** 冒烟测试 (见 `PLAN.md`) 测出实际吞吐后再填
-`hidden_size` / `n_layers` / `max_seq_len` / `batch_size`。
-这四个数是耦合的, 先拍数字再测是本末倒置。
-
-## 记一件事
-
-> 几个月后你会忘了 `t2_a2d_dllm.yaml` 是干嘛的。
-
-所以每套配置**跑完之后**, 在这个文件里补一行: 跑了什么、结果如何、
-有什么坑。**没跑过的配置标 PENDING, 别让它看起来像能用的。**
-
-## mask token 不同
-
-| 线 | mask token id |
-|---|---|
-| T1 / T2a / T2b (自训, vocab 6400) | **27** = `<|buffer1|>` |
-| T2c (Qwen3-0.6B, vocab 151936) | **151669** (267 个空闲 slot 之一) |
-
-T3 用 `dllm` 的默认配置, 别手改。
+`practical/` 还没有内容 —— 实践版的规模要等吞吐阶梯测完再定（`example/teach/13-tier1.md`）。

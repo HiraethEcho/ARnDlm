@@ -1,80 +1,117 @@
-"""Frozen Tier-0 smoke constants. One source of truth for all 10 cells.
+"""The experimental version's configuration, read from configs/example/tier0.yaml.
 
-Every number here is SPEC 4 Tier 0: the goal is pipeline validity, not model
-quality. They live in one dataclass instead of being re-typed per script
-because a silent mismatch between two cells would invalidate every A/B number.
+SPEC 1.1.1: nothing here is a literal. The dataclasses keep the *shape* (which
+fields a model config has), and every value comes from the YAML through the
+shared loader, so the practical version's configs/practical/tier1.yaml takes
+exactly the same path. A constant written here instead would be a value the
+practical version never validates.
+
+Imports below stay module-level and eager so a malformed config fails at import
+time rather than on the first batch.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
+
+from .version import cell_path, load_config
 
 ROOT = Path(__file__).resolve().parents[2]          # example/common/ -> repo root
 
+VERSION = "example"
+TIER = "tier0"
+_RAW = load_config(VERSION, TIER)
+
 TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
-DATA_DIR = ROOT / "data" / "prepared" / "tinystories-6400"
-# SPEC 1.2: the layout is flat and the experimental version is distinguished by a
-# suffix, so `ar-3.2m-hf` and `ar-3.2m-hf-example` sit next to each other with the
-# rest of the name byte-identical. The suffix is appended here rather than at
-# every call site, which is where it would eventually be forgotten.
+DATA_DIR = ROOT / _RAW["data"]["prepared_dir"]
+# Kept as names because dozens of call sites use them; the values come from
+# version.cell_path, which owns the -example suffix (SPEC 1.1.1).
 CKPT_ROOT = ROOT / "checkpoints"
 RUN_ROOT = ROOT / "logs" / "run"
 EXPERIMENT_SUFFIX = "-example"
 
-# Special ids. MASK reuses a reserved buffer token instead of growing the vocab
-# (SPEC 3.2): a new row would change the embedding shape and silently break
-# every weight copied from the AR checkpoint during A2D.
-PAD, BOS, EOS, MASK = 0, 1, 2, 27
-VOCAB = 6400
+_tok = _RAW["tokens"]
+# MASK reuses a reserved buffer token instead of growing the vocab (SPEC 3.2):
+# a new row would change the embedding shape and silently break every weight
+# copied from the AR checkpoint during A2D.
+PAD, BOS, EOS, MASK = _tok["pad"], _tok["bos"], _tok["eos"], _tok["mask"]
+VOCAB = _RAW["model"]["vocab_size"]
 
 # Fixed generation prompts (SPEC "Evaluation plan").
 PROMPTS = ("Once upon a time", "The future of AI is")
+
+
+def _from(raw: dict, cls):
+    """Build a dataclass from a YAML mapping. Unknown keys are an error.
+
+    A typo in the config that is silently dropped would leave the default in
+    place, and a default that differs between the two versions is exactly what
+    this indirection is meant to prevent.
+    """
+    known = {f.name for f in fields(cls)}
+    unknown = set(raw) - known
+    if unknown:
+        raise ValueError(f"unknown config keys for {cls.__name__}: {sorted(unknown)}")
+    return cls(**raw)
 
 
 @dataclass(frozen=True)
 class ModelCfg:
     """Qwen-style decoder shape (SPEC 3.1)."""
 
-    hidden_size: int = 256
-    num_layers: int = 2
-    num_heads: int = 2
-    num_kv_heads: int = 1
-    intermediate_size: int = 768
-    context_length: int = 128
-    vocab_size: int = VOCAB
-    rope_theta: float = 10000.0
-    rms_norm_eps: float = 1e-6
-    tie_word_embeddings: bool = True
+    hidden_size: int
+    num_layers: int
+    num_heads: int
+    num_kv_heads: int
+    intermediate_size: int
+    context_length: int
+    vocab_size: int
+    rope_theta: float
+    rms_norm_eps: float
+    tie_word_embeddings: bool
 
     @property
     def head_dim(self) -> int:
         return self.hidden_size // self.num_heads
 
 
-TIER0 = ModelCfg()
-
-
 @dataclass(frozen=True)
 class TrainCfg:
-    steps: int = 200
-    batch_size: int = 8
-    lr: float = 3e-4
-    min_lr_ratio: float = 0.1      # cosine floor, as a fraction of lr
-    warmup_steps: int = 20
-    weight_decay: float = 0.1
-    betas: tuple[float, float] = (0.9, 0.95)
-    grad_clip: float = 1.0
-    seed: int = 42
-    log_every: int = 20
-    loss_window: int = 20          # avg of first/last N steps -> RESULTS.md
+    steps: int
+    batch_size: int
+    lr: float
+    dlm_lr: float
+    min_lr_ratio: float
+    warmup_steps: int
+    weight_decay: float
+    grad_clip: float
+    beta1: float
+    beta2: float
+    seed: int
+    log_every: int
+    loss_window: int
+
+    @property
+    def betas(self) -> tuple[float, float]:
+        return (self.beta1, self.beta2)
+
+    @property
+    def dlm(self) -> "TrainCfg":
+        """Same schedule, the fine-tuning learning rate (SPEC 3.3 A2D)."""
+        return TrainCfg(**{**asdict(self), "lr": self.dlm_lr})
 
 
-AR_TRAIN = TrainCfg(lr=3e-4)
-DLM_TRAIN = TrainCfg(lr=1e-4)                      # A2D fine-tuning is gentler
-# T2c only: real Qwen3-0.6B is 200x Tier 0, so the smoke run stays tiny.
-QWEN3_LORA = TrainCfg(steps=20, batch_size=2, lr=1e-4, warmup_steps=2, log_every=5)
+TIER0 = _from(_RAW["model"], ModelCfg)
+AR_TRAIN = _from(_RAW["train"], TrainCfg)
+DLM_TRAIN = AR_TRAIN.dlm
+QWEN3_LORA = TrainCfg(**{**asdict(AR_TRAIN), "steps": 20, "batch_size": 2,
+                         "lr": AR_TRAIN.dlm_lr, "warmup_steps": 2, "log_every": 5})
 
 BLOCK_SIZE = TIER0.context_length                  # packing block == context
+MAX_BLOCKS = _RAW["data"]["max_blocks"]
+DTYPE = _RAW["runtime"]["dtype"]
+
+EVAL_BATCHES = 4                                   # frozen batches for eval loss
 
 
 def as_dict(obj) -> dict:
@@ -83,9 +120,9 @@ def as_dict(obj) -> dict:
 
 
 def cell_dir(name: str) -> Path:
-    """checkpoints/<name>-example (SPEC 1.2 rule 7)."""
-    return CKPT_ROOT / f"{name}{EXPERIMENT_SUFFIX}"
+    """checkpoints/<name>-example (SPEC 1.1.1)."""
+    return cell_path(name, VERSION, "ckpt")
 
 
 def run_dir(name: str) -> Path:
-    return RUN_ROOT / f"{name}{EXPERIMENT_SUFFIX}"
+    return cell_path(name, VERSION, "run")
