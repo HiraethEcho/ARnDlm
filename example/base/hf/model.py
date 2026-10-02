@@ -61,3 +61,25 @@ def sample_ar(model: Qwen3ForCausalLM, prompts=PROMPTS,
     return {"prompts": list(prompts), "ids": ids, "texts": texts,
             "params": {"max_new_tokens": max_new_tokens, "temperature": temperature,
                        "top_k": top_k}}
+
+
+# Prompts for the SFT rows. The questions come from the corpus itself so the
+# model's answer is a response to something in-distribution; the two fixed
+# pretraining prompts stay the AR rows' business. Sampling uses the same
+# temperature/top_k as every other cell so rep-4 stays comparable within a row.
+SFT_PROMPTS = ("你是一个 helpful 的助手。用户问：什么是深度学习？",
+               "请用一句话解释什么是大语言模型。")
+
+
+def sample_sft(model: Qwen3ForCausalLM, prompts=SFT_PROMPTS, max_new_tokens: int = 32,
+               temperature: float = 0.3, top_k: int = 50) -> dict:
+    """`sample_ar` with the chat shape the SFT rows actually trained on.
+
+    The header is plain text rather than a `<|im_assistant|>` token because the
+    6400-vocab tokenizer has no role tokens and SPEC 3.3 forbids adding any
+    (common/sft.py documents this). Sampling the wrong shape would make an
+    SFT cell look broken for a reason that has nothing to do with its training.
+    """
+    return sample_ar(model, prompts=[f"user\n{p}\nassistant\n" for p in prompts],
+                     max_new_tokens=max_new_tokens, temperature=temperature,
+                     top_k=top_k)

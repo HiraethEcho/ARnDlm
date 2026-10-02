@@ -15,6 +15,9 @@ from pathlib import Path
 
 from . import config as C
 from .data import PackedData, build_packed, fixed_batches
+from .sft import SFTData, load_sft
+
+SFT_DATA_DIR = C.ROOT / "data" / "prepared" / "sft-mini-6400"
 
 
 def add_common_args(parser: argparse.ArgumentParser, train_cfg: C.TrainCfg,
@@ -42,6 +45,30 @@ def resolve(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, PackedData, list]:
     if not batches:
         # An empty batch set makes eval_loss return 0.0, which reads as a
         # perfect model and makes the checkpoint verifier report OK.
+        raise ValueError(
+            f"no eval batches: corpus has {len(data)} blocks, batch size is "
+            f"{cfg.batch_size}. Raise --max-blocks or lower --batch-size.")
+    return cfg, data, batches
+
+
+def resolve_sft(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, SFTData, list]:
+    """(train config, SFT corpus, frozen eval batches).
+
+    Identical to `resolve` except for the loader: an SFT cell needs the assistant
+    spans, so `build_packed` would hand it blocks with no supervision at all and
+    every loss would be 0. Reusing the same function name shape keeps the two
+    paths from drifting.
+    """
+    cfg = dataclasses.replace(train_cfg, steps=args.steps, batch_size=args.batch_size,
+                              seed=args.seed)
+    prepared = Path(args.data_dir) if args.data_dir != C.DATA_DIR else SFT_DATA_DIR
+    if not (prepared / "meta.json").exists():
+        raise FileNotFoundError(
+            f"{prepared} does not look like an SFT prepared directory. Build it "
+            f"first: .venv/bin/python example/base/hf/make_sft_data.py")
+    data = load_sft(prepared, block_size=C.BLOCK_SIZE, max_blocks=args.max_blocks)
+    batches = fixed_batches(args.eval_batches, cfg.batch_size, len(data))
+    if not batches:
         raise ValueError(
             f"no eval batches: corpus has {len(data)} blocks, batch size is "
             f"{cfg.batch_size}. Raise --max-blocks or lower --batch-size.")

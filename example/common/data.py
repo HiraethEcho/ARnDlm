@@ -40,6 +40,18 @@ class PackedData:
         return self.blocks[idx].long()
 
 
+def ids_of(batch: torch.Tensor) -> torch.Tensor:
+    """The input ids of a batch, whatever shape it arrives in.
+
+    Pretraining batches are [B, L]; SFT batches are [2, B, L] with row 0 ids and
+    row 1 labels. Anything that forwards a batch to the model rather than to a
+    loss function has to unwrap it -- feeding [2, B, L] straight into a model
+    treats the channel axis as the batch and dies inside RoPE, which is a very
+    unhelpful error message for what is really a missing `[0]`.
+    """
+    return batch[0] if batch.dim() == 3 else batch
+
+
 def _load(prepared_dir: Path):
     meta = json.loads((prepared_dir / "meta.json").read_text())
     # Explicit little-endian: without "<" a big-endian host silently misreads.

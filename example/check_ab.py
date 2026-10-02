@@ -431,7 +431,51 @@ def c6(args) -> dict:
             "same_corruption": same_t and same_mask, "tol": 0.01}
 
 
-CHECKS = {"c1": c1, "c2": c2, "c3": c3, "c4": c4, "c5": c5, "c6": c6}
+def c7(args) -> dict:
+    """SFT rows: same weights, same SFT batch, two implementations, one loss.
+
+    The SFT cells start from *their own* AR checkpoints, and those two were
+    trained independently, so `ar-3.2m-hf-sft` and `ar-3.2m-native-sft` are
+    expected to end at slightly different losses (measured: 6.5408 vs 6.5252,
+    0.23% apart) -- and that difference is upstream, not the SFT step.
+
+    So this check does what C1 does for the AR rows: load **one** checkpoint into
+    both implementations and run the same assistant-only loss over the same
+    batches. Anything above 1e-5 is a real divergence in the SFT path.
+    """
+    from common.losses import sft_ar_loss
+    from common.sft import load_sft
+    from base.native.model import build_native_model
+
+    prepared = C.ROOT / "data" / "prepared" / "sft-mini-6400"
+    if not (prepared / "meta.json").exists():
+        return {"status": "SKIP", "reason": "sft-mini-6400 not built"}
+    src = Path(args.ckpt or HF_AR)
+    if not (src / "model.safetensors").exists():
+        return {"status": "SKIP", "reason": f"no checkpoint at {src}"}
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
+    hf_model = build_hf(C.TIER0, seed=args.seed).to(device).float().eval()
+    native_model = build_native_model(C.TIER0, seed=args.seed).to(device).float().eval()
+    load_into(hf_model, load_state_dict(src))
+    load_into(native_model, load_state_dict(src))
+
+    data = load_sft(prepared, block_size=C.BLOCK_SIZE, max_blocks=256)
+    batches = fixed_batches(4, args.batch_size, len(data))
+    worst, n = 0.0, 0
+    for idx in batches:
+        batch = data.batch(idx).to(device)
+        with torch.no_grad():
+            ours = float(sft_ar_loss(hf_model, batch)[0])
+            theirs = float(sft_ar_loss(native_model, batch)[0])
+        worst = max(worst, abs(ours - theirs))
+        n += 1
+    return {"status": "PASS" if worst <= args.tol else "FAIL",
+            "max_abs_loss_delta": worst, "batches": n, "tol": args.tol,
+            "source": src.name}
+
+
+CHECKS = {"c1": c1, "c2": c2, "c3": c3, "c4": c4, "c5": c5, "c6": c6, "c7": c7}
 EXTRAS = {"decode-bench": decode_bench}
 
 
@@ -450,6 +494,7 @@ def main() -> int:
     ap.add_argument("--bench", action="store_true",
                     help="time each loss implementation on the same batch (C2)")
     ap.add_argument("--cpu", action="store_true")
+    ap.add_argument("--ckpt", help="checkpoint C7 loads into both rows (default: ar-3.2m-hf)")
     ap.add_argument("--gen-len", type=int, default=32)
     ap.add_argument("--block-size", type=int, default=8)
     ap.add_argument("--dlm-steps", type=int, default=8)

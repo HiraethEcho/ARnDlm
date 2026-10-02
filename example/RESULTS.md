@@ -11,6 +11,12 @@ Tier 0 · 200 steps · tinystories-6400 · 只验 pipeline，不看模型能力�
 > 见 `common/data.py` 的 `n_tokens = n_blocks × block_size`），即可用上限，
 > 不是消耗量。两个数都对，量的是不同的东西。
 
+> **SFT 格的 `eval loss` 与预训练格不可比。** SFT 的 loss 只在 assistant 段
+> （每块 128 token 里约 62 个）计算，预训练的 loss 在全部 token 上计算。
+> 两者只在 SFT 之间比、或在预训练之间比，**不能跨列比大小**。
+> SFT 行之间也不应直接比——两行从各自独立的 AR checkpoint 出发，差异来自上游。
+> 要隔离 SFT 路径本身，用 `check_ab c7`：同一份权重进两个实现，差 0.000e+00。
+
 | cell | base | method | params | steps | loss first->last | train-only tok/s | wall tok/s | eval loss | rep-4 | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
 | ar-3.2m-hf | Qwen-mini-HF | AR | 3213056 | 200 | 8.4414 -> 4.6970 | 46,173 | 40,286 | 4.6356 | 0.1724 | 524,288 tok, Tier 0 |
@@ -36,3 +42,5 @@ Tier 0 · 200 steps · tinystories-6400 · 只验 pipeline，不看模型能力�
 >
 > 这两格重跑一次（约 15 min GPU）后本注记删除。
 > 在那之前**不要引用这两行的任何数字**。
+| ar-3.2m-hf-sft | Qwen-mini-HF | AR-SFT | 3213056 | 200 | 9.4496 -> 6.5408 | 46,151 | 40,644 | 6.3639 | 0.4310 | from ar-3.2m-hf-example, assistant-only loss, lr 1e-04 |
+| ar-3.2m-native-sft | Qwen-mini-MiniMind | AR-SFT | 3213056 | 200 | 9.4158 -> 6.5252 | 46,374 | 42,477 | 6.3462 | 0.0517 | from ar-3.2m-native-example, assistant-only loss, native torch, lr 1e-04 |

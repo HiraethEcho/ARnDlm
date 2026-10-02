@@ -246,6 +246,46 @@ def section_integration() -> None:
           f"{total} < {ceiling}")
 
 
+def section_verify() -> None:
+    print("\n[7] the checkpoint verifier accepts an SFT batch")
+    from common.data import ids_of
+    from common.verify import logits_delta
+    flat = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], dtype=torch.long)
+    stacked = torch.stack([flat, torch.full_like(flat, IGNORE)])
+    check("ids_of passes a [B, L] batch through", ids_of(flat) is flat)
+    check("ids_of unwraps a [2, B, L] batch",
+          tuple(ids_of(stacked).shape) == (2, 4), str(tuple(ids_of(stacked).shape)))
+    check("the unwrapped ids are row 0",
+          bool((ids_of(stacked) == flat).all()))
+
+    # Two identical models on an SFT corpus must report 0.0 -- and must not die
+    # inside RoPE, which is what happened before ids_of existed.
+    prepared = C.ROOT / "data" / "prepared" / "sft-mini-6400"
+    if not (prepared / "meta.json").exists():
+        print("  SKIP  corpus not built")
+        return
+    data = load_sft(prepared, C.BLOCK_SIZE, max_blocks=16)
+    lin_a = torch.nn.Linear(1, 1)
+    calls = []
+
+    class Recorder(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.lin = torch.nn.Linear(1, 1)
+
+        def forward(self, inputs):
+            calls.append(tuple(inputs.shape))
+            n = inputs.shape[0] * inputs.shape[1]
+            return type("O", (), {"logits": torch.zeros(n, 3)})()
+
+    delta = logits_delta(Recorder(), Recorder(), data, [torch.arange(2)], torch.device("cpu"))
+    check("logits_delta runs on SFT data", delta == 0.0, f"delta {delta}")
+    check("the model saw [B, L], not [2, B, L]",
+          calls and calls[0] == (2, C.BLOCK_SIZE), str(calls[:1]))
+    check("no extra shift was applied (that is the loss function's job)",
+          calls and calls[0][1] == C.BLOCK_SIZE)
+
+
 def main() -> int:
     section_shape()
     section_shift()
@@ -253,6 +293,7 @@ def main() -> int:
     section_empty()
     section_gradient()
     section_integration()
+    section_verify()
     print()
     if FAILS:
         print(f"FAIL ({len(FAILS)}): " + ", ".join(FAILS))

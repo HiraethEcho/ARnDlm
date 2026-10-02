@@ -39,7 +39,8 @@ echo "A-version smoke: 10 cells, Tier 0, ${QUICK:-full}"
 
 # --- unit tests first: a broken base makes every later number meaningless ---
 for t in test_common test_hf_ar test_native_c1 test_a2d test_dllm_a2d \
-         test_direct_dlm test_native_dlm test_lora_0p6b; do
+         test_direct_dlm test_native_dlm test_lora_0p6b \
+         test_sft_flatten test_sft_loss test_sft_cells; do
   run "test/$t" "$PY" "example/tests/$t.py"
 done
 
@@ -70,7 +71,7 @@ run "cell 10 qwen3-0.6b-qwen3-0.6b-mini_a2d" \
     "$PY" example/base/qwen3_0p6b/train_lora_minimind.py --n-docs 400
 
 # --- cross-checks ---
-run "check_ab c1..c5" "$PY" example/check_ab.py all
+run "check_ab c1..c6" "$PY" example/check_ab.py all
 run "decode benchmark" "$PY" example/check_ab.py decode-bench
 
 echo

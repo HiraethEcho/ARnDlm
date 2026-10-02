@@ -1,0 +1,102 @@
+#!/usr/bin/env python
+"""test_sft_cells -- do the SFT cell scripts refuse to lie?
+
+The single worst bug in this project's history is documented in the long-run
+skill: "row 3 was LoRA on a randomly initialised 600M backbone -- 3 of 10 cells
+measured a random model; every number looked plausible". A cell that cannot find
+its upstream checkpoint must therefore **exit non-zero**, not quietly train from
+random init, because the second outcome produces a table that reads fine.
+
+Also checked here: the cell names match SPEC 2.3, each script exposes
+`--init-random` as the deliberate ablation, and each imports without side effects.
+
+Run:  .venv/bin/python example/tests/test_sft_cells.py
+"""
+from __future__ import annotations
+
+import importlib
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from common import config as C
+
+FAILS: list[str] = []
+
+
+def check(name: str, ok: bool, detail: str = "") -> None:
+    print(f"  {'OK  ' if ok else 'FAIL'}  {name}{('  ' + detail) if detail else ''}")
+    if not ok:
+        FAILS.append(name)
+
+
+# SPEC 2.3's SFT column, as (module, cell name, upstream checkpoint dir).
+CELLS = [
+    ("base.hf.train_sft", "ar-3.2m-hf-sft", "ar-3.2m-hf"),
+    ("base.native.train_sft", "ar-3.2m-native-sft", "ar-3.2m-native"),
+]
+
+
+def section_spec_names() -> None:
+    print("\n[1] cell names match SPEC 2.3")
+    spec = (C.ROOT / "SPEC.md").read_text()
+    for mod, cell, upstream in CELLS:
+        check(f"{cell} is in SPEC.md", f"`{cell}`" in spec)
+        check(f"{cell} is downstream of {upstream}", upstream in cell or cell.endswith("-sft"))
+
+
+def section_importable() -> None:
+    print("\n[2] the scripts import and expose their knobs")
+    for mod, cell, _ in CELLS:
+        try:
+            m = importlib.import_module(mod)
+        except Exception as exc:
+            check(f"{mod} imports", False, f"{type(exc).__name__}: {exc}")
+            continue
+        check(f"{mod} imports", True)
+        check(f"{mod} declares CELL = {cell}", getattr(m, "CELL", None) == cell,
+              str(getattr(m, "CELL", None)))
+        src = Path(m.__file__).read_text()
+        check(f"{mod} offers --init-random", "--init-random" in src)
+        check(f"{mod} guards the upstream checkpoint",
+              "no AR checkpoint" in src or "no upstream checkpoint" in src,
+              "silently training from random init is the bug this exists for")
+
+
+def section_refuses_without_upstream() -> None:
+    print("\n[3] a missing upstream checkpoint exits non-zero")
+    argv = sys.argv
+    for mod, cell, _ in CELLS:
+        m = importlib.import_module(mod)
+        missing = Path("/nonexistent/upstream-checkpoint")
+        if not hasattr(m, "AR_CKPT"):
+            check(f"{mod} names its upstream checkpoint", False, "no AR_CKPT attribute")
+            continue
+        original = m.AR_CKPT
+        m.AR_CKPT = missing
+        sys.argv = [f"{mod}.py", "--steps", "1", "--max-blocks", "8", "--no-verify"]
+        try:
+            rc = m.main()
+        except SystemExit as exc:
+            rc = int(exc.code or 0)
+        finally:
+            sys.argv = argv
+            m.AR_CKPT = original
+        check(f"{mod} returns non-zero", rc != 0, f"rc={rc}")
+
+
+def main() -> int:
+    section_spec_names()
+    section_importable()
+    section_refuses_without_upstream()
+    print()
+    if FAILS:
+        print(f"FAIL ({len(FAILS)}): " + ", ".join(FAILS))
+        return 1
+    print("PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

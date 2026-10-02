@@ -14,7 +14,7 @@ from pathlib import Path
 import torch
 
 from .ckpt import load_into, load_state_dict
-from .data import PackedData
+from .data import PackedData, ids_of
 
 
 @torch.no_grad()
@@ -27,8 +27,10 @@ def logits_delta(model_a: torch.nn.Module, model_b: torch.nn.Module,
     worst = 0.0
     for idx in batches:
         batch = data.batch(idx).to(device)
-        worst = max(worst, float((model_a(batch).logits
-                                  - model_b(batch).logits).abs().max()))
+        # An SFT batch is [2, B, L]; the model only ever sees the ids row.
+        inputs = ids_of(batch)
+        worst = max(worst, float((model_a(inputs).logits
+                                  - model_b(inputs).logits).abs().max()))
     return worst
 
 
