@@ -97,9 +97,16 @@ class DLLMLoss:
         self.trainer.meter = _MeterStub()
 
     def __call__(self, model, batch: torch.Tensor) -> torch.Tensor:
+        # An SFT batch is [2, B, L]: row 0 ids, row 1 labels with IGNORE outside
+        # the assistant spans. dllm's own trainer already derives
+        # `maskable_mask = labels != -100` and intersects it with the stochastic
+        # mask, so passing the labels through is all it takes to restrict A2D
+        # training to the assistant half -- no patch to the upstream package.
+        # A pretraining batch is [B, L] and is passed through untouched.
+        ids, labels = (batch[0], batch[1]) if batch.dim() == 3 else (batch, batch)
         # labels == input_ids with no attention mask: every position is valid,
         # and A2DQwen3Model turns a missing mask into "all valid, bidirectional".
-        return self.trainer.compute_loss(model, {"input_ids": batch, "labels": batch})
+        return self.trainer.compute_loss(model, {"input_ids": ids, "labels": labels})
 
 
 def make_a2d_loss(loss: DLLMLoss):

@@ -34,12 +34,27 @@ def native_forward(model, is_causal: bool = False):
 
 def make_a2d_loss(model, generator: torch.Generator | None = None,
                   epsilon: float = 0.0):
-    """Same objective as the transformers row, different forward."""
+    """Same objective as the transformers row, different forward.
+
+    Accepts both batch shapes for the same reason row 1 does: [B, L] for a
+    pretraining/A2D cell, [2, B, L] for an SFT cell whose row 1 carries IGNORE
+    outside the assistant spans. Row 1 got this first and the native row kept only
+    the [B, L] path for a while, which showed up as a shape error at dim 1 --
+    `batch.shape[0]` was the channel axis. `test_dlm_sft.py` §3 now exercises both
+    rows' factories with both shapes.
+    """
+    from common.sft import IGNORE
+
     def loss_fn(model, batch: torch.Tensor):
-        t = sample_t(batch.shape[0], batch.device, generator, epsilon=epsilon)
+        if batch.dim() == 3:
+            ids, labels = batch[0], batch[1]
+            valid = labels != IGNORE
+        else:
+            ids, labels, valid = batch, batch, None
+        t = sample_t(ids.shape[0], ids.device, generator, epsilon=epsilon)
         t_safe = t.clamp_min(1e-3)
-        x_t, masked = corrupt(batch, t, C.MASK, generator)
-        return a2d_loss(native_forward(model)(x_t), batch, masked, t_safe), {
+        x_t, masked = corrupt(ids, t, C.MASK, generator, valid=valid)
+        return a2d_loss(native_forward(model)(x_t), ids, masked, t_safe, valid=valid), {
             "t_mean": float(t.mean())}
     return loss_fn
 

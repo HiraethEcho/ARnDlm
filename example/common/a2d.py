@@ -47,10 +47,20 @@ def sample_t(batch_size: int, device, generator: torch.Generator | None = None,
 
 
 def corrupt(x0: torch.Tensor, t: torch.Tensor, mask_id: int = MASK,
-            generator: torch.Generator | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-    """Mask each token with probability t[b]. Returns (x_t, masked)."""
+            generator: torch.Generator | None = None,
+            valid: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mask each token with probability t[b]. Returns (x_t, masked).
+
+    `valid` restricts *where* noise may be applied, which is what the SFT rows
+    need: the user's half of a turn is given context, and replacing it with MASK
+    would change what the model is conditioned on rather than what it is asked
+    to predict. Without it, an SFT row would see a corrupted prompt and learn to
+    reconstruct the question.
+    """
     probs = torch.rand(x0.shape, device=x0.device, generator=generator)
     masked = probs < t[:, None]                       # [B, L], t is per-sample
+    if valid is not None:
+        masked = masked & valid
     return torch.where(masked, torch.full_like(x0, mask_id), x0), masked
 
 

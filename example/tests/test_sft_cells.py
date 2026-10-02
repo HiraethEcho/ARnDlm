@@ -44,6 +44,9 @@ def section_spec_names() -> None:
     for mod, cell, upstream in CELLS:
         check(f"{cell} is in SPEC.md", f"`{cell}`" in spec)
         check(f"{cell} is downstream of {upstream}", upstream in cell or cell.endswith("-sft"))
+    for cell in ("ar-3.2m-hf-mini_a2d-sft", "ar-3.2m-hf-dllm_a2d-sft",
+                 "ar-3.2m-native-mini_a2d-sft", "ar-3.2m-native-dllm_a2d-sft"):
+        check(f"{cell} is in SPEC.md", f"`{cell}`" in spec)
 
 
 def section_importable() -> None:
@@ -86,10 +89,31 @@ def section_refuses_without_upstream() -> None:
         check(f"{mod} returns non-zero", rc != 0, f"rc={rc}")
 
 
+def section_rows() -> None:
+    print("\n[4] the cell name decides the row and the objective")
+    spec = (C.ROOT / "SPEC.md").read_text()
+    import base.hf.train_dlm_sft as dlmsft
+    for cell, (row, obj) in sorted(dlmsft.CELLS.items()):
+        check(f"{cell} is in SPEC.md", f"`{cell}`" in spec)
+        check(f"{cell} names the {row} row", row in cell,
+              "a native cell that runs the transformers model produces numbers "
+              "for the wrong implementation")
+        builder, _, _, base_label, _ = dlmsft.build_parts(row, obj)
+        module = builder.__module__
+        check(f"{cell} builds its row's model",
+              ("base.hf" in module) if row == "hf" else ("base.native" in module),
+              module)
+        check(f"{cell} labels its base correctly",
+              base_label == ("Qwen-mini-HF" if row == "hf" else "Qwen-mini-MiniMind"),
+              base_label)
+        check(f"{cell} accepts --cell", cell in dlmsft.CELLS)
+
+
 def main() -> int:
     section_spec_names()
     section_importable()
     section_refuses_without_upstream()
+    section_rows()
     print()
     if FAILS:
         print(f"FAIL ({len(FAILS)}): " + ", ".join(FAILS))

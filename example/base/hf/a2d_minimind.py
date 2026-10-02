@@ -38,14 +38,29 @@ def dlm_forward(model):
 
 
 def make_a2d_loss(model, generator: torch.Generator | None = None):
-    """`loss_fn(model, batch)` shaped for common.loop.Loop."""
+    """`loss_fn(model, batch)` shaped for common.loop.Loop.
+
+    Accepts both batch shapes on purpose: [B, L] for a pretraining/A2D cell
+    (every position is supervised) and [2, B, L] for an SFT cell (row 0 ids, row
+    1 labels with IGNORE outside assistant spans). The same closure serves both
+    because a second copy of this function would drift -- which is the failure
+    the long-run skill records as "copy instead of import for the second
+    caller".
+    """
+    from common.sft import IGNORE
+
     def loss_fn(model, batch: torch.Tensor):
-        t = sample_t(batch.shape[0], batch.device, generator)
-        x_t, masked = corrupt(batch, t, C.MASK, generator)
+        if batch.dim() == 3:
+            ids, labels = batch[0], batch[1]
+            valid = labels != IGNORE
+        else:
+            ids, labels, valid = batch, batch, None
+        t = sample_t(ids.shape[0], ids.device, generator)
+        x_t, masked = corrupt(ids, t, C.MASK, generator, valid=valid)
         # t=0 would divide by ~1e-6; that sample contributes nothing anyway.
         t = t.clamp_min(1e-3)
         logits = dlm_forward(model)(x_t)
-        return a2d_loss(logits, batch, masked, t), {"t_mean": float(t.mean())}
+        return a2d_loss(logits, ids, masked, t, valid=valid), {"t_mean": float(t.mean())}
     return loss_fn
 
 
