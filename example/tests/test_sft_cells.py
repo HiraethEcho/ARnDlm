@@ -93,11 +93,13 @@ def section_rows() -> None:
     print("\n[4] the cell name decides the row and the objective")
     spec = (C.ROOT / "SPEC.md").read_text()
     import base.hf.train_dlm_sft as dlmsft
-    for cell, (row, obj) in sorted(dlmsft.CELLS.items()):
+    for cell, (row, obj, upstream) in sorted(dlmsft.CELLS.items()):
         check(f"{cell} is in SPEC.md", f"`{cell}`" in spec)
         check(f"{cell} names the {row} row", row in cell,
               "a native cell that runs the transformers model produces numbers "
               "for the wrong implementation")
+        check(f"{cell} points at a real upstream cell",
+              f"`{upstream}`" in spec, upstream)
         builder, _, _, _, base_label = dlmsft.build_parts(row, obj)
         module = builder.__module__
         check(f"{cell} builds its row's model",
