@@ -126,3 +126,5 @@ DLM 额外记录 sampling steps、generation speed、output quality 和 repetiti
 6. ~~Direct DLM~~ **DONE** (0.67 nat behind A2D)
 7. **B 版实现** — 按 `example/teach/` step 0→13 写, 每步对拍
 8. **Tier 1 定档** — 先测吞吐阶梯再定参数量 (`example/teach/13-tier1.md`)
+9. **T4 后训练** — SFT 先做 (AR 两格 + DLM 两格), DPO 排后。
+   完整任务表见 `SPEC.md` §8 (A/B 两维度, 含依赖顺序和验收命令)

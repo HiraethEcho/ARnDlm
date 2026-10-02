@@ -3,26 +3,59 @@
 **规则**：解不了就记在这里（原因 / 影响 / 回头计划），继续做下一格，收尾时清理。
 **状态**：`OPEN` / `DEFERRED`（明确不做）/ `DONE`（已解决，写上怎么解决的）。
 
+## OPEN-1b · A 版代码要不要跟着改成复用 151662
+
+**现象**：决定已经拍板（DONE-1），但 `example/base/qwen3_0p6b/` 三个文件仍按
+「新增 `<|diff-mask|>` + resize」实现：
+
+| 文件 | 位置 |
+|---|---|
+| `common_qwen.py` | `MASK_TOKEN = "<|diff-mask|>"`、`resize_token_embeddings(len(tokenizer))` |
+| `lora_common.py` | docstring「Mask id 151669 (see common_qwen.py for why it has to be added)」 |
+| `tests/test_lora_0p6b.py` | `check("mask token was added", ids["mask"] == 151669)` |
+
+**为什么要问**：A 版是 B 版的正确性基准。两边用不同的 MASK id 方案，
+A/B 对拍在行3 两格就对不上——差的不是模型实现，是 token id 约定。
+
+**倾向**：改成复用 151662。代价是两格要重跑（LoRA 0.6B 各约 5 分钟），
+收益是 A/B 基线一致 + 参数量对得上。
+
 ---
 
-## OPEN-1 · SPEC 3.2 的 MASK id 151669 在 Qwen3-0.6B 的 tokenizer 里不存在
+## DONE-1 · Qwen track 的 MASK id：复用 `151662` `<|fim_pad|>`
 
-**现象**：该 tokenizer 的最大 id 是 **151668**，151669 无效。
-A 版按「新加一个 token」处理：加 `<|diff-mask|>` 后它正好拿到 151669。
+**决定 (用户拍板)**：复用已有的 `<|fim_pad|>` (151662)，**不新增 token、不 resize
+embedding**。`SPEC.md` §3.2 已改。
 
-**附带影响**：`resize_token_embeddings(151670)` 同时把 embedding 从
-checkpoint 的 **151936 行**缩到 151670 行，掉了 266 行 = **272,384 参数**。
-这 266 行 tokenizer 永远吐不出来，所以不影响正确性，但参数量对不上时
-很容易被当成 bug 查半天。
+**原问题**：`SPEC.md` 写「MASK 使用 id 151669」，实测越界——Qwen3-0.6B 的 tokenizer
+`vocab_size = 151,669`，合法 id 是 0-151668。
 
-**影响**：行3 两格（cells 9/10）。
+**验证 (2026-10-01)**：
 
-**回头计划**：B 版写 `training/a2d_dllm/` 时二选一，并写进注释：
-1. 沿用 A 版（加 token + resize），接受参数量变化；
-2. 复用已有的未使用 special token（如 `<|fim_pad|>` 151662），**不改 embedding**。
-   更干净，但要确认该 token 在 Qwen3-0.6B 的训练数据里从未出现。
+| 检查 | 结果 |
+|---|---|
+| `vocab_size` | 151,669 → 151669 确实越界 |
+| 151662 | `<|fim_pad|>`，special 段真实存在 |
+| `tinystories-6400` 中 id ≥ 151000 | **一个都没有** |
+| `minimind3-6400` 中 id ≥ 151000 | **一个都没有** |
 
-**未决**：SPEC 该改成「先加 token 再用 151669」，还是「复用 151662」。
+两个语料都没碰过任何 special token，所以复用不会与语料相撞。
+
+**为什么复用比新增好**：
+
+1. 不动 embedding —— 新增需 `resize_token_embeddings(151670)`，embedding 从
+   checkpoint 的 151,936 行缩到 151,670 行，少 266 行。复用则参数量保持精确的
+   **598,071,296**，A/B 对拍基线干净。
+2. 对 LoRA 两格的可训练参数**影响为零** —— LoRA 只挂 attention 四个投影，
+   backbone 冻结，embedding 本来就不训练。
+
+**⚠️ 注意**：`<|fim_pad|>` 在 Qwen3 自己的预训练语料里可能出现过（Qwen 用了 FIM
+格式），所以它**不是随机初始化的一行**。不影响正确性（A2D 只拿它当被遮位置的
+标记），但不要当成「空白 token」期待。
+
+**本文件下方代码的遗留**：`example/base/qwen3_0p6b/` 目前仍按「加 `<|diff-mask|>`
++ resize」实现（`common_qwen.py` 的 `MASK_TOKEN`、`lora_common.py` 的注释、
+`tests/test_lora_0p6b.py` 的断言）。改不改见下方 OPEN-1b。
 
 ---
 
