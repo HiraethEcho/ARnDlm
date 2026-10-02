@@ -1,0 +1,78 @@
+# 实践版 · Tier 1（正式规模）
+#
+# SPEC 1.1.1: 每个版本的配置都在这里，不硬编码在代码里。
+# 与 configs/example/tier0.yaml 走同一个加载器
+# (example/common/version.py::load_config) —— **字段名必须完全一致**，
+# 少一个字段就等于多一条代码路径，对照实验立刻失去意义。
+#
+# 数字来源：2026-10-01 本机实测 (AMD Radeon 880M, ROCm 10.0, bf16 + AdamW + sdpa,
+# packing 零 padding, 不开 gradient checkpointing)，完整阶梯见
+# logs/dev/02-hardware-perf.md。不是估算。
+#
+#   参数量 26,879,488 · 吞吐 7,995 train-only tok/s · 512.3 ms/step
+#   峰值显存 1.41 GB · step 外开销 0.09% · 跑完 332M token 约 11.6 h
+
+version: practical
+tier: tier1
+purpose: the real comparison -- AR vs DLM on the same token stream
+
+model:
+  hidden_size: 512
+  num_layers: 8
+  num_heads: 8
+  num_kv_heads: 4
+  intermediate_size: 1408
+  context_length: 512
+  vocab_size: 6400
+  rope_theta: 10000.0
+  rms_norm_eps: 1e-6
+  tie_word_embeddings: true
+
+tokens:
+  pad: 0
+  bos: 1
+  eos: 2
+  mask: 27
+
+train:
+  # 332,495,324 token / 4,096 token 每步 = 81,174 步 = 正好一遍语料。
+  # 用步数封顶不用 epoch（AGENTS.md/PLAN.md），但这里两者数值相同。
+  steps: 81174
+  batch_size: 8          # 实测 B8 与 B16 吞吐无法区分 (ms/step 精确翻倍)，B8 省一半显存
+  lr: 3e-4               # AR pretrain; A2D fine-tune 用 dlm_lr
+  dlm_lr: 1e-4
+  min_lr_ratio: 0.1
+  warmup_steps: 2000     # 约 2.5% of steps
+  weight_decay: 0.1
+  grad_clip: 1.0
+  beta1: 0.9
+  beta2: 0.95
+  seed: 42
+  log_every: 200         # 全程约 400 个点，metrics.csv 不会膨胀
+  loss_window: 100
+
+data:
+  prepared_dir: data/prepared/minimind3-6400
+  # 0 = 不限量。整个语料 332,495,324 token / 512 = 649,405 块，
+  # 训练只吃前 81,174 × 8 = 649,392 块。
+  max_blocks: 0
+
+runtime:
+  dtype: bfloat16
+  loss_window: 100
+
+# ---------------------------------------------------------------------------
+# 这份配置**没有**的旋钮，以及为什么
+#
+# gradient_checkpointing —— 实测本机上慢 18-23% 只省 3 GB，不开。
+# attention backend —— 固定 sdpa。瓶颈在 attention 的 backward kernel，
+#   换 backend 不解决那个。
+#
+# 以下都还没有实测依据，先按 tier0 沿用，**别当成定论**：
+#   lr 3e-4 / betas (0.9, 0.95) / weight_decay 0.1 / grad_clip 1.0
+#   —— 这些是照抄实验版。tier1 的 batch 与 token 数都变了 20 倍以上，
+#   正式扫参前它们应该各自被单独验一次。
+#
+# seq_len 256 实测快 9% (8,999 tok/s)，但上下文减半。这里选 512 是因为
+# DLM 的 block 去噪需要足够长的上下文，一次改动不要同时动两件事。
+# ---------------------------------------------------------------------------

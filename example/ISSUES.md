@@ -3,22 +3,24 @@
 **规则**：解不了就记在这里（原因 / 影响 / 回头计划），继续做下一格，收尾时清理。
 **状态**：`OPEN` / `DEFERRED`（明确不做）/ `DONE`（已解决，写上怎么解决的）。
 
-## OPEN-1b · 实验版代码要不要跟着改成复用 151662
+## OPEN-1b · ~~实验版代码要不要跟着改成复用 151662~~ → **已改完，待重跑**
 
-**现象**：决定已经拍板（DONE-1），但 `example/base/qwen3_0p6b/` 三个文件仍按
-「新增 `<|diff-mask|>` + resize」实现：
+**状态**：代码已改完（DONE-1 的决定已落地），**但那两格的结果行尚未刷新**。
+`example/RESULTS.md` 末尾有注记：参数量从 598,071,296 变成 598,343,680，
+loss / 吞吐 / eval / rep-4 也要重跑才知道（mask token 不同 → 加噪用的
+embedding 行不同 → loss 会变）。
 
-| 文件 | 位置 |
+已改的地方：
+
+| 文件 | 改动 |
 |---|---|
-| `common_qwen.py` | `MASK_TOKEN = "<|diff-mask|>"`、`resize_token_embeddings(len(tokenizer))` |
-| `lora_common.py` | docstring「Mask id 151669 (see common_qwen.py for why it has to be added)」 |
-| `tests/test_lora_0p6b.py` | `check("mask token was added", ids["mask"] == 151669)` |
+| `base/qwen3_0p6b/common_qwen.py` | `MASK_TOKEN = "<\|fim_pad\|>"` + `MASK_ID = 151662`；`load_tokenizer()` 不再add token，改成**断言它在词表里且 id 没变**；`build_a2d_lora()` 去掉 `resize_token_embeddings`，改成断言 embedding **行数未变且逐位相同** |
+| `tests/test_lora_0p6b.py` | 断言改成 `mask == 151662`、`vocab == 151669`（原来断言 151670）、`embedding rows == 151936` |
+| `base/qwen3_0p6b/lora_common.py` · `train_lora_dllm.py` · `base/hf/a2d_dllm.py` | docstring / 注释里的 151669 → 151662 |
 
-**为什么要问**：实验版是 实践版的正确性基准。两边用不同的 MASK id 方案，
-实验版/实践版 对拍在行3 两格就对不上——差的不是模型实现，是 token id 约定。
-
-**倾向**：改成复用 151662。代价是两格要重跑（LoRA 0.6B 各约 5 分钟），
-收益是 实验版/实践版 基线一致 + 参数量对得上。
+`test_lora_0p6b.py` 已 PASS（含手写 loss vs dllm loss 相对差 1.55e-05）。
+**两格重跑尚未执行**（需 GPU，约 15 min）。在那之前不要引用 RESULTS.md
+最后两行的任何数字。
 
 ---
 

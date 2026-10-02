@@ -402,6 +402,50 @@ packing 把多篇文档首尾相接时没有 document mask, 模型能看见上�
 
 ## 项目当前进度
 
+**2026-10-02 更新**：长任务已完成并全部合入 `main`（`cf9d708` → `5e3646e`）。
+`example/` 里的实验版 10 格全通，workspace `ARnDlm-example` 与 `example-pipeline`
+分支已删除（原始run 产物已搬回本工作区 `logs/run/example/`，33 个文件）。
+
+### 实验版 vs 实践版
+
+长任务引入的区分，`SPEC.md` §1.1.1 有完整理由：
+
+| | 实验版 | 实践版 |
+|---|---|---|
+| 代码 | `example/` | 根目录七个目录（B 版） |
+| 配置 | `configs/example/tier0.yaml` | `configs/practical/` **只有 README** |
+| 结果 | `example/RESULTS.md` | `RESULTS.md` 还不存在 |
+| checkpoint | `checkpoints/<name>-example/` | `checkpoints/<name>/` |
+
+后缀由 `example/common/version.py` 加 —— 拼错不报错，只会静默覆盖另一版权重。
+
+### 实践版的规模数据已经测出来了
+
+`configs/practical/tier1.yaml` 空着是等吞吐阶梯，阶梯已测完（本文件上方）：
+
+| hidden/layers | params | train tok/s | ms/step | GB | h@332M |
+|---|---:|---:|---:|---:|---:|
+| 512 / 8 | 26,879,488 | 7,995 | 512.3 | 1.41 | 11.6 |
+
+seq 256 → 8,999 tok/s（快 9%，但上下文减半）；seq 1024 → 6,731（慢 18%，
+`AGENTS.md` 的 `seq ≤ 512` 约束成立）。**直接填即可，不用重测。**
+
+### 剩下的 14 格全卡在 SFT 展平上
+
+SPEC 里 14 个 ⬜ 全部属于 SFT 列（G3）+ `dlm-3.2m-dllm`。共同前置是
+`conversations` 格式展平成训练序列 + `assistant_spans.npy`（标出 assistant 段，
+只在 assistant 段算 loss）。
+
+数据已下载（`sft_t2t.jsonl` 14 GB / 5,109,432 行），但 `prepare_data.py` 只读
+`row["text"]`，喂 `conversations` 会**静默产出 0 token**。
+
+### 长任务留下的方法论资产
+
+`~/.pi/agent/skills/long-horizon-run/`（全局）+ `.agents/skills/`（项目副本，
+不进 git）。里面记了这次真实踩到的坑：行3 从没加载预训练权重、C5 值比对是死代码、
+decode 计时无预热（报 745 ms 实际 49 ms）、短跑覆盖正式行、第二个调用方复制而非
+import。
+
 **实验版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
 
 ```

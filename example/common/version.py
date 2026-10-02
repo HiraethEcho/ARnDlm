@@ -92,7 +92,11 @@ def cell_path(name: str, version: str = "example", kind: str = "ckpt") -> Path:
     """checkpoints/<name><suffix> or logs/run/<name><suffix>."""
     if version not in SUFFIX:
         raise ValueError(f"version must be one of {sorted(SUFFIX)}, got {version!r}")
-    root = ROOT / ("checkpoints" if kind == "ckpt" else "logs" / "run")
+    # `/` binds tighter than the conditional expression, so the string concat
+    # has to happen *inside* the else branch. Written the other way round this
+    # raises TypeError on the "run" path only -- and every test here goes
+    # through the "ckpt" path, so nothing catches it.
+    root = ROOT / ("checkpoints" if kind == "ckpt" else "logs/run")
     return root / f"{name}{SUFFIX[version]}"
 
 

@@ -146,7 +146,7 @@ metrics.csv      同样内容的表格版, 方便直接丢进 Excel
 ```
 
 ```sh
-.venv/bin/python scripts/plot.py logs/run/t1_pretrain
+.venv/bin/python scripts/plot.py logs/run/example/hf-ar-example
 ```
 
 SwanLab 是**可选**的。想用先 export 令牌 —— 令牌在 `~/.config/zsh/dev.zsh` 里
@@ -158,29 +158,86 @@ export SWANLAB_API_KEY=...
 
 没 export 时训练脚本要正常跑通, 只是不上传。
 
-## 训练
+## 跑实验版（`example/`，已全部完成）
 
-还没写。各路线的模块等做到那一步再填 (见 `PLAN.md`):
+实验版是参考实现，10 格全通。这是目前**唯一能直接跑**的训练代码。
 
 ```sh
-# T1a  transformers 包
-.venv/bin/python -m training.ar_hf.pretrain --config configs/t1_pretrain.yaml
-.venv/bin/python -m training.ar_hf.lora     --ckpt checkpoints/t1/final.pt
+# 一次跑完 10 格 + 全部跨格对拍 + 写 RESULTS.md (约 25 min)
+bash example/smoke_all.sh
 
-# T1b  原生 pytorch
-.venv/bin/python -m training.ar_native.pretrain   --config configs/t1_pretrain_native.yaml
-.venv/bin/python -m training.ar_native.sample      --ckpt checkpoints/t1_native/final.pt
+# 快版: 20 步 + 小语料 (约 8 min), 代码路径完全相同, 但不是 RESULTS.md 引用的那次
+bash example/smoke_all.sh --quick
 
-# T2   A2D (两条路必须对拍)
-.venv/bin/python -m training.a2d_minimind.train            --ckpt checkpoints/t1_native/final.pt
-.venv/bin/python -m training.a2d_dllm.train       --ckpt checkpoints/t1_native/final.pt
+# 只跑对拍 (check 可选: c1..c6 / decode-bench / all)
+.venv/bin/python example/check_ab.py all
 
-# T3   直接用 dllm 包训
-.venv/bin/python -m training.direct_dlm.pretrain        --config configs/t3_dllm_pretrain.yaml
+# 单个测试文件 (8 个, 失败非零退出 —— 不是 pytest, 环境里没装)
+.venv/bin/python example/tests/test_common.py
+
+# 单格调试 (Tier 0, 200 步, 几十秒)
+.venv/bin/python example/base/hf/train_ar.py
 ```
 
-**长任务用非阻断 subagent 启动, 让 subagent 监督进程并在完成时回报。**
-(见 `memo-more.md`)
+配置从 YAML 来，**代码里没有字面量**：
+
+```sh
+configs/example/tier0.yaml          # 实验版, 已填
+configs/practical/tier1.yaml       # 实践版, 还没有
+```
+
+## 测吞吐
+
+```sh
+.venv/bin/python scripts/bench_throughput.py --seq-len 512 --batch 8
+.venv/bin/python scripts/bench_throughput.py --sweep --steps 100 --warmup 50
+```
+
+⚠️ **这张 880M 是核显，桌面和别的会话都在抢它。** 同一配置离散度可达 2.7 倍。
+测之前 `rocm-smi --showuse` 确认卡空，同一配置跑 3 次报离散度，预热 ≥ 50 步。
+方法学见 `notes/05-measurement.md`。
+
+## 准备数据
+
+```sh
+# MiniMind 全量 (约 22 GiB, 下载约 6.6 MB/s, 可断点续传)
+.venv/bin/python scripts/download_minimind.py --list
+.venv/bin/python scripts/download_minimind.py
+
+# HF 三个数据集 (choices: tinystories / openwebtext / wikipedia-zh)
+.venv/bin/python scripts/download_data.py tinystories --max-docs 10000
+.venv/bin/python scripts/download_data.py openwebtext
+.venv/bin/python scripts/download_data.py wikipedia-zh
+
+# tokenize 成训练格式
+.venv/bin/python scripts/prepare_data.py data/raw/minimind_dataset/pretrain_t2t_mini.jsonl \
+    --output data/prepared/minimind3-6400 --append-eos
+```
+
+**`datasets` 4.2.0 在本机不能用**（Python 3.14 + dill 0.4.0 报
+`Pickler._batch_setitems() takes 2 positional arguments but 3 were given`），
+`download_data.py` 会自动回退到 parquet backend。不要动 pin。
+
+⚠️ **SFT / DPO / RL 数据用 `conversations` 格式，喂给 `prepare_data.py` 会静默
+产出 0 token。** 已下载但还不能用，见 `notes/06-datasets.md`。
+
+## 跑实践版（B 版，尚未实现）
+
+B 版目录目前只有 docstring。写完之前下面这些命令都不存在：
+
+```sh
+# 计划中的入口（尚不存在，写的时候按example/teach/ 的顺序来）
+.venv/bin/python -m training.ar_hf.pretrain       --config configs/practical/tier1.yaml
+.venv/bin/python -m training.ar_native.pretrain   --config configs/practical/tier1.yaml
+.venv/bin/python -m training.a2d_minimind.train   --ckpt checkpoints/<name>/final
+.venv/bin/python -m training.a2d_dllm.train       --ckpt checkpoints/<name>/final
+.venv/bin/python -m training.direct_dlm.pretrain  --config configs/practical/tier1.yaml
+```
+
+写代码的顺序在 `example/teach/00-common-base.md` → `13-tier1.md`，每个文件都写了验收标准。
+
+**长任务用非阻断subagent 启动，让 subagent 监督进程并在完成时回报**
+（见 `AGENTS.md` 的「运行」）。
 
 ## 换机器 / 链接断了
 

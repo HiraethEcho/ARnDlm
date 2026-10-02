@@ -42,12 +42,14 @@ def main() -> int:
     print("\n[1] tokenizer")
     model, tokenizer = build_a2d_lora(seed=42)
     ids = special_ids(tokenizer)
-    check("mask token was added", ids["mask"] == 151669,
+    check("mask token is the reused one", ids["mask"] == 151662,
           f"{MASK_TOKEN} -> {ids['mask']}")
-    check("vocab grew by one", ids["vocab"] == 151670, f"{ids['vocab']}")
+    check("vocab unchanged", ids["vocab"] == 151669, f"{ids['vocab']}")
     check("Qwen3 has no BOS", ids["bos"] is None, str(ids["bos"]))
-    check("embedding matches the tokenizer",
-          model.get_input_embeddings().weight.shape[0] == ids["vocab"],
+    # The whole point of reusing 151662 over adding a token: the embedding keeps
+    # the checkpoint's 151,936 rows instead of being resized down to 151,670.
+    check("embedding was not resized",
+          model.get_input_embeddings().weight.shape[0] == 151936,
           str(tuple(model.get_input_embeddings().weight.shape)))
 
     print("\n[2] LoRA scope")

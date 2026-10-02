@@ -2,13 +2,20 @@
 
 Three things differ from the 3.2M Tier 0 cells and each needs a decision:
 
-* **The mask token.** SPEC 3.2 says id 151669, which does not exist in this
-  tokenizer (its highest id is 151668). 151669 is exactly the id a *newly added*
-  token receives, so the SPEC number assumes one is added. We add
-  `<|diff-mask|>` and resize. The checkpoint's embedding has 151936 rows while
-  the tokenizer only emits 151669 of them, so resizing to 151670 drops 266 rows
-  that the tokenizer can never produce -- noted here because `params_unique`
-  changes by 272,384 and a silent parameter-count difference is confusing.
+* **The mask token.** SPEC 3.2 originally said id 151669, which does not exist in
+  this tokenizer (its highest id is 151668). 151669 is exactly the id a *newly
+  added* token receives, so that number assumed one was added. We **reuse
+  `<|fim_pad|>` (151662) instead** and never touch the embedding shape:
+  - `resize_token_embeddings(151670)` would shrink the checkpoint's 151,936
+    rows down to 151,670, dropping 266 rows the tokenizer can never emit. That
+    is harmless for correctness but silently moves `params_unique` by 272,384.
+  - Reuse keeps the parameter count exact, so the A/B census lines up.
+  - Verified: neither `tinystories-6400` nor `minimind3-6400` contains any
+    token id >= 151000, so a corpus can never collide with this id.
+  - `<|fim_pad|>` is a real Qwen3 special token (the fill-in-middle pad), so
+    its embedding is *not* random. Irrelevant here -- LoRA freezes the
+    embedding -- but do not read it as a blank row.
+  See SPEC.md §3.2 and example/ISSUES.md DONE-1.
 * **The tokenizer.** Row 3 uses the Qwen BPE (151,669), not the project's 6400.
   Loss and perplexity are only comparable within a track (SPEC 3.3), so the
   numbers in RESULTS for these two cells are read against each other and not
@@ -33,7 +40,8 @@ CELL_DLLM = "qwen3-0.6b-dllm_a2d"
 CELL_MINIMIND = "qwen3-0.6b-mini_a2d"
 BASE = "Qwen3-0.6B"
 MODEL_ID = "Qwen/Qwen3-0.6B"
-MASK_TOKEN = "<|diff-mask|>"
+MASK_TOKEN = "<|fim_pad|>"          # 151662, already in the vocabulary
+MASK_ID = 151662
 LORA_R = 8
 LORA_ALPHA = 16
 BLOCK_SIZE = 128
@@ -41,11 +49,21 @@ CONTEXT = 128
 
 
 def load_tokenizer():
+    """Load the Qwen3 tokenizer unchanged.
+
+    No `add_special_tokens`, no resize. The mask is a token the tokenizer
+    already knows, so nothing here mutates it -- that is the whole point of
+    reusing 151662 over adding one.
+    """
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
     if MASK_TOKEN not in tok.get_vocab():
-        tok.add_special_tokens({"additional_special_tokens": [MASK_TOKEN]})
+        raise RuntimeError(f"{MASK_TOKEN} is not in the Qwen3 vocabulary; "
+                           f"SPEC 3.2's mask id needs revisiting")
+    if tok.convert_tokens_to_ids(MASK_TOKEN) != MASK_ID:
+        raise RuntimeError(f"{MASK_TOKEN} moved to "
+                           f"{tok.convert_tokens_to_ids(MASK_TOKEN)}, not {MASK_ID}")
     return tok
 
 
@@ -84,16 +102,18 @@ def build_a2d_lora(seed: int = 42, trainable: str = "all"):
     del source, state
 
     tokenizer = load_tokenizer()
-    model.resize_token_embeddings(len(tokenizer))     # adds the MASK row
-    # The resize drops the tail rows the tokenizer can never emit (see
-    # ISSUES.md OPEN-1); every row the tokenizer *can* emit -- ids 0..len-2,
-    # with len-1 being the MASK row just appended -- must be untouched.
-    keep = len(tokenizer) - 1
-    assert keep <= pretrained_embedding.shape[0], \
-        "resize would drop rows the tokenizer still uses"
-    assert torch.equal(model.get_input_embeddings().weight[:keep].detach(),
-                       pretrained_embedding[:keep].detach()), \
-        "resize must keep every row the tokenizer can reach"
+    # No resize: the embedding stays exactly as the checkpoint ships it. Assert
+    # that rather than trusting it -- the old code resized here, and a resize
+    # that silently succeeded would move params_unique by 272,384 with nothing
+    # in the output to say so.
+    rows = model.get_input_embeddings().weight.shape[0]
+    if rows != pretrained_embedding.shape[0]:
+        raise RuntimeError(f"embedding was resized: {rows} rows, checkpoint "
+                           f"has {pretrained_embedding.shape[0]}")
+    if not torch.equal(model.get_input_embeddings().weight.detach(),
+                       pretrained_embedding.detach()):
+        raise RuntimeError("embedding rows changed; the mask reuse path must "
+                           "leave the embedding bit-identical")
 
     modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
     if trainable == "qk":

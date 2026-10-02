@@ -5,7 +5,8 @@ The Loop expects a PackedData-like object with `.batch(indices)` and
 objective and the decoder stay in `common/a2d.py`; only the forward differs,
 because the base model is a peft-wrapped A2DQwen3.
 
-Mask id 151669 (see common_qwen.py for why it has to be added).
+Mask id 151662 (`<|fim_pad|>`, reused rather than added -- see
+common_qwen.py and SPEC.md 3.2).
 """
 from __future__ import annotations
 

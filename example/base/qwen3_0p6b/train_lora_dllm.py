@@ -4,7 +4,7 @@
 Same base, same LoRA scope and the same batch as cell 10; the only difference
 is which implementation of the objective drives it -- dllm's
 MDLMTrainer.compute_loss here, the hand-written one there. C2's logic carries
-over: the harness is told the Qwen track's mask id (151669) rather than the
+over: the harness is told the Qwen track's mask id (151662) rather than the
 project's 27.
 
     .venv/bin/python example/base/qwen3_0p6b/train_lora_dllm.py

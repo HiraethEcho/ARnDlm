@@ -90,9 +90,9 @@ class DLLMLoss:
         self.trainer.loss_weight_type = loss_weight_type
         self.trainer.loss_norm_type = loss_norm_type
         self.trainer.right_shift_logits = False
-        # Row 3 runs on the Qwen tokenizer, whose mask id is 151669 rather than
-        # the project's 27 -- the stub is parameterised so dllm's loss does not
-        # have to be told which track it is on.
+        # Row 3 runs on the Qwen tokenizer, whose mask id is 151662 (`<|fim_pad|>`,
+        # reused) rather than the project's 27 -- the stub is parameterised so
+        # dllm's loss does not have to be told which track it is on.
         self.trainer.processing_class = _ProcessingStub(**(special_ids or {}))
         self.trainer.meter = _MeterStub()
 
