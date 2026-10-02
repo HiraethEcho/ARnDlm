@@ -68,4 +68,4 @@ wandb/
 *.swp
 
 # 本地 agent 配置 (skill 定义等) —— 不进 git
-.agents/
+.agents

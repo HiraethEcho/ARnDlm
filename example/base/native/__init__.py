@@ -1,0 +1,1 @@
+"""Row 2 of SPEC 2.3: the same training logic, plain torch.nn."""
