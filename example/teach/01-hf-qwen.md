@@ -1,7 +1,7 @@
 # Step 1 — `models/hf_qwen/`：用包建模型
 
 **你要写的**：`models/hf_qwen/`（Qwen3 配置 + 加载 + 形状信息）
-**A 版参考**：`example/common/model.py` + `example/base/hf/model.py::build_model`
+**实验版参考**：`example/common/model.py` + `example/base/hf/model.py::build_model`
 **验收**：同 Tier 0 配置下，你的模型和 `transformers.Qwen3ForCausalLM` 的
 logits **逐元素相等**（fp32 CPU，`max|Δ| ≤ 1e-5`），参数量解析式对得上。
 
@@ -14,7 +14,7 @@ logits **逐元素相等**（fp32 CPU，`max|Δ| ≤ 1e-5`），参数量解析�
 
 ## 1.2 必须显式写的字段
 
-`transformers` 的默认值会随版本变，静默默认的字段会变成一个查不出来的 A/B 差值：
+`transformers` 的默认值会随版本变，静默默认的字段会变成一个查不出来的 实验版/实践版 差值：
 
 | 字段 | Tier 0 取值 | 不写会怎样 |
 |---|---|---|
@@ -56,7 +56,7 @@ seed_all(seed)
 model = Qwen3ForCausalLM(build_qwen3_config(cfg))
 ```
 
-A 版第一版就是漏了这一步，「同 seed 同权重」的检查立刻失败。
+实验版第一版就是漏了这一步，「同 seed 同权重」的检查立刻失败。
 
 ## 1.5 坑
 
@@ -70,7 +70,7 @@ A 版第一版就是漏了这一步，「同 seed 同权重」的检查立刻失
 ## 1.6 验收命令
 
 ```sh
-# A 版基准数
+# 实验版基准数
 .venv/bin/python example/tests/test_hf_ar.py
 
 # 你的实现写完后，加一条对拍（写进 test/ 或自己的脚本）

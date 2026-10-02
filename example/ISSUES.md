@@ -3,7 +3,7 @@
 **规则**：解不了就记在这里（原因 / 影响 / 回头计划），继续做下一格，收尾时清理。
 **状态**：`OPEN` / `DEFERRED`（明确不做）/ `DONE`（已解决，写上怎么解决的）。
 
-## OPEN-1b · A 版代码要不要跟着改成复用 151662
+## OPEN-1b · 实验版代码要不要跟着改成复用 151662
 
 **现象**：决定已经拍板（DONE-1），但 `example/base/qwen3_0p6b/` 三个文件仍按
 「新增 `<|diff-mask|>` + resize」实现：
@@ -14,11 +14,11 @@
 | `lora_common.py` | docstring「Mask id 151669 (see common_qwen.py for why it has to be added)」 |
 | `tests/test_lora_0p6b.py` | `check("mask token was added", ids["mask"] == 151669)` |
 
-**为什么要问**：A 版是 B 版的正确性基准。两边用不同的 MASK id 方案，
-A/B 对拍在行3 两格就对不上——差的不是模型实现，是 token id 约定。
+**为什么要问**：实验版是 实践版的正确性基准。两边用不同的 MASK id 方案，
+实验版/实践版 对拍在行3 两格就对不上——差的不是模型实现，是 token id 约定。
 
 **倾向**：改成复用 151662。代价是两格要重跑（LoRA 0.6B 各约 5 分钟），
-收益是 A/B 基线一致 + 参数量对得上。
+收益是 实验版/实践版 基线一致 + 参数量对得上。
 
 ---
 
@@ -45,7 +45,7 @@ embedding**。`SPEC.md` §3.2 已改。
 
 1. 不动 embedding —— 新增需 `resize_token_embeddings(151670)`，embedding 从
    checkpoint 的 151,936 行缩到 151,670 行，少 266 行。复用则参数量保持精确的
-   **598,071,296**，A/B 对拍基线干净。
+   **598,071,296**，实验版/实践版 对拍基线干净。
 2. 对 LoRA 两格的可训练参数**影响为零** —— LoRA 只挂 attention 四个投影，
    backbone 冻结，embedding 本来就不训练。
 
@@ -59,7 +59,7 @@ embedding**。`SPEC.md` §3.2 已改。
 
 ---
 
-## OPEN-2 · A 版 loss 与 dllm loss 的 t 分布不同源
+## OPEN-2 · 实验版 loss 与 dllm loss 的 t 分布不同源
 
 **现象**：手写实现是 `t ~ U[0,1)`（`notes/03` §4），dllm 是
 `t = ε + (1-ε)·U[0,1)`，`ε = 1e-3`（`MDLMConfig.time_epsilon`）。
@@ -68,7 +68,7 @@ embedding**。`SPEC.md` §3.2 已改。
 但**对拍必须让两边抽到同一个 t**，所以 `check_ab c2/c3` 里两边都用
 `epsilon=1e-3` 并重新播种。
 
-**回头计划**：正式训练时要不要统一成 dllm 的写法？目前 A 版保持
+**回头计划**：正式训练时要不要统一成 dllm 的写法？目前 实验版保持
 「手写版 = notes/03 原式」+「对拍时对齐」，两种口径都在代码注释里写明。
 
 ---
@@ -78,12 +78,12 @@ embedding**。`SPEC.md` §3.2 已改。
 **现象**：dllm 的 `steps` 是**全序列**预算，会按 block 数摊薄
 （`samplers/mdlm.py:131`：`steps = ceil(steps / num_blocks)`）；
 `notes/03` §7 的语义是**每块**步数。同一个 `--dlm-steps 8`：
-dllm 跑 8 次 forward，A 版跑 32 次。
+dllm 跑 8 次 forward，实验版跑 32 次。
 
 **影响**：任何跨实现的解码速度对比，除非换算到同一工作量，否则测的是
 「谁配置的步数少」。`check_ab decode-bench` 已经做了换算。
 
-**回头计划**：B 版要不要统一成一个语义？建议保留 A 版口径（每块），
+**回头计划**：实践版要不要统一成一个语义？建议保留 实验版口径（每块），
 在 CLI 上写明，并在对拍脚本里换算。
 
 ---
@@ -91,7 +91,7 @@ dllm 跑 8 次 forward，A 版跑 32 次。
 ## OPEN-4 · packing 没有 attention 隔离
 
 **现象**：块由多篇文档首尾相接拼成，没有 document mask，模型能看见上一篇的尾巴。
-与 MiniMind 的做法一致，**是刻意的**（test/02 和 A 版模块注释都写明了）。
+与 MiniMind 的做法一致，**是刻意的**（test/02 和 实验版模块注释都写明了）。
 
 **影响**：AR 无所谓；DLM 尤其可疑 —— 被遮的位置会从上一篇的尾巴取信息。
 行3 的 Qwen track 同样如此。
@@ -131,7 +131,7 @@ dllm 跑 8 次 forward，A 版跑 32 次。
 本项目不用它们，但删不掉（`dllm/__init__.py` 顶层 import）。
 已决定不动（`scripts/install_dllm.sh` 回钉了 datasets 4.2.0）。
 
-## DEFERRED-2 · BD3LM 没有 A 版
+## DEFERRED-2 · BD3LM 没有 实验版
 
 `dllm/core/trainers/bd3lm.py` 和 `samplers/bd3lm.py` 都在，本项目矩阵里没有这一列。
 不实现。

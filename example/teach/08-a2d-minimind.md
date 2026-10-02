@@ -1,14 +1,14 @@
 # Step 8 — `training/a2d_minimind/`
 
 **你要写的**：`training/a2d_minimind/`
-**A 版参考**：`example/base/hf/a2d_minimind.py` + `example/base/native/a2d_minimind.py`
-**验收**：**C2/C3** —— 与 dllm 的 loss 相对差 `< 1%`（A 版实测 **7.6e-08**）。
+**实验版参考**：`example/base/hf/a2d_minimind.py` + `example/base/native/a2d_minimind.py`
+**验收**：**C2/C3** —— 与 dllm 的 loss 相对差 `< 1%`（实验版实测 **7.6e-08**）。
 
 ---
 
 ## 8.1 这个目录有多薄
 
-A 版两个 base 行的 A2D 训练脚本一共 ~60 行，因为难的四块已经拆出去了：
+实验版两个 base 行的 A2D 训练脚本一共 ~60 行，因为难的四块已经拆出去了：
 
 | 部分 | 在哪 | 步骤 |
 |---|---|---|
@@ -55,10 +55,10 @@ dllm:  rand(B)  → t          rand(B, L) → mask
 我们:  rand(B)  → t          rand(B, L) → mask      ← 顺序一致
 ```
 
-A 版 C2 就是这么做的，并且**额外验证两次 corruption 真的相同**，
+实验版 C2 就是这么做的，并且**额外验证两次 corruption 真的相同**，
 而不是只看两个相近的 loss 数字。
 
-## 8.4 A 版实测（两行、两个 checkpoint、同一份数据）
+## 8.4 实验版实测（两行、两个 checkpoint、同一份数据）
 
 | | hf-minimind-a2d | hf-dllm-a2d |
 |---|---|---|

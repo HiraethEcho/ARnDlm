@@ -1,15 +1,15 @@
-# example/ — A 版参考实现
+# example/ — 实验版参考实现
 
-**这里的代码是 AI 写的。根目录下 B 版目录里的代码是你写的。**
+**这里的代码是 AI 写的。根目录下 实践版目录里的代码是你写的。**
 执行计划见 [`PLAN.md`](PLAN.md)，实测数字见 [`RESULTS.md`](RESULTS.md)。
 
 ---
 
-## A/B 的轴是「用包 vs 不用包」，不是「AI vs 人」
+## 实验版/实践版 的轴是「用包 vs 不用包」，不是「AI vs 人」
 
 同一个功能（AR 训练 / A2D / 从零训 DLM）有**两版实现**：
 
-| SPEC 2.3 行 | 用不用包 | A 版（AI 写） | B 版（你写） |
+| SPEC §8 行 | 用不用包 | 实验版（AI 写） | 实践版（你写） |
 |---|---|---|---|
 | Qwen-mini-HF | **用包** —— `transformers.Qwen3ForCausalLM` | `base/hf/` | `models/hf_qwen/` + `training/ar_hf/` |
 | Qwen-mini-MiniMind | **不用包** —— 纯 `torch.nn` 手写 | `base/native/` | `models/minimind_qwen/` + `training/ar_native/` |
@@ -17,15 +17,15 @@
 
 三条规则：
 
-1. **每一行、每一格都有 A 版和 B 版。** 不是「AI 写包版、你写手写版」——
+1. **每一行、每一格都有 实验版和 实践版。** 不是「AI 写包版、你写手写版」——
    你手写的那份同样有 `transformers` 版和原生 torch 版。
 2. **`example/` 覆盖矩阵全部 10 格**，包括行2 的纯 torch 实现。
-   A 版不是「包的使用示例」，它本身是一套完整的、能跑出权重的实现。
-3. **A/B 对照发生在行内**：行1 对 `models/hf_qwen/`，行2 对 `models/minimind_qwen/`。
+   实验版不是「包的使用示例」，它本身是一套完整的、能跑出权重的实现。
+3. **实验版 / 实践版 对照发生在行内**：行1 对 `models/hf_qwen/`，行2 对 `models/minimind_qwen/`。
 
-行1 和行2 之间是对照**不是** A/B 对照——那是两条路线的横向比较：
+行1 和行2 之间是对照**不是** 实验版 / 实践版 对照——那是两条路线的横向比较：
 它验的是「用包这条路的实现对不对」（`check_ab.py` 的 C1，logits `1e-5`）。
-等你写完行2 之后，C1 同时也是行2 的 A/B 对拍。
+等你写完行2 之后，C1 同时也是行2 的 实验版/实践版 对拍。
 
 ---
 
@@ -33,7 +33,7 @@
 
 ```
 example/
-  common/        A 版公用底座 (data · ckpt · metrics · seeds · config) —— 不碰根目录 utils/
+  common/        实验版公用底座 (data · ckpt · metrics · seeds · config) —— 不碰根目录 utils/
   base/hf/       行1  train_ar.py · a2d_minimind.py · a2d_dllm.py · direct_dlm.py
   base/native/   行2  model.py (RoPE·RMSNorm·SwiGLU·GQA·QK-Norm·tied) + 同样四个
   base/qwen3_0p6b/  行3  lora_dllm_a2d.py · lora_minimind_a2d.py
@@ -52,11 +52,11 @@ example/
 | 实测 | **已完成** —— 10 格全部跑通，数字见 [`RESULTS.md`](RESULTS.md) |
 | 对拍 | C1-C5 全绿（C1 6.91e-06 · C2 7.56e-08 · C3 1.54e-07 · C4 0.0 · C5 0/0/0） |
 | 未决问题 | [`ISSUES.md`](ISSUES.md) 5 条 |
-| 下一步 | 按 `teach/` 逐步写 B 版，从 step 0 开始 |
+| 下一步 | 按 `teach/` 逐步写 实践版，从 step 0 开始 |
 
 ## 对照表（模块级）
 
-| B 版模块（你写） | A 版参考（这里） | `notes/` |
+| 实践版模块（你写） | 实验版参考（这里） | `notes/` |
 |---|---|---|
 | `models/hf_qwen/` | `base/hf/model.py`（`Qwen3Config` + `Qwen3ForCausalLM`） | `04-qwen-architecture.md` |
 | `models/minimind_qwen/` | `base/native/model.py` | `04` |
@@ -74,20 +74,20 @@ example/
 
 ---
 
-## 为什么不把 A 版放在 B 版目录里
+## 为什么不把 实验版放在 实践版目录里
 
 根目录已经有七条路线（`base` `utils` `transformer` `minimind` `a2d`
-`dllm-a2d` `dllm`），但它们全部是 B 版。A 版只存在于这里。
+`dllm-a2d` `dllm`），但它们全部是 实践版。实验版只存在于这里。
 
 `training/ar_hf/` 和 `training/a2d_dllm/` 看起来像「AI 写的参考实现」——
-不是。B 版目录里的一切都是你写的，只是**用不用某个包**的区别：
+不是。实践版目录里的一切都是你写的，只是**用不用某个包**的区别：
 
 | | 不用包 | 用包 |
 |---|---|---|
 | AR 训练 | `models/minimind_qwen/` + `training/ar_native/` | `models/hf_qwen/` + `training/ar_hf/` |
 | A2D | `training/a2d_minimind/` | `training/a2d_dllm/` |
 
-A/B 对照是**同一路线内部**的对照：用 `transformers` 写的和你手写的
+实验版 / 实践版 对照是**同一路线内部**的对照：用 `transformers` 写的和你手写的
 `models/minimind_qwen/`，在同一 batch 同一权重下 logits 要对齐到 1e-5。
 
 ---

@@ -1,7 +1,7 @@
 # Step 4 — `training/ar_native/`：同一套循环，原生模型
 
 **你要写的**：`training/ar_native/`
-**A 版参考**：`example/base/native/train_ar.py`
+**实验版参考**：`example/base/native/train_ar.py`
 **验收**：与行1 **同 seed 同数据**，逐步 loss 一致（fp32，`< 1e-6`）。
 
 ---
@@ -12,7 +12,7 @@
 全部共用（来自 step 0 的 `utils/`）。
 
 如果行2 另写一套循环，那么 C2/C3 的 loss 差就有两个来源：模型 or 循环。
-A 版两行共用 `common/loop.py`，就是为了让差值**只能**来自模型。
+实验版两行共用 `common/loop.py`，就是为了让差值**只能**来自模型。
 
 ## 4.2 入口签名要对齐
 
@@ -23,7 +23,7 @@ example/base/native/train_ar.py --steps 200 --batch-size 8 --max-blocks 4096
 `--max-blocks` 是为了 smoke 快速验流程：4096 块 × 128 = **524,288 token**，
 200 步 × 8 × 128 = 204,800 token，只吃语料前 ~20%。
 
-## 4.3 A 版实测基准（你可以对着对）
+## 4.3 实验版实测基准（你可以对着对）
 
 | | 行1 hf | 行2 native |
 |---|---|---|
@@ -81,7 +81,7 @@ for _ in range(max_new_tokens):
 | 采样不裁窗口 | 超过 128 之后 RoPE 位置越界，输出变乱码 |
 | 忘了 `.float()` 取 logits | top-k 在 bf16 上选错 token，分布悄悄变窄 |
 | 采样后没恢复 `train()` | 后续 step 在 eval 模式下跑 |
-| 用 rep-4 做 A/B 对拍 | 它是分布性质，两次采样本来就不一样 |
+| 用 rep-4 做 实验版/实践版 对拍 | 它是分布性质，两次采样本来就不一样 |
 | 拿 Tier 0 的吞吐推断正式规模 | 见 4.4 |
 
 ## 4.7 验收命令

@@ -1,9 +1,9 @@
-# example/ — A 版执行计划
+# example/ — 实验版执行计划
 
 **范围**: `example/` 覆盖 SPEC 2.3 实验矩阵**全部 10 格**, 在 Tier 0 极小配置下
 把每条 pipeline 跑通。**不关心模型能力**, 只关心 pipeline 成立 + 代码正确 + 代码简洁。
 
-跑完之后进入 B 版教学阶段 (见 §10)。
+跑完之后进入 实践版教学阶段 (见 §10)。
 
 ---
 
@@ -13,7 +13,7 @@ SPEC 2.3 的矩阵是 **3 个 base model × 3 种 DLM 方法**（Direct-DLM 在 
 「—」，所以 3×3−1 = **8 格**），另外 **2 个 AR baseline** 是所有 DLM 格的前置。
 合计 **10 格**，本次全部要跑通。
 
-| # | 格子 | base 权重从哪来 | A 版文件（我写） | B 版目录（你写） | smoke 产物 |
+| # | 格子 | base 权重从哪来 | 实验版文件（我写） | 实践版目录（你写） | smoke 产物 |
 |---|---|---|---|---|---|
 | 1 | **AR baseline · 行1**（矩阵前置） | 随机初始化 | `base/hf/train_ar.py` | `models/hf_qwen/` + `training/ar_hf/` | `qwen-mini/hf-ar-example/` |
 | 2 | **AR baseline · 行2**（矩阵前置） | 随机初始化 | `base/native/train_ar.py` | `models/minimind_qwen/` + `training/ar_native/` | `qwen-mini/minimind-ar-example/` |
@@ -29,15 +29,15 @@ SPEC 2.3 的矩阵是 **3 个 base model × 3 种 DLM 方法**（Direct-DLM 在 
 两个轴是**独立**的：base 决定权重从哪来，method 决定怎么转成 DLM。
 所以三个 DLM 训练目录吃**任意** AR 权重，格 3-8 只是「换了个 base 再跑一遍」。
 
-行1 的 A/B 对照对象是 `models/hf_qwen/`，行2 是 `models/minimind_qwen/` ——
-**用不用包是这个项目里真正的 A/B 轴**，不是「谁写的」。
+行1 的 实验版 / 实践版 对照对象是 `models/hf_qwen/`，行2 是 `models/minimind_qwen/` ——
+**用不用包是这个项目里真正的 实验版/实践版 轴**，不是「谁写的」。
 
 ---
 
 ## 1. 非目标
 
 - 不追求 loss 好看到能读懂
-- 不做正式规模 (Tier 1/2) 训练, 不定参数量 —— 等 B 版跑完再定
+- 不做正式规模 (Tier 1/2) 训练, 不定参数量 —— 等 实践版跑完再定
 - 不碰 `data/`、`utils/`、`models/`、`training/`、`diffusion/`、`evaluation/`
   (除注释)、`test/`、`configs/`
 - 不动 `.venv`, 不装包, 不跑 `scripts/setup_env.sh`
@@ -57,7 +57,7 @@ SPEC 2.3 的矩阵是 **3 个 base model × 3 种 DLM 方法**（Direct-DLM 在 
 
 ```
 example/
-  README.md            A/B 契约 · 完整对应表 · 状态 (开工时更新)
+  README.md            实验版/实践版 契约 · 完整对应表 · 状态 (开工时更新)
   PLAN.md              本文件
   RESULTS.md           smoke 实测数字 (10 格表)
   common/
@@ -144,8 +144,8 @@ example/
 | C4 | ckpt resume: 一次跑 220 步 vs 200+20 续训 | 末 loss `1e-6` | optimizer state / RNG / step 计数漏存 |
 | C5 | dllm convert 前后 | `missing == unexpected == []` | A2D config 与 4.57 `create_causal_mask` 对不上 |
 
-**等你写完 B 版**, 同一个 `check_ab.py` 增加两列指向 `models/hf_qwen/` 与
-`models/minimind_qwen/`。B 版模块不存在时打印 `SKIP`, 不静默通过。
+**等你写完 实践版**, 同一个 `check_ab.py` 增加两列指向 `models/hf_qwen/` 与
+`models/minimind_qwen/`。实践版模块不存在时打印 `SKIP`, 不静默通过。
 
 ## 8. checkpoint 路径
 
@@ -181,7 +181,7 @@ checkpoints/example/
 (BOS/EOS 偏移、resume 丢批次位置、reveal 索引错行、decode 计时无预热、
 LoRA 行的 `bos_token_id is None`)。
 
-## 10. 教学路线图 (A 版跑通后开始)
+## 10. 教学路线图 (实验版跑通后开始)
 
 按依赖顺序, 每步你写、我审、我跑对拍:
 

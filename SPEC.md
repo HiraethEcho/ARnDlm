@@ -1,210 +1,185 @@
 # ARnDlm SPEC
 
-## 1. Project objective and scope
+## 1. 目标与两个维度
 
-在一致的 tokenizer、vocab、数据集和运行环境下，比较 Qwen-style Transformer 的 AR 与 DLM：
+在一致的 tokenizer、数据集和测量口径下，比较 Qwen-style Transformer 的 **AR** 与 **DLM**，
+并把两者都训到**能对话**的程度。项目用于学习、复现和可测量对比，不追求 SOTA。
 
-- HF Transformers 与原生 PyTorch 两种 AR 实现；
-- MiniMind-DLM A2D、dllm A2D、Direct DLM 三种 DLM 路线；
-- 自训练小模型与 Qwen3-0.6B 的 A2D。
+### 1.1 两个版本（同一件事写两遍）
 
-项目用于学习、复现和可测量对比，不追求 SOTA，不做多卡、多模态、权重发布或 dllm 库重构。
-
-本项目分两个阶段：
-
-1. **预训练**（已完）：§2.3 的 10 格，比较 AR 与 DLM 的训练与生成。
-2. **后训练**（本节新增，T4）：把两个 AR 小模型（`hf-ar-example` / `minimind-ar-example`）做 SFT 与 DPO，
-   得到能对话的模型。见 §1.6。
-
-## 2. Experimental matrix
-
-### 2.1 Base models
-
-| ID | Model | Implementation | Size | Training |
-|---|---|---|---|---|
-| B1 | Qwen-mini-HF | Transformers | 冒烟后决定 | AR |
-| B2 | Qwen-mini-MiniMind | 原生 PyTorch | 冒烟后决定 | AR |
-| B3 | Qwen3-0.6B | Transformers | 600M | 现有 checkpoint |
-
-### 2.2 DLM methods
-
-| ID | Method | Description |
+| | **实验版** | **实践版** |
 |---|---|---|
-| A1 | dLLM-A2D | 使用 dllm 将 AR checkpoint 转为 DLM |
-| A2 | MiniMind-DLM-A2D | 按 MiniMind-DLM 思路手写 A2D |
-| A3 | Direct-DLM | 随机初始化后直接进行 diffusion training |
+| 谁写 | AI | 你 |
+| 位置 | `example/` | 根目录 `models/` `training/` `diffusion/` `evaluation/` `utils/` `data/` |
+| 模型规模 | **Tier 0**：3.21M · ctx 128 · 2 层 | **Tier 1（待测）**：~50M · ctx 512 · 8 层 |
+| 语料 | tinystories-6400 切片（~20 万 token） | minimind3-6400（332M token） |
+| 步数 | 200 | 按吞吐阶梯定 |
+| 目的 | **pipeline 能不能跑通 + 代码对不对** | 正式实验，拿可引用的数字 |
+| 能力 | **不看**（loss 与 rep-4 只记录） | 看 |
+| checkpoint | `checkpoints/example/…-example/` | `checkpoints/…` |
+| 关系 | **实验版是实践版的正确性基准** | 实践版输出必须与实验版对齐 |
 
-### 2.3 Experiment matrix
+**实验版跑通 ≠ 实践版可以写。** 写每一步之前，先用 `example/teach/<step>.md` 里的
+「验收命令」跑一遍实验版，拿到基准数。
 
-| Base model | dLLM-A2D | MiniMind-DLM-A2D | Direct-DLM |
-|---|---:|---:|---:|
-| Qwen-mini-HF | ✓ | ✓ | ✓ |
-| Qwen-mini-MiniMind | ✓ | ✓ | ✓ |
-| Qwen3-0.6B | ✓ | ✓ | — |
+### 1.2 两条路线（先 A2D 还是先 SFT）
 
-### 2.4 Post-training matrix (T4)
+```
+原路线：pretrain(AR) → SFT → A2D          ← 先 SFT 后 A2D
+新路线：pretrain(AR) → A2D → SFT          ← 先 A2D 后 SFT
+```
 
-后训练分两个轴：**base checkpoint**（AR 还是 DLM）和 **objective**（AR 的 next-token CE，还是 DLM 的 masked CE）。
-目标不是刷指标，是**训到能对话**（见 §6 的“能 chat”门槛）。
+**原路线在前，因为它是被验证过的做法**：Qwen3-0.6B 和 `dllm` 的 A2D，
+作用对象本来就是**已经能 chat 的模型**（`notes/03` §12 提到作者的 `dllm_768.pth`
+是从 SFT 后的权重转出来的）。换句话说，业界已有的 A2D 全部落在原路线上。
 
-| # | 起始 checkpoint | objective | 目录 | 优先级 |
-|---|---|---|---|---|
-| T4-1 | `hf-ar-example` | AR CE（assistant 段） | `training/sft_ar_hf/` | P0 |
-| T4-2 | `minimind-ar-example` | AR CE（assistant 段） | `training/sft_ar_native/` | P0 |
-| T4-3 | `hf-minimind-a2d-example` | masked CE（**只在 assistant 段**加噪） | `training/sft_a2d_hf/` | P0 |
-| T4-4 | `native-minimind-a2d-example` | masked CE（只在 assistant 段） | `training/sft_a2d_native/` | P0 |
-| T4-5 | `hf-dllm-a2d-example` | dllm `MDLMTrainer`（只在 assistant 段） | 同上 `--loss dllm` | P1 |
-| T4-6 | `hf-direct-dlm-example` | masked CE（只在 assistant 段） | 同上 | P2 |
-| T4-7 | `minimind-ar-example` | DPO（chosen/rejected） | `training/dpo_ar_native/` | P2 |
-| T4-8 | `minimind-dllm-a2d-example` | DPO on DLM | — | **不做**，见下 |
+**新路线是本项目要验的变体**：A2D 在裸文本上学会双向去噪，再用 SFT 教对话。
+两条路线各有对方无法推断的失败模式，所以都做（见 §2 G3）。
 
-**为什么 DLM-SFT 不是 AR-SFT 换个数据**：DLM 的加噪必须**限制在 assistant 段**
-（`notes/03` §4）—— prompt 区被 mask 掉，模型就看不到自己在回答什么，会退化成
-“无条件续写”。这正好是 `notes/03` §4 反复强调的那一条，现在 A 版只跑过
-裸文本（整块都是 assistant 区），**这条规则一次都没被验证过**。T4 就是验它的地方。
+---
 
-**为什么 DPO on DLM 不做**：DPO 需要序列级 log-prob，而 masked diffusion 的
-“序列 log-prob”没有单一定义（每步去噪的归一化项不一样）。dllm 的
-`pipelines/rl/grpo/` 是 AR 导向的，与本项目的 DLM 对比无关。这是**待研究的题**，不是工程量。
+## 2. 五组对比
 
-**Direct-DLM 的 SFT 降到 P2**：它的 eval 5.64 已是三档里最差，且没有任何 AR 知识可继承，
-能 chat 的概率低。先把 P0 四格跑通。
+每组只动**一个变量**。格子里的模型对象与阶段见 §8 网格。
 
-## 3. Model, tokenizer and data specification
+### G1 · 两种 AR 实现
 
-### 3.1 Unified model architecture
-
-自训练模型使用 Qwen-style decoder-only Transformer：
-
-- RoPE；
-- RMSNorm；
-- SwiGLU FFN；
-- GQA attention；
-- QK-Norm；
-- tied embedding；
-- causal LM head（AR）或双向 attention + denoising objective（DLM）。
-
-`head_dim` 从模型配置计算；GQA 将较少的 K/V heads 复制到 Q heads；tied embedding 的共享参数传给 optimizer 前按 `id()` 去重。
-
-### 3.2 Tokenizer tracks
-
-自训练路线使用项目内的 6400-vocab BPE：
-
-- 文件：`tokenizer/tokenizer.json`；
-- vocab size：6400；merges：6108；
-- PAD 0 `<|endoftext|>`、BOS 1 `<|im_start|>`、EOS 2 `<|im_end|>`；
-- MASK 27 `<|buffer1|>`，复用预留 token，不扩充词表。
-
-Qwen3-0.6B A2D 使用 checkpoint 自带的 Qwen tokenizer：
-
-- vocab size：151,936；
-- 保留 Qwen3 的 chat template 和 special-token 定义；
-- **MASK 复用 `151662` `<|fim_pad|>`**，不新增 token、不动 embedding 形状；
-- 不与 6400-vocab 权重、token id 或逐 token 对拍混用。
-
-> 最初写的是「MASK 使用 id 151669」，实测**越界**：Qwen3-0.6B 的 tokenizer
-> `vocab_size` 是 151,669，合法 id 只有 0-151668。改成复用 151662 的理由：
->
-> 1. **不动 embedding** —— 新增 token 需要 `resize_token_embeddings(151670)`，
->    把 embedding 从 checkpoint 的 151,936 行缩到 151,670 行，少 266 行。
->    复用则参数量保持精确的 598,071,296，A/B 对拍的基线才干净。
-> 2. **语料不会撞** —— 实测 `tinystories-6400` 和 `minimind3-6400` 里
->    **没有任何 token id ≥ 151000**（见 `example/ISSUES.md` OPEN-1）。
-> 3. **对 LoRA 两格影响为零** —— LoRA 只挂 attention 四个投影，backbone 冻结，
->    embedding 本来就不训练，所以「新增」与「复用」的可训练参数完全相同。
->
-> 注意点：`<|fim_pad|>` 在 Qwen3 自己的预训练语料里**可能出现过**（Qwen 用了 FIM
-> 格式），所以它不是随机初始化的一行。这不影响正确性（A2D 只把它当被遮位置
-> 的标记），但不要把它当成「空白 token」来期待。
-
-6400-vocab 方案降低小模型的 embedding、输出层和 optimizer 成本，适合自训及 AR/A2D 对照；Qwen tokenizer 对英文、代码、混合文本和 Qwen3 checkpoint 的兼容性更好，但词表和训练成本显著更高。两条 tokenizer track 的 loss、perplexity、token/s 只能在各自 track 内比较；跨 track 应按相同原文和字符数/字节数归一化。
-
-### 3.3 Data
-
-数据必须使用与模型相同的 tokenizer：
-
-- 6400-vocab track：`/mnt/extra/data/prepared/minimind3-6400/`，包含 `tokens.bin`、`doc_lengths.npy`、`meta.json`；
-- Qwen3 track：使用 Qwen tokenizer 重新编码的数据；TinyStories 或小型 instruction/text corpus 可作为来源；
-- 三个自训练 DLM 路线共享 6400-vocab 数据，保证对比公平。
-
-### 3.4 SFT / DPO 数据（6400-vocab track）
-
-后训练只在 6400-vocab track 上做，两个 base 都是 3.2M 的 Tier 0 模型。
-
-| 项 | 值 |
+| | |
 |---|---|
-| 源文件 | `data/raw/minimind_dataset/sft_t2t.jsonl`（14 GiB，509 万条对话） |
-| 原始格式 | `{"conversations": [{"role": "user", "content": ...}, {"role": "assistant", "content": ...}]}` |
-| 展平产物 | `data/prepared/sft-6400/` — 与 pretrain 同格式：`tokens.bin` / `doc_lengths.npy` / `meta.json`，每条对话一段 |
-| chat 标记 | 纯文本标记，与 minimind 一致，不新增 special token |
+| **问题** | `transformers` 写法和纯 torch 原生写法是不是同一个模型？ |
+| **变量** | 模型实现（用包 / 不用包） |
+| **格子** | `ar-hf` pretrain · `ar-native` pretrain |
+| **验收** | 同权重同 batch 下 logits `max\|Δ\| ≤ 1e-5`（**C1**，实验版实测 6.91e-06） |
+| **产出** | 两个 AR pretrain 权重 —— 后续所有 SFT / A2D 的起点 |
 
-**展平是必须的，不是可选的。** `scripts/prepare_data.py` 的 `read_text()` 只取 `text` 键，
-对话数据没有 `text`，会被**静默跳过**（0 token，不报错）。展平脚本要写两遍内容：
+### G2 · Direct-DLM vs A2D
 
-```
-<user>\n{提问}\n<assistant>\n{回答}\n
-```
+| | |
+|---|---|
+| **问题** | AR 权重对 DLM 值多少？ |
+| **变量** | 起点权重（随机初始化 vs 从 AR 转换） |
+| **格子** | `direct-dlm` pretrain + SFT · `a2d` pretrain + SFT（**都是 3.2M 极小模型，不含 0.6B**） |
+| **验收** | 两格都要能 chat；assistant 段 eval loss 之差 = AR 权重的价值（实验版 pretrain 阶段实测 0.67 nat） |
 
-**产物除了 token，还要带 assistant 区间**：
+### G3 · 顺序：原路线 vs 新路线
+
+| | |
+|---|---|
+| **问题** | 先 SFT 还是先 A2D？ |
+| **变量** | 顺序 |
+| **格子** | 原路线：`ar-sft` → A2D → DLM-SFT · 新路线：`ar-a2d` → DLM-SFT |
+| **验收** | 两条线的「能 chat」四条门槛（§6.3）都能报；差值就是顺序的代价 |
+| **注意** | **AR-SFT 是必需的对照组**。没有它，无法判断 DLM 的输出是「变差了」还是「本来就差」 |
+
+### G4 · 不同基模做 A2D
+
+| | |
+|---|---|
+| **问题** | A2D 换个基模还成立吗？ |
+| **变量** | 基模的规模与来源 |
+| **格子** | `ar-hf-sft`（3.2M）· `ar-native-sft`（3.2M）· `qwen3-0.6b`（600M + LoRA） |
+| **验收** | 三者都要能 chat；报 eval loss / 步数 / 可训参数占比 |
+| **注意** | 两条 tokenizer track 的 loss **不可直接比较**（词表 6400 vs 151,669）；跨 track 按字符/字节归一化 |
+
+### G5 · `dllm` 包 vs minimind-dlm 手写
+
+| | |
+|---|---|
+| **问题** | 上游包和手写实现是不是同一个东西？ |
+| **变量** | 实现 |
+| **格子** | 每一个 A2D 格都跑两条路径 |
+| **验收** | 同 checkpoint 同 seed **同 corruption** 下 loss 相对差 `< 1%`（**C2/C3**，实测 7.6e-08 / 1.5e-07）；转换 **0 丢失 0 漂移**（**C5**） |
+
+### 2.6 对照组汇总
+
+| 组 | 变量 | 依赖 |
+|---|---|---|
+| G1 | 模型实现 | — |
+| G2 | 起点权重 | G1 |
+| G3 | 顺序 | G1（AR-SFT 是 G3 的对照） |
+| G4 | 基模 | G1 · G3 |
+| G5 | 实现 | G1 |
+
+---
+
+## 3. 模型、数据与 tokenizer
+
+### 3.1 统一架构
+
+Qwen-style decoder-only：RoPE · RMSNorm · SwiGLU · GQA · QK-Norm · tied embedding。
+AR 用因果 mask，DLM 去掉因果 mask（**权重一个都不动**）。
+
+### 3.2 两条 tokenizer track
+
+| | 6400-vocab track | Qwen3 track |
+|---|---|---|
+| 用在哪 | 实验版 + 实践版的全部自训模型 | 只有 `qwen3-0.6b` |
+| 词表 | 6400 | 151,669 |
+| MASK | **id 27**（`<\|buffer1\|>`，预留，**不扩词表**） | **id 151662**（`<\|fim_pad\|>`，**复用，不新增 token、不 resize embedding**） |
+| EOS / BOS | 2 / 1 | 151645 / **无 BOS**（`bos_token_id is None`） |
+
+两条 track 的 loss、perplexity、token/s **只能在各自 track 内比较**。
+
+> `SPEC` 最初写「Qwen3 的 MASK 用 151669」，实测**越界**（合法 id 只到 151668），
+> 改为复用 151662：不动 embedding，参数量保持精确值。详见 `example/ISSUES.md` DONE-1。
+
+### 3.3 语料
+
+| 阶段 | 源 | 规模 |
+|---|---|---|
+| pretrain | `data/prepared/minimind3-6400/` | 332M token |
+| pretrain（实验版） | `data/prepared/tinystories-6400/` | 3.1M token，取前 ~20 万 |
+| sft | `data/raw/minimind_dataset/sft_t2t.jsonl` | 14 GiB，509 万条对话 |
+| dpo | `data/raw/minimind_dataset/dpo.jsonl` | 53 MB |
+
+**对话数据必须先展平。** `scripts/prepare_data.py` 的 `read_text()` 只取 `text` 键，
+对话数据没有 `text`，会被**静默跳过**（0 token，不报错）。
+
+展平产物 `data/prepared/sft-6400/`：
 
 | 文件 | 内容 | 用途 |
 |---|---|---|
-| `tokens.bin` | 展平后的 token 序列（含 BOS/EOS） | 输入 |
+| `tokens.bin` | 展平后的 token（含 BOS/EOS） | 输入 |
 | `doc_lengths.npy` | 每条对话的 token 数 | packing / 边界 |
-| `assistant_spans.npy` | `[n_docs, 2]`，每条对话 assistant 段的 token 起止 | **加噪 / loss 区间** |
-| `meta.json` | vocab_size / n_docs / total_tokens / source_sha256 | 自检 |
+| **`assistant_spans.npy`** | `[n_docs, 2]`，assistant 段的 token 起止 | **加噪 / loss 区间** |
+| `meta.json` | vocab / n_docs / total_tokens / sha256 | 自检 |
 
-`assistant_spans` 是 T4 的核心。**没有它，AR 只能算全序列 CE（等于没做 SFT），
-DLM 会把 prompt 也遮掉（等于没在看问题）**。两条路都静默跑完。
-
-区间约定（与 `notes/03` §4 的示例一致）：
+展平后的文本（纯文本标记，不新增 special token）：
 
 ```
-tokens:   [BOS] <user> \n 提问 \n <assistant> \n 回答 \n [EOS]
-区间:                              ^^^^^^^^^^^^^^^^  ← 含末尾 \n，不含 <assistant> 标记本身
-labels:   区间外全 -100
+<user>\n{提问}\n<assistant>\n{回答}\n
+                   ^^^^^^^^^^^^^  assistant 段：含末尾 \n，不含 <assistant> 标记
 ```
 
-DLM 的腐蚀必须**只在区间内**抽 mask：区间外的位置（包括整个 prompt）**不得**被替换成 MASK。
+**`assistant_spans.npy` 是 SFT 的核心。** 没有它：
 
-DPO 的源是 `data/raw/minimind_dataset/dpo.jsonl`（53 MB），格式为 chosen/rejected 两条回答，
-需要同一套展平 + 区间逻辑。
+- AR 只能算全序列 CE（等于没做 SFT）；
+- DLM 会把 prompt 也遮掉（等于没在看问题）——**而 loss 照样下降**。
 
-### 3.5 后训练语料规模（smoke）
+---
 
-smoke 只取 sft 数据前 2000 条对话，展平后约 20-40 万 token（`logs/dev/06-datasets.md` 记的压缩比约 0.5-1.0），
-用于验证 SFT loss、mask 区间、对话采样三条路径是否成立。正式规模另定。
+## 4. 配置
 
-## 4. Model configurations
-
-### Tier 0 · Debug model
-
-用于验证 forward、短训练、checkpoint 保存/恢复、A2D 转换、采样和 loss 下降。唯一冒烟配置：
+### 4.1 Tier 0（实验版，唯一的冒烟配置）
 
 ```yaml
 hidden_size: 256
 num_layers: 2
 num_attention_heads: 2
 num_key_value_heads: 1
+head_dim: 128
 intermediate_size: 768
 context_length: 128
+vocab_size: 6400
+tie_word_embeddings: true
 ```
 
-该配置只用于 pipeline validation，不代表正式模型规模。
+参数量解析值 **3,213,056**（tied 只算一次）。**只用于 pipeline validation，不代表正式规模。**
 
-实测 3,213,056 params。单步 18.8 ms (seq 128) / 64.4 ms (seq 512), 2M token 约
-37 秒, 适合当 smoke test。
-
-⚠️ **前 50 步是 kernel 编译相, 比稳态慢 1.15-1.8 倍**。单步只有十几毫秒时
-这个开销相对很大, 起步要多留预热步, 否则前几十步的 loss 不可信。
-
-### Tier 1 · Main experiment candidates
-
-正式规模须在 Tier 0 冒烟测试和吞吐测量后选择。候选配置如下，不预先承诺其中任何一个：
+### 4.2 Tier 1（实践版，待测后定）
 
 ```yaml
-# 26,879,488 params (measured, vocab 6400)
-hidden_size: 512
+hidden_size: 512        # 候选，冒烟+吞吐测量后再拍
 num_layers: 8
 num_attention_heads: 8
 num_key_value_heads: 4
@@ -212,198 +187,162 @@ intermediate_size: 1408
 context_length: 512
 ```
 
-实测 (2026-10-01, AMD Radeon 880M, ROCm 10.0, bf16 + AdamW + sdpa, packing 零 padding,
-seq 512 / batch 8): **7,995 train-only tok/s**, 跑完 `minimind3-6400` 的 332M token 约
-**11.6 小时**。wall-clock 吞吐与 train-only 几乎相等 (step 外开销 0.09%), 所以两个
-口径在本项目里给出同一个数。峰值显存 1.41 GB。
+**先测吞吐阶梯，再定参数量。** 参数量、序列长度、数据量是耦合的，先拍数字再测是本末倒置。
 
-batch 8 与 batch 16 吞吐无法区分 (ms/step 精确翻倍)，故取 8。数据见
-`logs/dev/02-hardware-perf.md`。
+### 4.3 已知硬件约束
 
-### Tier 2 · Extended candidate
+`max_seq_len ≤ 512`（attention O(T²)）· batch 8 就够 · 不开 gradient checkpointing ·
+packing 优于 padding · 瓶颈在 attention backward kernel · run-to-run 方差可达 ±20%。
 
-```yaml
-# 80,433,408 params (measured, vocab 6400)
-hidden_size: 768
-num_layers: 12
-num_attention_heads: 12
-num_key_value_heads: 4
-intermediate_size: 2048
-context_length: 512
-```
+---
 
-同条件实测: **3,540 train-only tok/s**, 332M token 约 **26.1 小时**,
-峰值显存 2.76 GB。吞吐随规模亚线性 (3.0x 参数 → 2.33x
-耗时)，即大模型的每 token 算力更高；代价是 wall-clock 翻倍。是否上这一档取决于
-单次实验的预算上限，不取决于它能不能跑完。
+## 5. 环境
 
-### Tier 3 · Real model
+Python 3.14 + ROCm torch 2.12 + **transformers 钉 4.57.0**（dllm 的 pin）。
+不装 deepspeed / wandb / torchvision / torchaudio。`dllm` 从钉死的 commit clone 后打
+本仓库的 patch 再 editable 安装。HF 走 `hf-mirror` 镜像。
 
-Qwen3-0.6B 使用现有 checkpoint，A2D 采用 LoRA/adapter 并冻结 backbone；目标是 dLLM-A2D 与 MiniMind-DLM-A2D。
+**不要写 5.x 的代码**：5.x 的 `create_causal_mask` 签名变了，dllm 的 A2D 模型接不上。
+transformers 4.57 里「关掉因果 mask」的正确做法是**传一个 4D 全零 attention mask**
+（`create_causal_mask` 会原样返回已准备好的 4D mask），不是改 `self_attn.is_causal`
+（那是 5.x 才有的字段）。
 
-## 5. Environment contract
+---
 
-目标环境为 Python 3.14.7、ROCm torch 2.12.0、Transformers 4.57.0、datasets 4.2.0、peft 0.17.1 和 accelerate。不得安装 deepspeed、wandb、torchvision、torchaudio。dllm 固定 commit，并通过仓库内 patch 安装。环境契约由 PLAN.md 中的环境阶段执行。
+## 6. 验收
 
-## 6. Acceptance criteria
+### 6.1 跨实现对拍（G5 的硬指标）
 
-- T1a：AR checkpoint 可保存、恢复和生成；报告 train-only 与 wall-clock tok/s。
-- T1b：同 batch、同权重下与 T1a logits 逐 token 对齐到 `1e-5`。
-- T2a/T2b：同 checkpoint、同 seed 下 loss 差小于 1%。
-- T2c：Qwen3-0.6B A2D 跑通并报告 repetition rate。
-- T3：必须报告 repetition rate，不能只报告 loss。
-- benchmark 至少 400 步并丢弃预热；`Predicted` 与 `Measured` 分列。
-
-### T4（后训练）验收
-
-- **T4a 展平正确**：抽查 3 条对话，`decode(展平后的 tokens)` 能还原出带 `<user>` / `<assistant>` 标记的原文；
-  `meta.json` 里的 assistant 区间长度与回答长度一致（误差 ≤ 1 token）。
-- **T4b 区间正确**：随机取一条样本，断言 label 在 user 段全是 -100、在 assistant 段全不是 -100。
-  **区间错位是最阴的一类 bug**：loss 照样下降，模型学会了「不看问题直接答」。
-- **T4c SFT/DPO 端到端**：从 `hf-ar-example` / `minimind-ar-example` 出发，各能保存、恢复、生成；
-  生成走对话格式（`<user>…<assistant>…`），报告 train-only 与 wall-clock tok/s、eval loss（assistant 段）、repetition rate。
-- **T4d A/B 对齐**：行1（`training/sft_hf/`）与行2（`training/sft_native/`）在同 seed、同数据、
-  同区间下逐步 loss 一致（fp32，`< 1e-6`）。
-- **T4e SFT 必须比 AR 续训强**：同一批数据同样步数，SFT 的 assistant 段 eval loss
-  低于「用同一批数据做纯 next-token 续训」的 eval loss。这条不满足说明区间 mask 没生效。
-- 所有 DLM 相关结论仍必须报 repetition rate（§6 T3 规则对 T4 同样成立）。
-
-### T4 的 DLM 专项
-
-- **T4f 区间外的位置永不被加噪**：抽 100 个 batch，断言 `MASK` 出现的位置 ⊆ assistant 区间。
-  这条比 loss 曲线重要得多：prompt 被遮了，loss 照样降，但模型学的是“无条件生成回答”。
-- **T4g 两种 objective 在 SFT 下仍然一致**：手写 masked CE vs dllm `MDLMTrainer`，
-  同区间、同 seed 下 loss 相对差 `< 1%`（即 C2 的逻辑搬到区间版）。
-- **T4h AR-SFT 与 DLM-SFT 的 assistant 段 eval loss 可比**（同一个 tokenizer、同一批区间），
-  差值就是「双向去噪 vs 自回归」在同预算下的实际代价。
-
-### “能 chat”的门槛（T4 的真正验收）
-
-不追求指标，只要求模型能像个对话模型一样回话。四条同时满足：
-
-| # | 判据 | 阈值 | 为什么这么定 |
+| # | 比什么 | 阈值 | 实验版实测 |
 |---|---|---|---|
-| 1 | assistant 段 eval loss | ≤ 1.5 × AR-SFT 同条件 | DLM 先天比 AR 难，放 1.5 倍；超了就是没训好而不是方法不行 |
-| 2 | rep-4（≥64 token 生成） | < 0.5 | 复读是最典型的 DLM 失败模式（`notes/03` §11） |
-| 3 | 生成非空、格式正确 | `Once upon a time` / `The future of AI is` / 一个真实提问，各能接在 `<assistant>` 后输出 | 排掉「输出全 PAD / 全重复字符」 |
-| 4 | 不回声提问 | 抽查 2 条，回答里不出现 prompt 原文 | AR 模型的经典失败：把问题重复一遍当成回答 |
+| **C1** | 原生 torch vs `transformers` logits（同权重同 batch） | `≤ 1e-5` | 6.91e-06 |
+| **C2** | minimind-dlm 手写 vs `dllm` loss，**同 corruption** | 相对差 `< 1%` | 7.56e-08 |
+| **C3** | 同上，在原生 base 上 | `< 1%` | 1.54e-07 |
+| **C4** | 连续跑 N 步 vs M + resume + (N−M) | 逐步差 `≤ 1e-6` | 0.0 |
+| **C5** | A2D 转换 | 0 丢失 / 0 新增 / 0 形状变化 / 0 漂移 | 全 0 |
 
-**步数**：能 chat 即可，不要求收敛。Tier 0 上先跑 200 步看 rep-4 和格式，
-不够再追到 400 / 800 步。**每加一档都要重报 rep-4**，并遵守 `notes/05` 的计时规则。
+**对拍必须在同一输入上比。** 两套实现各自抽随机数 → loss 不同 → 无法区分
+「实现错了」和「随机数不一样」。做法是两边用同一个全局 seed 且 RNG 消耗顺序一致，
+并**验证两次 corruption 逐位相同**，而不是只看两个相近的 loss 数字。
 
-## 7. Repository layout
+### 6.2 SFT 专项
+
+- **T4a 展平正确**：抽查 3 条，`decode(tokens)` 能还原带 `<user>` / `<assistant>` 标记的原文；
+  区间长度与回答长度一致（误差 ≤ 1 token）。
+- **T4b 区间正确**：label 在 user 段全 `-100`、assistant 段全不是。**区间错位是最阴的
+  bug** —— loss 照样下降，模型学会了「不看问题直接答」。
+- **T4f 区间外永不加噪**：抽 100 个 batch，断言 `MASK` 出现的位置 ⊆ assistant 区间。
+- **T4g 两种 objective 在 SFT 下仍一致**：区间版 C2。
+- **T4h AR-SFT 与 DLM-SFT 的 assistant 段 eval loss 可比**，差值即「双向去噪 vs 自回归」
+  在同预算下的实际代价。
+
+### 6.3 「能 chat」的门槛（SFT 的真正验收）
+
+不追求指标，只要求能像个对话模型回话。四条同时满足：
+
+| # | 判据 | 阈值 |
+|---|---|---|
+| 1 | assistant 段 eval loss | `≤ 1.5 ×` 同条件 AR-SFT |
+| 2 | rep-4（≥64 token 生成） | `< 0.5` |
+| 3 | 三个 prompt 都能在 `<assistant>` 后输出非空、格式正确 | — |
+| 4 | 不回声提问 | 抽查 2 条，回答不含 prompt 原文 |
+
+**步数**：能 chat 即可，不要求收敛。先 200 步看 rep-4 和格式，不够追到 400 / 800，
+每加一档都重报 rep-4。
+
+### 6.4 测量规则
+
+- **必须同时报 train-only 和 wall-clock 两个吞吐**（验证和采样不污染 train-only 分母）。
+- benchmark ≥ 400 步，丢弃预热；`Predicted` 与 `Measured` 分列。
+- **所有 DLM 结论必须报 repetition rate，不能只报 loss** —— DLM 失败最典型的表现
+  就是复读而 loss 照样下降（`notes/03` §11）。
+- **rep-4 不能给实现排名**：同一方法换一个 base，A2D 在 0.40 ~ 0.81 之间跳
+  （32 token 样本的噪声）。正式评测要几百 token × ≥5 个 prompt。
+
+---
+
+## 7. 目录
 
 ```text
-configs/                 # 模型和实验配置
-scripts/                 # 环境、数据下载/准备、训练和可视化命令
+configs/                 # 模型与实验配置
+scripts/                 # 环境、数据、训练、可视化
 data/                    # dataset、packing、tokenizer 适配
-tokenizer/               # 6400 tokenizer
+tokenizer/               # 6400 BPE
 models/hf_qwen/          # Transformers Qwen 适配
 models/minimind_qwen/    # 原生 PyTorch Qwen-style model
-training/ar_hf/          # T1a
-training/ar_native/      # T1b
-training/sft_ar_hf/       # T4-1 SFT，行1（AR objective，用包）
-training/sft_ar_native/   # T4-2 SFT，行2（AR objective，不用包）
-training/sft_a2d_hf/      # T4-3 SFT，行1（DLM objective，区间内加噪）
-training/sft_a2d_native/  # T4-4 SFT，行2（DLM objective）
-training/dpo_ar_native/   # T4-7 DPO（只在 AR 上做）
-training/a2d_minimind/   # T2a
-training/a2d_dllm/       # T2b/T2c
-training/direct_dlm/     # T3
+training/ar_hf/          # G1 行1
+training/ar_native/      # G1 行2
+training/a2d_minimind/   # G5 不用包
+training/a2d_dllm/       # G5 用包
+training/direct_dlm/     # G2
+training/sft_ar_hf/      # G2/G3 的 AR-SFT 对照
+training/sft_ar_native/
+training/sft_a2d_hf/     # G3 新路线 / G4
+training/sft_a2d_native/
+training/dpo_ar_native/  # RL（只在 AR 上做）
 diffusion/               # corruption、scheduler、loss、sampler
 evaluation/              # generation、benchmark、repetition rate
-utils/                   # logger、device、seed、checkpoint、metrics
-example/                 # 参考实现
-notes/ logs/ scripts/patches/ # 知识、开发记录、运行产物、dllm patch
+utils/ data/             # logger、device、seed、checkpoint、metrics
+example/                 # 实验版参考实现 + teach/ + RESULTS.md + ISSUES.md
+notes/ logs/ scripts/patches/
 ```
 
-路线依赖单向：公共数据和工具被模型、训练和评测使用；A2D 可以读取 AR 权重，但不导入 AR 训练循环。
+依赖单向：公共数据和工具被模型、训练、评测使用；A2D 可以读取 AR 权重，但不导入 AR 训练循环。
 
-## 8. 任务表（A 版 / B 版 两个维度）
+---
 
-### 8.1 两个维度的定义
+## 8. 任务网格
 
-同一件事写两遍。**任务相同，规模不同。**
+**行 = 模型对象**，**列 = 阶段**。✅ = 实验版已完成（在 main）· ⬜ = 未写 · P0/P1/P2 = 优先级。
 
-| | A 版（参考实现） | B 版（正式实现） |
-|---|---|---|
-| 谁写 | AI | 你 |
-| 位置 | `example/` | 根目录 `models/` `training/` `diffusion/` `evaluation/` `utils/` `data/` |
-| 模型规模 | **Tier 0**：3.21M 参数 · ctx 128 · 2 层 | **Tier 1（待测）**：~50M · ctx 512 · 8 层 |
-| 语料 | tinystories-6400 切片（~20 万 token） | minimind3-6400（332M token） |
-| 步数 | 200 | 按 `logs/dev/02` 吞吐阶梯定 |
-| 目的 | **pipeline 能不能跑通 + 代码对不对** | 正式实验与可测量对比 |
-| checkpoint | `checkpoints/example/…-example/` | `checkpoints/…` |
-| 能力 | **不看**（loss 降没降、rep-4 多少都只记录） | 看（这是要拿数字的） |
-| 对拍关系 | A 是基准 | **B 的输出必须与 A 对齐** |
-
-**A 版跑通 ≠ B 版可以写。** B 版在写之前，用 `example/teach/` 里那一步的
-「验收命令」自己先跑一遍 A 版，拿到基准数。
-
-### 8.2 任务网格：base × 阶段
-
-**行 = 模型对象**，**列 = 训练阶段**。每个格子是一份代码；A 版一份、B 版一份。
-
-```
-              pretrain          a2d              sft              rl
-              从零训基座         AR→DLM 转换+微调    对话微调          偏好/强化
-```
-
-### 8.2.1 A 版（AI 写，`example/`，Tier 0 3.2M）
+### 8.1 实验版（AI 写，`example/`，Tier 0 3.2M）
 
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
-| **ar-hf**<br>`transformers` Qwen3 | ✅ `base/hf/train_ar.py`<br>格1 · eval 4.6356 | ✅ `base/hf/a2d_minimind.py`<br>`a2d_dllm.py` · 格3/4 | ⬜ `base/hf/sft_ar.py`<br>P0 | ⬜ P2 |
-| **ar-native**<br>纯 torch Qwen3 | ✅ `base/native/train_ar.py`<br>格2 · eval 4.6283 | ✅ `base/native/a2d_minimind.py`<br>`a2d_dllm.py` · 格6/7 | ⬜ `base/native/sft_ar.py`<br>P0 | ⬜ P2 |
-| **qwen3-0.6b**<br>现成权重 + LoRA | — 用现成 checkpoint<br>不训 | ✅ `base/qwen3_0p6b/` · 格9/10<br>eval 4.80 / 4.82 | ⬜ P1 | ⬜ P2 |
-| **direct-dlm**<br>随机初始化 DLM | ✅ `base/{hf,native}/direct_dlm.py`<br>格5/8 · eval 5.64 | — 本来就是 DLM<br>无 AR 可转 | ⬜ P2 | — DPO 需序列 logprob<br>DLM 无定义 |
+| **ar-hf**<br>`transformers` | ✅ 格1 · eval 4.6356 | ✅ 格3/4 · eval 4.97 | ⬜ **P0** | ⬜ P2 |
+| **ar-native**<br>纯 torch | ✅ 格2 · eval 4.6283 | ✅ 格6/7 · eval 4.97 | ⬜ **P0** | ⬜ P2 |
+| **qwen3-0.6b**<br>600M + LoRA | — 用现成 checkpoint | ✅ 格9/10 · eval 4.80 | ⬜ P1 | ⬜ P2 |
+| **direct-dlm**<br>随机初始化 | ✅ 格5/8 · eval 5.64 | — 本来就是 DLM | ⬜ P2 | — DLM 无序列 logprob |
 
-### 8.2.2 B 版（你写，根目录，Tier 1 ~50M / ctx 512）
+### 8.2 实践版（你写，根目录，Tier 1 ~50M / ctx 512）
 
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
 | **ar-hf** | `models/hf_qwen/`<br>`training/ar_hf/` | `training/a2d_minimind/`（不用包）<br>`training/a2d_dllm/`（用包） | `training/sft_ar_hf/` | `training/dpo_ar_hf/` |
-| **ar-native** | `models/minimind_qwen/`<br>`training/ar_native/` | ↑ **同一对目录**，`--base` 切换 | `training/sft_ar_native/` | `training/dpo_ar_native/` |
+| **ar-native** | `models/minimind_qwen/`<br>`training/ar_native/` | ↑ **同一对目录**，`--base` 切 | `training/sft_ar_native/` | `training/dpo_ar_native/` |
 | **qwen3-0.6b** | — | ↑ 同一对目录，行3 分支（LoRA） | 同 sft 目录，LoRA | ⬜ P2 |
 | **direct-dlm** | `training/direct_dlm/` | — | 同 sft 目录 | — |
 
-**a2d / sft 三个 base 共用同一份 B 版代码**：`training/a2d_*/` 吃任意 AR checkpoint，
-`training/sft_*/` 也一样。A/B 的轴是**用不用包**（minimind vs dllm），不是 base 本身。
+**a2d / sft 三个 base 共用同一份代码**：`training/a2d_*/` 吃任意 AR checkpoint，
+`--base` 切换。A/B 的轴是**用不用包**，不是加载哪个 base。
 
-### 8.2.3 每格验收
-
-| 阶段 | 验收 | A 版实测 |
-|---|---|---|
-| pretrain | 存/恢复/生成 + 双吞吐 | ✅ 两 base eval 差 0.007 |
-| a2d | **C1 `1e-5`** · **C2/C3 `<1%`** · **C5 0 丢失** | 6.91e-06 / 7.6e-08 / 0 |
-| sft | T4a-T4h + 「能 chat」四条门槛（§6） | 未做 |
-| rl | chosen 排序正确 | 未做 |
-
-✅ = 已完成并在 main · ⬜ = 未写 · P0/P1/P2 = 优先级
-
-### 8.3 依赖顺序
+### 8.3 两条路线在网格上的位置
 
 ```
-T0 ──→ T1a ──→ T1b ──┬──→ T2a ──┬──→ T2c
-                     │           ├──→ T4-1/2 (SFT·AR)
-                     ├──→ T2b ───┤
-                     └──→ T3 ────┴──→ T4-3/4 (SFT·DLM) ──→ T4-5
-                                     └──→ T4-6 ──→ T4-7
+原路线： ar-hf-sft ──A2D──▶ dllm-a2d ──(chat)──┐
+         ar-native-sft ─A2D─▶ native-a2d ────────┤ 对照组：ar-sft ──(chat)──┘
+                                                  │
+新路线： ar-hf ──A2D──▶ hf-a2d ──SFT──▶ (chat) ───┤
+         ar-native ──A2D──▶ native-a2d ─SFT─▶ ───┘
 ```
 
-T4 的数据（展平 + `assistant_spans.npy`）是 T4 自己的前置，不依赖 T2。
+G3 的比较对象就是这两条线的「能 chat」四条门槛。
 
-### 8.4 B 版每一步的对拍命令
+### 8.4 依赖顺序
+
+```
+G1 (ar-hf, ar-native pretrain)
+  ├─▶ G2 (direct-dlm vs a2d)
+  ├─▶ G5 (dllm vs minimind)
+  └─▶ SFT (AR-SFT 对照组) ──▶ G3 原路线 ──▶ G4
+        └─▶ A2D ──▶ SFT ──────────────▶ 新路线
+```
+
+### 8.5 对拍命令
 
 | 任务 | 命令 | 判定 |
 |---|---|---|
-| T0 | `.venv/bin/python example/tests/test_common.py` | 逐条对上 `example/common/` |
-| T1a | `.venv/bin/python example/base/hf/train_ar.py` | 拿到 A 版基准数 |
-| T1b | `.venv/bin/python example/check_ab.py c1 --layer-report` | `max\|Δ\| ≤ 1e-5`，失败时逐层报告定位 |
-| T2a | `.venv/bin/python example/check_ab.py c2` | `rel_diff < 1%` |
-| T2b | `.venv/bin/python example/check_ab.py c5` | `missing=unexpected=drifted=0` |
-| T3 | `.venv/bin/python example/base/*/direct_dlm.py` | 与 A2D 的 eval 差记录下来 |
-| T4 | `.venv/bin/python example/base/*/sft_*.py` | T4a-T4h 逐条 |
-
-**通用**：`bash example/smoke_all.sh --quick` 一次跑完 A 版全部格子，
-任何一格 FAILED 会打出来。
+| 实验版全跑 | `bash example/smoke_all.sh --quick` | 任一格 FAILED 会打出来 |
+| G1 | `python example/check_ab.py c1 --layer-report` | `max\|Δ\| ≤ 1e-5`，失败时逐层定位 |
+| G5 | `python example/check_ab.py c2` · `c5` | `< 1%` · 全 0 |
+| 逐行对拍 | `python example/tests/test_*.py` | 失败非零退出 |

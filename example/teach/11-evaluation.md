@@ -1,8 +1,8 @@
 # Step 11 — `evaluation/`
 
 **你要写的**：`evaluation/`（生成 + 评测 + repetition rate）
-**A 版参考**：`example/common/metrics.py` + `example/common/cell.py::finish_cell`
-**验收**：重复率数值和 A 版一致；`results` 表的每一行都带 rep-4。
+**实验版参考**：`example/common/metrics.py` + `example/common/cell.py::finish_cell`
+**验收**：重复率数值和 实验版一致；`results` 表的每一行都带 rep-4。
 
 ---
 
@@ -24,7 +24,7 @@ rep-n = 1 - |unique n-grams| / |total n-grams|
 按序列分别统计后合并。长度 < n 的序列**不参与**（返回 nan），
 不是记 0.0 —— 把退化样本记成 0 会让坏掉的采样器看起来完美。
 
-A 版 `test_common.py` 拿闭式解对拍过：
+实验版 `test_common.py` 拿闭式解对拍过：
 
 ```
 looped = list(range(8)) * 8      # 61 个 4-gram 窗口，8 个不同
@@ -37,9 +37,9 @@ looped = list(range(8)) * 8      # 61 个 4-gram 窗口，8 个不同
 采样有随机数，32 个 token 的样本噪声极大。
 
 **它能回答**：这个模型是不是在复读。
-**它不能回答**：A 版和 B 版谁更好。
+**它不能回答**：实验版和 实践版谁更好。
 
-A 版实测（Tier 0, 200 步）：
+实验版实测（Tier 0, 200 步）：
 
 | 格 | rep-4 |
 |---|---|
@@ -70,7 +70,7 @@ smoke 阶段 32 token / 2 prompt 只能「报出来」，不能「判断」。
 `eval.repetition_ngram` 和 `report_train_only_tps` / `report_wall_tps`
 在 `configs/base.yaml` 里是**默认开启**的，不是可选项。
 
-A 版自己踩过：`summary` 在 eval/sample 之前组装，wall-clock 于是
+实验版自己踩过：`summary` 在 eval/sample 之前组装，wall-clock 于是
 和 train-only 三个数字位一样 —— 那就是 `notes/05` Bug 1 的形状，
 自己复现了一遍（见 commit `2928fba`）。
 

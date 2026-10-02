@@ -1,7 +1,7 @@
 # Step 12 — Qwen3-0.6B LoRA 两格（行3）
 
 **你要写的**：`training/a2d_dllm/` + `training/a2d_minimind/` 的行3 分支
-**A 版参考**：`example/base/qwen3_0p6b/`
+**实验版参考**：`example/base/qwen3_0p6b/`
 **验收**：两格都跑通，重复率**必报**（`SPEC` §6：T2c 必须报 repetition rate）。
 
 ---
@@ -15,7 +15,7 @@
 | backbone | 全参训练 | **冻结**，只训 LoRA r=8 |
 
 **三条 tokenizer track 的 loss 不能互相比**（`SPEC` 3.3）。
-跨 track 要按相同原文和字符数归一化，A 版没做这件事，所以
+跨 track 要按相同原文和字符数归一化，实验版没做这件事，所以
 格9/10 的 eval 10.1 不能和格3 的 4.97 放一张表里比。
 
 ## 12.2 MASK token 的三种处理
@@ -29,7 +29,7 @@
 | B | 复用未使用的 special token（如 `<|fim_pad|>` 151662） | 不改 embedding，但要确认它在训练数据里从未出现 |
 | C | 改 SPEC，写「复用 151662」 | 最干净，但要你拍板 |
 
-A 版选了 A 并在 `ISSUES.md` OPEN-1 记着。**参数量对不上时不要查 bug**，
+实验版选了 A 并在 `ISSUES.md` OPEN-1 记着。**参数量对不上时不要查 bug**，
 是 resizing 掉的。
 
 ## 12.3 LoRA 挂哪、冻结哪
@@ -45,7 +45,7 @@ r = 8, alpha = 16, dropout = 0
 注意力从因果变双向。**这一条是可证伪的**，`build_a2d_lora(trainable=...)`
 留了 `freeze_ffn` 和 `qk` 两个档，正好用来做那个消融。
 
-A 版测试已经验了默认档：`trainable_names` 里**没有一个含 `.mlp.`**。
+实验版测试已经验了默认档：`trainable_names` 里**没有一个含 `.mlp.`**。
 
 `dropout = 0` 不是随便填的：LoRA 有 dropout 就没法做 bit 级对拍。
 
@@ -65,7 +65,7 @@ as an integer` —— 报错信息里完全看不出是 tokenizer 的问题。
 
 编码速度 ~1.5M tok/s，所以现场 tokenize 2000 篇的开销可以忽略。
 
-## 12.5 A 版实测（诚实记录，不解释）
+## 12.5 实验版实测（诚实记录，不解释）
 
 | 格 | loss 首 → 末 | eval | tok/s | rep-4 |
 |---|---|---|---|---|
@@ -83,7 +83,7 @@ rep-4 0.78 仍然很高：这是 51k token 对一个 600M 模型，输出退化�
 
 ### ⚠ 这一格曾经**完全没有预训练权重**
 
-A 版第一版 `build_a2d_lora()` 只 `AutoConfig.from_pretrained()`，直接
+实验版第一版 `build_a2d_lora()` 只 `AutoConfig.from_pretrained()`，直接
 `A2DQwen3LMHeadModel(config)` —— **随机初始化的 600M 底座**。
 参数量、可训比例、loss 下降曲线全都「看起来对」，
 eval 卡在 10.45（6400-vocab 那几格是 4.97）。
@@ -91,7 +91,7 @@ eval 卡在 10.45（6400-vocab 那几格是 4.97）。
 对抗评审（gpt-6-luna）抓出来之后修正 + 重跑，eval 变成 **4.80**。
 
 **教训**：A2D 格子必须断言底座权重真的加载了。
-A 版现在的做法是先加载预训练权重、转换、断言 `missing`/`unexpected` 为空，
+实验版现在的做法是先加载预训练权重、转换、断言 `missing`/`unexpected` 为空，
 再断言 resize 之后「tokenizer 能触达的那些行」逐位未变。
 少任何一条断言，这个 bug 都会安静地活下来。
 

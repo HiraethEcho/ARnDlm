@@ -1,8 +1,8 @@
 # Step 5 — `diffusion/corruption.py` + `scheduler.py`
 
 **你要写的**：`diffusion/corruption.py`（加噪）、`diffusion/scheduler.py`（α(t) 与权重）
-**A 版参考**：`example/common/a2d.py`（`sample_t` / `corrupt`）
-**验收**：同 seed 同 batch，A 版和你的 mask 位置**逐位相同**。
+**实验版参考**：`example/common/a2d.py`（`sample_t` / `corrupt`）
+**验收**：同 seed 同 batch，实验版和你的 mask 位置**逐位相同**。
 
 ```sh
 .venv/bin/python example/tests/test_a2d.py      # 第 [1] 节
@@ -34,7 +34,7 @@ t = torch.rand(B, L)
 masked = torch.rand(B, L) < t
 ```
 
-A 版实测（`test_a2d.py` 第 [1] 节）：per-token 版本下每个样本的 mask 率
+实验版实测（`test_a2d.py` 第 [1] 节）：per-token 版本下每个样本的 mask 率
 **均匀分布在 [0,1)**，而 per-sample 版本 mask 率 ≈ t，最大偏差 0.10
 （128 个位置的抽样噪声量级）。
 

@@ -2,13 +2,13 @@
 
 ## 写代码 —— 分工 (最重要)
 
-**A/B 的轴是「用包 vs 不用包」, 不是「AI vs 人」。**
-每条路线都有两版实现 —— A 版在 `example/` (AI 写), B 版在根目录 (你写)。
+**实验版 / 实践版 的轴是「用包 vs 不用包」, 不是「AI vs 人」。**
+每条路线都有两版实现 —— 实验版在 `example/` (AI 写), 实践版在根目录 (你写)。
 
 | | 谁写 | 位置 |
 |---|---|---|
-| **A 版 (参考实现)** | **AI 写** | `example/` |
-| **B 版 (正式实现)** | **你自己写** | 根目录下的 `models/`、`training/`、`diffusion/` 等目录 |
+| **实验版 (参考实现)** | **AI 写** | `example/` |
+| **实践版 (正式实现)** | **你自己写** | 根目录下的 `models/`、`training/`、`diffusion/` 等目录 |
 
 七条路线和依赖见 `SPEC.md`。简言之: `data/` 和 `utils/` 是公用底座,
 剩下五个是路线 —— 同一个功能走两条路 (用包 / 不用包):
@@ -19,38 +19,39 @@
 | A2D | `training/a2d_minimind/` | `training/a2d_dllm/` |
 | 从零训 DLM | — | `training/direct_dlm/` |
 
-### 实验矩阵 (SPEC 2.3) 每格的 A 版 / B 版
+**SFT 阶段两个 base 共用同一份代码**：`training/sft_ar_*/`（AR objective）与
+`training/sft_a2d_*/`（DLM objective），靠 `--base` 切换权重来源。
 
-矩阵的两个轴是**独立的**: base model 决定权重从哪来, method 决定怎么转 DLM。
-三个 DLM 训练目录吃**任意** AR 权重, 不绑定某个 base。
+### 五组对比 (`SPEC.md` §2)
 
-| SPEC 2.3 格子 | A 版 (`example/`) | B 版 (你写) |
+`SPEC.md` 把任务组织成五组，每组只动一个变量：
+
+| 组 | 变量 | 回答什么 |
 |---|---|---|
-| Qwen-mini-HF · dLLM-A2D | `base/hf/a2d_dllm.py` | `training/a2d_dllm/` |
-| Qwen-mini-HF · MiniMind-A2D | `base/hf/a2d_minimind.py` | `training/a2d_minimind/` |
-| Qwen-mini-HF · Direct-DLM | `base/hf/direct_dlm.py` | `training/direct_dlm/` |
-| Qwen-mini-MiniMind · dLLM-A2D | `base/native/a2d_dllm.py` | `training/ar_native/` 产权重 + `training/a2d_dllm/` |
-| Qwen-mini-MiniMind · MiniMind-A2D | `base/native/a2d_minimind.py` | `training/ar_native/` 产权重 + `training/a2d_minimind/` |
-| Qwen-mini-MiniMind · Direct-DLM | `base/native/direct_dlm.py` | `models/minimind_qwen/` + `training/direct_dlm/` |
-| Qwen3-0.6B · dLLM-A2D (LoRA) | `base/qwen3_0p6b/lora_dllm_a2d.py` | `training/a2d_dllm/` |
-| Qwen3-0.6B · MiniMind-A2D (LoRA) | `base/qwen3_0p6b/lora_minimind_a2d.py` | `training/a2d_minimind/` |
+| **G1** | 模型实现（用包 / 不用包） | 两种 AR 写法是不是同一个模型 |
+| **G2** | 起点权重（AR 转换 / 随机初始化） | AR 权重对 DLM 值多少 |
+| **G3** | 顺序（**原路线** SFT→A2D / **新路线** A2D→SFT） | 先 SFT 还是先 A2D |
+| **G4** | 基模（ar-hf-sft / ar-native-sft / qwen3-0.6b） | A2D 换个基模还成立吗 |
+| **G5** | 实现（`dllm` 包 / minimind-dlm 手写） | 上游和手写是不是同一个东西 |
 
-两个 AR baseline (`hf-ar-example` / `minimind-ar-example`) 是所有 DLM 格的前置,
-不属于矩阵格子。
+**两条路线**：原路线 = `pretrain(AR) → SFT → A2D`；新路线 = `pretrain(AR) → A2D → SFT`。
+原路线在前，因为 Qwen3-0.6B 与 dllm 的 A2D 作用对象本来就是**已经能 chat 的模型**。
+**AR-SFT 是 G3 的必需对照组** —— 没有它，无法判断 DLM 的输出是「变差了」还是「本来就差」。
 
-A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版本, 在同一 batch
-同一权重下输出必须一致。对应表见 `example/README.md`, 执行计划见 `example/PLAN.md`。
+实验版 / 实践版 的对应表见 `example/README.md`，逐格执行计划见 `example/PLAN.md`，
+逐步教学见 `example/teach/`。
 
 ## 我能写什么
 
 - **`example/` 里的任何东西** —— **包括纯 torch 的原生模型实现**。
-  `example/` 覆盖 SPEC 2.3 全部 10 格, 是你 B 版的正确性基准。
-- **B 版目录里只有注释** (docstring / `#` 注释)
+  `example/` 覆盖 SPEC §8 网格的 pretrain 与 a2d 阶段全部 10 格,
+  是你实践版的正确性基准。
+- **实践版目录里只有注释** (docstring / `#` 注释)
 - 对话里的代码片段
 
 ## 我不能写什么
 
-- **B 版目录里的任何实现代码**。哪怕一行。
+- **实践版目录里的任何实现代码**。哪怕一行。
   包括 `models/minimind_qwen/`、`training/ar_hf/`、`training/a2d_dllm/` ——
   需要参考实现时我在 `example/` 写一份给你对照。
 
@@ -80,7 +81,7 @@ A/B 对照是**同一路线内部**的对照: 用包的版本和你手写的版�
 
 ## 写代码
 
-- **注释写在 B 版目录。** 每个文件的 docstring 写: 作用 / 要写什么 / 注意 / 依赖 / 验收。
+- **注释写在实践版目录。** 每个文件的 docstring 写: 作用 / 要写什么 / 注意 / 依赖 / 验收。
 - **`test/` 的注释解释 Python 用法** (import 形式、`nn.Module`、
   `view` vs `reshape`、推导式、`try/except`、`del` + `empty_cache`),
   因为这是学 Python 的项目。**但要精简** —— 只写「这行为什么这么写」,

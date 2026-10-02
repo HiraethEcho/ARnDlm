@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-**A 版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
+**实验版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
 SPEC 2.3 的 10 格全部跑通，Tier 0 规模，200 步，实测数字见 `example/RESULTS.md`。
 
 | 项目 | 状态 |
@@ -19,8 +19,8 @@ SPEC 2.3 的 10 格全部跑通，Tier 0 规模，200 步，实测数字见 `exa
 | T2c Qwen3-0.6B A2D | **DONE** — LoRA r=8（0.38% 可训）两格 · eval 4.80 / 4.82 |
 | T3 Direct DLM | **DONE** — hf + native 两格 · eval 5.64（比 A2D 差 0.67 nat） |
 | C4 resume 等价性 | **DONE** — 40 步 vs 30+resume+10 逐步差 0.0 |
-| A 版教学计划 | **DONE** — `example/teach/` step 0-13 全部细化 |
-| B 版实现 | **PENDING** — 七个目录只有 docstring，按 `example/teach/` 逐步写 |
+| 实验版教学计划 | **DONE** — `example/teach/` step 0-13 全部细化 |
+| 实践版实现 | **PENDING** — 七个目录只有 docstring，按 `example/teach/` 逐步写 |
 | Tier 1 定档 | **PENDING** — 见 `example/teach/13-tier1.md`，先测吞吐再定参数量 |
 
 **三个方法在两个 base 上的相对关系一致**：A2D eval ≈ 4.97，Direct-DLM ≈ 5.64。
@@ -29,7 +29,7 @@ SPEC 2.3 的 10 格全部跑通，Tier 0 规模，200 步，实测数字见 `exa
 **rep-4 不可用于排名**：同一方法换一个 base，A2D 在 0.40 ~ 0.81 之间跳
 （32 token 样本的噪声），详见 `example/ISSUES.md` OPEN-6。
 
-**A 版只做了预训练**：10 格都是裸文本，没有 chat template、没有 SFT、没有 RL。
+**实验版只做了预训练**：10 格都是裸文本，没有 chat template、没有 SFT、没有 RL。
 `notes/01` 的三阶段目前只用到第一阶段。
 
 ## Implementation phases
@@ -124,7 +124,7 @@ DLM 额外记录 sampling steps、generation speed、output quality 和 repetiti
 4. ~~dLLM A2D~~ **DONE** (C5 = 0 lost, 0 drifted)
 5. ~~Qwen3-0.6B A2D~~ **DONE** (LoRA 0.38%, eval 4.80)
 6. ~~Direct DLM~~ **DONE** (0.67 nat behind A2D)
-7. **B 版实现** — 按 `example/teach/` step 0→13 写, 每步对拍
+7. **实践版实现** — 按 `example/teach/` step 0→13 写, 每步对拍
 8. **Tier 1 定档** — 先测吞吐阶梯再定参数量 (`example/teach/13-tier1.md`)
 9. **T4 后训练** — SFT 先做 (AR 两格 + DLM 两格), DPO 排后。
-   完整任务表见 `SPEC.md` §8 (A/B 两维度, 含依赖顺序和验收命令)
+   完整任务表见 `SPEC.md` §8 (实验版/实践版 两维度, 含依赖顺序和验收命令)

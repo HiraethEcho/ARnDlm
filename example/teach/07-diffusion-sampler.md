@@ -1,8 +1,8 @@
 # Step 7 — `diffusion/sampler.py`
 
 **你要写的**：`diffusion/sampler.py`
-**A 版参考**：`example/common/a2d.py::sample_dlm` + `gumbel_argmax`
-**验收**：同 seed 同参数同权重，A 版和你的输出**逐 token 相同**。
+**实验版参考**：`example/common/a2d.py::sample_dlm` + `gumbel_argmax`
+**验收**：同 seed 同参数同权重，实验版和你的输出**逐 token 相同**。
 
 ```sh
 .venv/bin/python example/tests/test_a2d.py      # 第 [3] 节
@@ -29,7 +29,7 @@ n_unmask = max(1, math.ceil(n_active / steps_left))
 
 不是固定 top-k。固定值在最后几步会一次揭太多，质量下降。
 
-预算要**按序列算**，不能按整个 batch 算。A 版第一版就是按 batch 汇总的
+预算要**按序列算**，不能按整个 batch 算。实验版第一版就是按 batch 汇总的
 `remaining`，batch=1 时看不出来，batch>1 就错了。
 
 ### 关键点 2：每步全序列 forward，没有 KV cache
@@ -90,7 +90,7 @@ token, conf = gumbel_argmax(logits, temperature)
 | 1 | 逐 token AR（退化） | 最慢，但最接近 AR |
 
 `steps=1` 时整个 block 一次填满；`steps=16 > block_size` 时也会终止
-（多出来的步数在 block 填满后直接退出）。这两个边界 A 版测试都覆盖了。
+（多出来的步数在 block 填满后直接退出）。这两个边界 实验版测试都覆盖了。
 
 ## 7.6 坑
 
@@ -112,4 +112,4 @@ token, conf = gumbel_argmax(logits, temperature)
 **用 `temperature=0` 对拍**。有温度时两边各自的随机数流不同，
 输出必然不同，差异不代表 bug。
 
-A 版测试就是这么做的：`check("temperature=0 is deterministic", ...)`。
+实验版测试就是这么做的：`check("temperature=0 is deterministic", ...)`。

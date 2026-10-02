@@ -253,7 +253,7 @@ abort (`opencode/space-bunny-free` 超时/中断), 子进程一起没了, 结果
 
 `dpo/rlaif/agent_rl/sft_t2t` 是 `conversations` 格式, 没有 `text` 键。
 `read_text()` 会静默跳过 (`if isinstance(text, str)`) —— **不报错, 只是
-0 token**。展平成单条 text 需要 chat template, 属于 B 版实现。
+0 token**。展平成单条 text 需要 chat template, 属于 实践版实现。
 详见 `notes/06-datasets.md` 第 2 节。
 
 ### 6400 BPE 对中文是超标的
@@ -402,7 +402,7 @@ packing 把多篇文档首尾相接时没有 document mask, 模型能看见上�
 
 ## 项目当前进度
 
-**A 版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
+**实验版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
 
 ```
 example/                       47 个 py (5001 行) + 19 个 md
@@ -433,8 +433,8 @@ C4 0.0（40 步）· C5 0/0/0。
 
 **AR 权重在 Tier 0 上值 0.67 nat**（A2D 4.97 vs Direct-DLM 5.64，两个 base 一致）。
 
-**没做**: B 版七个目录（`models/` `training/` `diffusion/` `evaluation/`
-`utils/`）仍只有 docstring · **SFT / DPO / RL 全部没做**（A 版只到预训练）
+**没做**: 实践版七个目录（`models/` `training/` `diffusion/` `evaluation/`
+`utils/`）仍只有 docstring · **SFT / DPO / RL 全部没做**（实验版只到预训练）
 · Tier 1 正式规模未训。
 
 **数据已就位**: minimind3-6400 (332M tok, 主实验) +
@@ -443,13 +443,13 @@ minimind 全量 11 个 jsonl / 22 GiB 下载完成并校验。
 `sft_t2t.jsonl` (14 GiB) 在盘上但**未展平**——对话格式需先展成单条 text。
 
 **checkpoint**: `checkpoints/example/` 下 10 格各一个目录
-（与 B 版的 `checkpoints/` 用 `-example` 后缀区分）。
+（与 实践版的 `checkpoints/` 用 `-example` 后缀区分）。
 
 ## 下一步
 
-1. **B 版 step 0**：`utils/` —— 照 `example/teach/00-common-base.md` 写，
+1. **实践版 step 0**：`utils/` —— 照 `example/teach/00-common-base.md` 写，
    对齐 `example/common/`（七个已知的坑都在那一节里）
-2. **B 版 step 3**：`models/minimind_qwen/` —— C1 是整个项目的核心对拍，
+2. **实践版 step 3**：`models/minimind_qwen/` —— C1 是整个项目的核心对拍，
    `example/check_ab.py c1 --layer-report` 会在第一个偏离的层停下来
 3. **Tier 1 定档**：先测吞吐阶梯再定参数量（`example/teach/13-tier1.md`）
 4. 可选：**SFT 版 DLM 两格**（M12）。数据在盘上但需先展平

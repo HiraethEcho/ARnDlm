@@ -1,7 +1,7 @@
 # Step 3 — `models/minimind_qwen/`：纯 torch 的 Qwen-mini
 
 **你要写的**：`models/minimind_qwen/`（RoPE · RMSNorm · SwiGLU · GQA · QK-Norm · tied embedding）
-**A 版参考**：`example/base/native/model.py`
+**实验版参考**：`example/base/native/model.py`
 **验收**：**C1** —— 灌入行1 的权重后，同 batch logits `max|Δ| ≤ 1e-5`。
 
 ```sh
@@ -89,7 +89,7 @@ apply 时 `unsqueeze(1)` 变成 `[1, 1, T, head_dim]` 去广播 `[B, H, T, D]`�
 
 ## 3.5 ⚠ 相同 seed ≠ 相同初始权重
 
-A 版实测：两个模型都传 `seed=42`，`max|Δ| = 2.7`。
+实验版实测：两个模型都传 `seed=42`，`max|Δ| = 2.7`。
 
 原因：`transformers` 在 `post_init()` 里初始化，本地实现在 `apply()` 里，
 **消耗 RNG 的顺序不同**。
@@ -113,7 +113,7 @@ F.scaled_dot_product_attention(q, k, v, is_causal=is_causal and T > 1)
 
 `T > 1` 的判断要留着：长度为 1 时 `is_causal=True` 在部分后端会报形状错。
 
-验证开关真的生效（A 版测试就是这么做的）：
+验证开关真的生效（实验版测试就是这么做的）：
 
 | 检查 | 期望 |
 |---|---|
@@ -141,5 +141,5 @@ layer 1          8.345e-07
 lm_head          2.265e-06
 ```
 
-第一个明显偏离的层就是 bug 所在。A 版实测全绿时的量级是 **1e-7 ~ 1e-6**
+第一个明显偏离的层就是 bug 所在。实验版实测全绿时的量级是 **1e-7 ~ 1e-6**
 （fp32 累加顺序造成的，不是语义差异）。

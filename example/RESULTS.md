@@ -1,4 +1,4 @@
-# RESULTS — A 版 smoke 实测
+# RESULTS — 实验版 smoke 实测
 
 由 `example/common/report.py` 自动追加，不要手改。
 

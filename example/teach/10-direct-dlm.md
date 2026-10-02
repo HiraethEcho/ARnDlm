@@ -1,7 +1,7 @@
 # Step 10 — `training/direct_dlm/`
 
 **你要写的**：`training/direct_dlm/`
-**A 版参考**：`example/base/hf/direct_dlm.py` + `example/base/hf/train_direct_dlm.py`
+**实验版参考**：`example/base/hf/direct_dlm.py` + `example/base/hf/train_direct_dlm.py`
 **验收**：能训练、能采样、能存盘；eval loss 与 A2D 格的差**记录**下来（不设阈值）。
 
 ---
@@ -17,10 +17,10 @@
 ```python
 # 不要复制 loss —— 复制之后两格会各自漂移，
 # 而这一对格存在的全部意义就是「只有一个变量不同」
-from base.hf.direct_dlm import make_direct_loss     # A 版：import 而非 copy
+from base.hf.direct_dlm import make_direct_loss     # 实验版：import 而非 copy
 ```
 
-B 版对应：`training/direct_dlm/` import `training/a2d_minimind/` 的模块。
+实践版对应：`training/direct_dlm/` import `training/a2d_minimind/` 的模块。
 
 ## 10.2 学习率要换
 
@@ -43,10 +43,10 @@ fingerprint = torch.cat([p.detach().reshape(-1)[:8] for p in model.parameters()]
 存进 `config.json`。两个都声称 `seed=42` 的 Direct-DLM 运行，
 如果指纹不同，那它们根本不是同一个实验 —— 而这件事在 loss 曲线上完全看不出来。
 
-A 版记录的值（Tier 0, seed 42）就存在
+实验版记录的值（Tier 0, seed 42）就存在
 `checkpoints/example/qwen-mini/hf-direct-dlm-example/config.json`。
 
-## 10.4 A 版实测：AR 权重值多少
+## 10.4 实验版实测：AR 权重值多少
 
 | | loss 首 → 末 | eval | rep-4 |
 |---|---|---|---|

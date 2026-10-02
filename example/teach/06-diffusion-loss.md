@@ -1,7 +1,7 @@
 # Step 6 — `diffusion/loss.py`
 
 **你要写的**：`diffusion/loss.py`
-**A 版参考**：`example/common/a2d.py::a2d_loss`
+**实验版参考**：`example/common/a2d.py::a2d_loss`
 **验收**：**C2** —— 与 `dllm` 的 loss 相对差 `< 1%`；同时与闭式解对拍。
 
 ```sh
@@ -26,7 +26,7 @@ loss = (nll * weight * masked).sum() / n_valid
 
 ## 6.2 三个必须避开的写法
 
-`test/04` 已经把这三个反例算出来了（A 版实测 Δ 值，vocab=8、logits×3）：
+`test/04` 已经把这三个反例算出来了（实验版实测 Δ 值，vocab=8、logits×3）：
 
 | 写法 | Δ | 为什么还能训 |
 |---|---|---|
@@ -46,7 +46,7 @@ loss = per_token.sum() / valid.sum().clamp_min(1)
 `valid = labels != -100`。纯文本预训练时每块都是满的，`valid` 就是全部位置。
 但 SFT 场景下 prompt 区 label 是 -100，**分母就不能包含 prompt**。
 
-A 版 `a2d_loss` 保留了 `valid` 参数就是为了这个：SFT 时传
+实验版 `a2d_loss` 保留了 `valid` 参数就是为了这个：SFT 时传
 `valid = (labels != -100)`。
 
 ## 6.4 ε = 1e-6，不是 0

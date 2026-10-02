@@ -1,7 +1,7 @@
 # Step 9 — `training/a2d_dllm/`
 
 **你要写的**：`training/a2d_dllm/`（转换 + 训练 + 采样都走 dllm 包）
-**A 版参考**：`example/base/hf/a2d_dllm.py`
+**实验版参考**：`example/base/hf/a2d_dllm.py`
 **验收**：**C5** —— 转换后 0 missing / 0 unexpected / 0 改动；**C2** —— loss 对得上。
 
 ```sh
@@ -12,7 +12,7 @@
 
 ## 9.1 这一格的意义：走通上游，不重写上游
 
-A 版**没有**重新实现 dllm 的 loss。三个部件全部来自包：
+实验版**没有**重新实现 dllm 的 loss。三个部件全部来自包：
 
 | 部件 | dllm 位置 |
 |---|---|
@@ -29,7 +29,7 @@ A 版**没有**重新实现 dllm 的 loss。三个部件全部来自包：
 `MDLMTrainer` 是 `transformers.Trainer` 的子类，构造它要 dataset、
 真 tokenizer、output_dir 脚手架 —— 这些都不在被测代码路径上。
 
-A 版的做法：
+实验版的做法：
 
 ```python
 trainer = MDLMTrainer.__new__(MDLMTrainer)
@@ -55,9 +55,9 @@ loss = trainer.compute_loss(model, {"input_ids": batch, "labels": batch})
 `import dllm.pipelines.a2d` **在模块顶层就炸**。
 
 修法：`scripts/patches/dllm-0001-a2d-config-class.patch`。
-A 版能 import 就是因为这个 patch 已经打上了。
+实验版能 import 就是因为这个 patch 已经打上了。
 
-**B 版写 `training/a2d_dllm/` 时也要确认 patch 在**：
+**实践版写 `training/a2d_dllm/` 时也要确认 patch 在**：
 `git -C ~/.cache/ARnDlm/dllm diff --cached --stat`
 
 ## 9.4 dllm 的 A2D 模型是怎么关掉因果的
@@ -71,10 +71,10 @@ A 版能 import 就是因为这个 patch 已经打上了。
 - 传 2D mask → 转成 4D，只有 padding 被屏蔽
 - **没有 5.x 的 `is_causal` 后门**
 
-A 版测试直接验了这一点：改最后一个 token，
+实验版测试直接验了这一点：改最后一个 token，
 行1（causal）前面的 logits **逐位不变**，A2D 模型前面的 logits 变化 0.92。
 
-## 9.5 A 版实测
+## 9.5 实验版实测
 
 ```
 [hf-dllm-a2d-example] loss 5.7631 -> 5.2761   eval 4.9765
@@ -95,11 +95,11 @@ steps = math.ceil(steps / num_blocks)                  # 8/4 = 2   ← 每块 2 
 
 而 `notes/03` §7 的语义是「每块的迭代步数」，两者**同一个标签含义不同**：
 
-| 配置 | dllm forward 次数 | A 版 sampler |
+| 配置 | dllm forward 次数 | 实验版 sampler |
 |---|---|---|
 | gen 32, block 8, steps 8 | **8** | **32** |
 
-A 版实测（同样 32 次 forward）：
+实验版实测（同样 32 次 forward）：
 
 ```
 手写 sampler   48.6 ms      MDLMSampler   101.0 ms      2.1x
