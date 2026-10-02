@@ -36,6 +36,80 @@
 **新路线是本项目要验的变体**：A2D 在裸文本上学会双向去噪，再用 SFT 教对话。
 两条路线各有对方无法推断的失败模式，所以都做（见 §2 G3）。
 
+### 1.3 模型命名规则
+
+**名字就是 pipeline**。从左到右读，就是这个模型的完整来路。
+
+```
+<family>-<size>[-<impl>][-<stage>]...
+```
+
+| 段 | 取值 | 含义 |
+|---|---|---|
+| `family` | `ar` / `dlm` / `qwen3` | AR / Direct-DLM / 现成 Qwen3 |
+| `size` | `3.2m` / `50m` / `0.6b` | 参数量，小写 m / b |
+| `impl` | `hf` / `native` | **模型怎么写的**：用 `transformers` / 纯 torch |
+| `stage` | `sft` / `mini_a2d` / `dllm_a2d` / `dpo` | 训练阶段，按发生顺序追加 |
+
+**规则**
+
+1. **`-` 分段，`_` 只出现在「实现 × 阶段」内部**：`mini_a2d` 是一个整体，不再拆。
+2. **每个阶段加一段**，顺序就是执行顺序，不可重排。
+3. **pretrain 不占段**：`ar-3.2m-hf` 就是 pretrain 完成后的权重。
+4. **`sft` 的目标函数由前一段决定**，不另写：前段是 `ar-*` → next-token CE；
+   前段是 `*_a2d` / `dlm-*` → masked CE。所以 `ar-3.2m-hf-sft` 和
+   `ar-3.2m-hf-mini_a2d-sft` 都是 SFT，objective 不同而名字不必区分。
+5. **`impl` 只对自训家族（`ar-` / `dlm-`）要求**；`qwen3-` 固定用
+   `transformers`，不写。
+6. **家族名隐含 tokenizer track**：`ar-` / `dlm-` ⇒ 6400-vocab track；
+   `qwen3-` ⇒ Qwen3 track。
+7. **实验版 checkpoint 加 `-example` 后缀**：`checkpoints/ar-3.2m-hf-mini_a2d-example/`。
+   名字其余部分与实践版完全相同，唯一区别就是有这个后缀。
+
+**四条基准例子**
+
+| 名字 | pipeline | 含义 |
+|---|---|---|
+| `ar-50m-native-sft-mini_a2d` | pretrain(AR,native) → SFT → A2D(minimind) | **原路线** |
+| `ar-50m-native-mini_a2d-sft` | pretrain(AR,native) → A2D(minimind) → SFT | **新路线** |
+| `dlm-50m-sft` | Direct-DLM pretrain → SFT | G2 对照 |
+| `qwen3-0.6b-mini_a2d` | Qwen3-0.6B → A2D(minimind) | G4 |
+
+**实验版（Tier 0）完整清单**（实践版把 `3.2m` 换成实测后的 size）
+
+| 名字 | 组 | 状态 |
+|---|---|---|
+| `ar-3.2m-hf` | G1 | ✅ eval 4.6356 |
+| `ar-3.2m-native` | G1 | ✅ eval 4.6283 |
+| `ar-3.2m-hf-sft` | G3 对照 | ⬜ P0 |
+| `ar-3.2m-native-sft` | G3 对照 | ⬜ P0 |
+| `ar-3.2m-hf-mini_a2d` | G2/G3 新 | ✅ eval 4.9723 |
+| `ar-3.2m-native-mini_a2d` | G2/G3 新 | ✅ eval 4.9692 |
+| `ar-3.2m-hf-dllm_a2d` | G5 | ✅ eval 4.9765 |
+| `ar-3.2m-native-dllm_a2d` | G5 | ✅ eval 4.9728 |
+| `ar-3.2m-hf-mini_a2d-sft` | G3 新路线 | ⬜ P0 |
+| `ar-3.2m-native-mini_a2d-sft` | G3 新路线 | ⬜ P0 |
+| `ar-3.2m-hf-dllm_a2d-sft` | G3/G5 | ⬜ P1 |
+| `ar-3.2m-native-dllm_a2d-sft` | G3/G5 | ⬜ P1 |
+| `ar-3.2m-hf-sft-mini_a2d` | G3 原路线 | ⬜ P0 |
+| `ar-3.2m-native-sft-mini_a2d` | G3 原路线 | ⬜ P0 |
+| `ar-3.2m-hf-sft-dllm_a2d` | G3/G5 原路线 | ⬜ P1 |
+| `ar-3.2m-native-sft-dllm_a2d` | G3/G5 原路线 | ⬜ P1 |
+| `dlm-3.2m-hf` | G2 | ✅ eval 5.6427 |
+| `dlm-3.2m-native` | G2 | ✅ eval 5.6351 |
+| `dlm-3.2m-hf-sft` | G2 | ⬜ P2 |
+| `dlm-3.2m-native-sft` | G2 | ⬜ P2 |
+| `qwen3-0.6b-mini_a2d` | G4 | ✅ eval 4.8166 |
+| `qwen3-0.6b-dllm_a2d` | G4 | ✅ eval 4.8013 |
+| `qwen3-0.6b-mini_a2d-sft` | G4 | ⬜ P1 |
+
+**两处偏离你的示例，需要确认**
+
+| 你的示例 | 我写的 | 原因 |
+|---|---|---|
+| `dlm-size-sft` | `dlm-3.2m-hf-sft` | Direct-DLM 也有 hf / native 两个实现（实验版格5/格8），不带 `impl` 分不开 |
+| — | 加 `dpo` 段 | RL 阶段目前只排在 P2，先把位置定下来 |
+
 ---
 
 ## 2. 五组对比
@@ -297,38 +371,29 @@ notes/ logs/ scripts/patches/
 
 ### 8.1 实验版（AI 写，`example/`，Tier 0 3.2M）
 
+模型名见 §1.3；下表是「哪一格产出哪个名字」。
+
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
-| **ar-hf**<br>`transformers` | ✅ 格1 · eval 4.6356 | ✅ 格3/4 · eval 4.97 | ⬜ **P0** | ⬜ P2 |
-| **ar-native**<br>纯 torch | ✅ 格2 · eval 4.6283 | ✅ 格6/7 · eval 4.97 | ⬜ **P0** | ⬜ P2 |
-| **qwen3-0.6b**<br>600M + LoRA | — 用现成 checkpoint | ✅ 格9/10 · eval 4.80 | ⬜ P1 | ⬜ P2 |
-| **direct-dlm**<br>随机初始化 | ✅ 格5/8 · eval 5.64 | — 本来就是 DLM | ⬜ P2 | — DLM 无序列 logprob |
+| **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ⬜ **P0** | `…-sft-dpo` ⬜ P2 |
+| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ⬜ P1 | ⬜ P2 |
+| **dlm**（直接训 DLM） | `dlm-3.2m-{hf,native}` ✅ | — 本来就是 DLM | `dlm-3.2m-{hf,native}-sft` ⬜ P2 | — DLM 无序列 logprob |
 
 ### 8.2 实践版（你写，根目录，Tier 1 ~50M / ctx 512）
 
+模型名把 `3.2m` 换成实测后的 size（如 `50m`）。
+
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
-| **ar-hf** | `models/hf_qwen/`<br>`training/ar_hf/` | `training/a2d_minimind/`（不用包）<br>`training/a2d_dllm/`（用包） | `training/sft_ar_hf/` | `training/dpo_ar_hf/` |
-| **ar-native** | `models/minimind_qwen/`<br>`training/ar_native/` | ↑ **同一对目录**，`--base` 切 | `training/sft_ar_native/` | `training/dpo_ar_native/` |
+| **ar-hf** | `models/hf_qwen/`+`training/ar_hf/` | `training/a2d_minimind/`（不用包）<br>`training/a2d_dllm/`（用包） | `training/sft_ar_hf/` | `training/dpo_ar_hf/` |
+| **ar-native** | `models/minimind_qwen/`+`training/ar_native/` | ↑ **同一对目录**，`--base` 切 | `training/sft_ar_native/` | `training/dpo_ar_native/` |
 | **qwen3-0.6b** | — | ↑ 同一对目录，行3 分支（LoRA） | 同 sft 目录，LoRA | ⬜ P2 |
-| **direct-dlm** | `training/direct_dlm/` | — | 同 sft 目录 | — |
+| **dlm** | `training/direct_dlm/` | — | 同 sft 目录 | — |
 
 **a2d / sft 三个 base 共用同一份代码**：`training/a2d_*/` 吃任意 AR checkpoint，
 `--base` 切换。A/B 的轴是**用不用包**，不是加载哪个 base。
 
-### 8.3 两条路线在网格上的位置
-
-```
-原路线： ar-hf-sft ──A2D──▶ dllm-a2d ──(chat)──┐
-         ar-native-sft ─A2D─▶ native-a2d ────────┤ 对照组：ar-sft ──(chat)──┘
-                                                  │
-新路线： ar-hf ──A2D──▶ hf-a2d ──SFT──▶ (chat) ───┤
-         ar-native ──A2D──▶ native-a2d ─SFT─▶ ───┘
-```
-
-G3 的比较对象就是这两条线的「能 chat」四条门槛。
-
-### 8.4 依赖顺序
+### 8.3 依赖顺序
 
 ```
 G1 (ar-hf, ar-native pretrain)
@@ -338,7 +403,7 @@ G1 (ar-hf, ar-native pretrain)
         └─▶ A2D ──▶ SFT ──────────────▶ 新路线
 ```
 
-### 8.5 对拍命令
+### 8.4 对拍命令
 
 | 任务 | 命令 | 判定 |
 |---|---|---|
