@@ -330,6 +330,23 @@ def section_tokenizer_report() -> None:
         check("header has every column", all(c in header for c in COLUMNS),
               f"{len(COLUMNS)} columns")
         check("rep-4 column present", "rep-4" in text)
+
+        # A shorter run must not replace the canonical row: a 6-step debug run
+        # overwrote cell 1's 200-step row once, and the wrong numbers were
+        # committed before anyone noticed.
+        append_result("test-cell", "b", "m", 2, 200, rep4=0.5)
+        long_row = [ln for ln in RESULTS.read_text().splitlines()
+                    if ln.startswith("| test-cell |")][0]
+        append_result("test-cell", "b", "m", 3, 6, rep4=0.1)
+        kept = [ln for ln in RESULTS.read_text().splitlines()
+                if ln.startswith("| test-cell |")][0]
+        check("shorter run does not overwrite the longer one", kept == long_row,
+              kept.split("|")[5].strip() + " steps")
+        append_result("test-cell", "b", "m", 3, 6, rep4=0.1, force=True)
+        forced = [ln for ln in RESULTS.read_text().splitlines()
+                  if ln.startswith("| test-cell |")][0]
+        check("force=True overrides the guard", forced != long_row,
+              forced.split("|")[5].strip() + " steps")
     finally:
         if saved is None:
             RESULTS.unlink(missing_ok=True)

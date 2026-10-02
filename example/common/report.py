@@ -30,12 +30,17 @@ def _fmt(value) -> str:
 def append_result(cell: str, base: str, method: str, params: int, steps: int,
                   loss: dict | None = None, train_tps: float | None = None,
                   wall_tps: float | None = None, eval_loss: float | None = None,
-                  rep4: float | None = None, notes: str = "") -> Path:
-    """Upsert one row per cell.
+                  rep4: float | None = None, notes: str = "",
+                  force: bool = False) -> Path:
+    """Upsert one row per cell, with the canonical row protected.
 
-    Replace rather than append: a rerun of the same cell (a quick smoke, a
-    resumed run) must not leave two rows with different step counts and no way
-    to tell which one RESULTS.md is quoting.
+    Two rules, both learned the hard way:
+
+    * replace rather than append -- a rerun of the same cell must not leave two
+      rows with different step counts and no way to tell which one is quoted;
+    * a run with *fewer* steps does not overwrite one with more -- a 6-step
+      debug run replaced cell 1's 200-step row, and the wrong numbers sat in
+      git until the next full smoke happened to overwrite them back.
     """
     loss = loss or {}
     row = [
@@ -50,7 +55,8 @@ def append_result(cell: str, base: str, method: str, params: int, steps: int,
         RESULTS.write_text(
             "# RESULTS — A 版 smoke 实测\n\n"
             "由 `example/common/report.py` 自动追加，不要手改。\n\n"
-            "每格一行，重跑会覆盖旧行。Tier 0 · 只验 pipeline，不看模型能力。\n\n"
+            "每格一行。**步数更少的 run 不会覆盖步数更多的行**。\n"
+            "Tier 0 · 只验 pipeline，不看模型能力。\n\n"
             "| " + " | ".join(COLUMNS) + " |\n"
             + "|" + "|".join(["---"] * len(COLUMNS)) + "|\n"
         )
@@ -58,10 +64,26 @@ def append_result(cell: str, base: str, method: str, params: int, steps: int,
     lines = RESULTS.read_text().splitlines()
     prefix = f"| {cell} |"
     for i, existing in enumerate(lines):
-        if existing.startswith(prefix):
-            lines[i] = line
-            break
+        if not existing.startswith(prefix):
+            continue
+        old_steps = _steps_of(existing)
+        if old_steps is not None and steps < old_steps and not force:
+            print(f"[RESULTS] keeping the {old_steps}-step row for {cell}; "
+                  f"this run had {steps} (pass force=True to overwrite)")
+            return RESULTS
+        lines[i] = line
+        break
     else:
         lines.append(line)
     RESULTS.write_text("\n".join(lines) + "\n")
     return RESULTS
+
+
+def _steps_of(line: str) -> int | None:
+    parts = [p.strip() for p in line.strip("|").split("|")]
+    if len(parts) < 5:
+        return None
+    try:
+        return int(parts[4].replace(",", ""))
+    except ValueError:
+        return None
