@@ -29,12 +29,15 @@ from __future__ import annotations
 import json
 import os
 
+import numpy as np
+
 # Must be set before any from_pretrained call; the hub cache lives on /mnt/extra.
 os.environ.setdefault("HF_HOME", "/mnt/extra/hf")
 
 import torch
 
 from common.config import ROOT
+from common.sft import SFTData
 
 CELL_DLLM = "qwen3-0.6b-dllm_a2d"
 CELL_MINIMIND = "qwen3-0.6b-mini_a2d"
@@ -154,6 +157,43 @@ def build_blocks(tokenizer, n_docs: int = 2000, block_size: int = BLOCK_SIZE,
     tensor = torch.tensor(ids[:usable], dtype=torch.int32).reshape(-1, block_size)
     g = torch.Generator().manual_seed(seed)
     return tensor[torch.randperm(tensor.shape[0], generator=g)]
+
+
+def build_sft_data(tokenizer, n_docs: int = 4000, block_size: int = BLOCK_SIZE,
+                    raw: Path | None = None):
+    """Flatten `sft_t2t_mini.jsonl` on the **Qwen** tokenizer, with loss spans.
+
+    Row 3 cannot reuse the 6400-vocab prepared corpus at all: SPEC 3.3 keeps the
+    two tracks' token ids apart, and the SFT spans have to come from the same
+    tokenizer the model speaks. `common.sft` supplies the span machinery and takes
+    the encoder as a parameter, so the template is identical on both tracks and
+    only the ids differ.
+
+    Qwen3 has no BOS (`bos_token_id is None`) and its EOS is
+    `<|endoftext|>` = 151643, while on the 6400 track id 1 is `<|im_start|>`
+    and id 2 is an ordinary BPE token. Using the 6400 ids here would put
+    meaningful text in meaningless positions, so all three ids are taken from
+    the tokenizer.
+    """
+    from common.sft import IGNORE, build_sft_blocks
+
+    def enc(text: str) -> list[int]:
+        return tokenizer.encode(text, add_special_tokens=False)
+
+    src = raw or (ROOT / "data" / "raw" / "minimind_dataset" / "sft_t2t_mini.jsonl")
+    # bos=None: Qwen3 has no BOS, and id 1 on this tokenizer is `<|im_start|>`,
+    # a real token. Prepending the 6400 track's BOS would put a meaningful token
+    # where the block is supposed to just start.
+    arr, spans, stats = build_sft_blocks(src, block_size, max_docs=n_docs,
+                                         enc=enc, bos=None,
+                                         eos=tokenizer.eos_token_id,
+                                         pad_id=tokenizer.pad_token_id)
+    labels = np.full(arr.shape, IGNORE, dtype=np.int64)
+    for i, row in enumerate(spans):
+        for a, b in row:
+            labels[i, a:b] = arr[i, a:b]
+    blocks = torch.from_numpy(arr.astype(np.int32))
+    return SFTData(blocks, spans, block_size, src)
 
 
 def special_ids(tokenizer) -> dict:

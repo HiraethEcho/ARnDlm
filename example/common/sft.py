@@ -77,7 +77,7 @@ class Turn:
         return f"{self.header()}{self.body()}\n"
 
 
-def _turn_ids(turn: Turn) -> tuple[list[int], int]:
+def _turn_ids(turn: Turn, enc=encode) -> tuple[list[int], int]:
     """(ids to append, length of the supervised body).
 
     The header and the body are encoded **separately and appended separately**,
@@ -88,29 +88,42 @@ def _turn_ids(turn: Turn) -> tuple[list[int], int]:
     the loss still looks like a loss -- so it is worth stating why the obvious
     implementation is wrong.
 
-    Consequence: the ids we append are not exactly `encode(turn.text())`. They
+    Consequence: the ids we append are not exactly `enc(turn.text())`. They
     decode to the same characters (section 2 of the test checks that), and the
     span is exact by construction.
+
+    `enc` is a parameter so the Qwen3 row can flatten the same SFT corpus on its
+    own tokenizer track (SPEC 3.3: the two tracks' token ids are not comparable).
     """
-    head = encode(turn.header())
-    body = encode(turn.body())
+    head = enc(turn.header())
+    body = enc(turn.body())
     return head + body, len(body)
 
 
-def _pack(turns: list[Turn], block_size: int, atomic: bool = True):
-    """Encode turns into whole-turn blocks. Returns [(ids, spans), ...]."""
+def _pack(turns: list[Turn], block_size: int, atomic: bool = True, enc=encode,
+          bos: int | None = C.BOS, eos: int = C.EOS):
+    """Encode turns into whole-turn blocks. Returns [(ids, spans), ...].
+
+    `bos`/`eos` are the block opener and the turn separator, and they are
+    parameters because the two tokenizer tracks number their specials completely
+    differently (SPEC 3.3). On Qwen3, id 1 is `<|im_start|>` and id 2 is an
+    ordinary BPE token, so the 6400 track's ids become meaningful text in a Qwen
+    block. Qwen3 has no BOS (`bos_token_id is None`) so `bos=None` there; its EOS
+    is `<|endoftext|>` = 151643. Turn spans are relative to the block start.
+    """
     blocks: list[tuple[list[int], list[tuple[int, int]]]] = []
-    cur: list[int] = [C.BOS]
+    cur: list[int] = [bos] if bos is not None else []
     cur_spans: list[tuple[int, int]] = []
 
     def flush():
         nonlocal cur, cur_spans
         if len(cur) > 1 and cur_spans:
             blocks.append((cur, cur_spans))
-        cur, cur_spans = [C.BOS], []
+        cur = ([bos] if bos is not None else [])
+        cur_spans = []
 
     for turn in turns:
-        whole, body_len = _turn_ids(turn)
+        whole, body_len = _turn_ids(turn, enc)
         need = len(whole) + 1                    # the turn plus its closing EOS
         # cur already holds a BOS, so the block total is len(cur) + need. Writing
         # `len(cur) - 1 + need` here lets a block reach block_size + 1, which the
@@ -134,14 +147,14 @@ def _pack(turns: list[Turn], block_size: int, atomic: bool = True):
                 cur.extend(whole[:room])
                 if turn.supervised and start < len(cur):
                     cur_spans.append((start, len(cur)))
-                cur.append(C.EOS)
+                cur.append(eos)
                 flush()
                 continue
         start = len(cur) + (len(whole) - body_len if turn.supervised else 0)
         cur.extend(whole)
         if turn.supervised:
             cur_spans.append((start, len(cur)))
-        cur.append(C.EOS)
+        cur.append(eos)
     flush()
     return blocks
 
@@ -154,7 +167,8 @@ def flatten_dialogue(turns: list[Turn], block_size: int,
 
 
 def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
-                     max_docs: int = 0):
+                     max_docs: int = 0, enc=encode, bos: int | None = C.BOS,
+                     eos: int = C.EOS, pad_id: int = C.PAD):
     """jsonl of conversations -> (blocks [n, L] int32, spans, stats).
 
     `n_dropped_turns_with_thinking` is the number the reviewer should look at
@@ -178,14 +192,19 @@ def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
                           reasoning=m.get("reasoning_content"))
                      for m in json.loads(line)["conversations"]]
             before = len(blocks)
-            for ids, sp in _pack(turns, block_size):
-                if len(blocks) >= max_blocks:
+            for ids, sp in _pack(turns, block_size, enc=enc, bos=bos, eos=eos):
+                # `max_blocks=0` means unlimited, so it has to be tested for
+                # truthiness first. `len(blocks) >= 0` is true on the very first
+                # block, which silently produced zero blocks -- and only for
+                # callers that pass 0, which is why the 6400 track (always 4096)
+                # never saw it.
+                if max_blocks and len(blocks) >= max_blocks:
                     break
-                blocks.append(ids + [C.PAD] * (block_size - len(ids)))
+                blocks.append(ids + [pad_id] * (block_size - len(ids)))
                 spans.append(sp)
                 used.append(len(ids))
             for t in turns:
-                if len(encode(t.text())) + 2 > block_size:
+                if len(enc(t.text())) + 2 > block_size:
                     n_long += 1
                     n_long_think += bool(t.reasoning)
             if len(blocks) == before:

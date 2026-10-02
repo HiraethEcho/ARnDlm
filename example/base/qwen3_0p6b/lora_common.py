@@ -40,12 +40,30 @@ def forward_fn(model):
 
 def make_minimind_loss(model, mask_id: int, generator: torch.Generator | None = None,
                        epsilon: float = 0.0):
+    """A2D loss on the LoRA'd Qwen3, accepting both batch shapes.
+
+    [B, L] is cells 9/10 (every position supervised). [2, B, L] is the SFT cell:
+    row 1 carries IGNORE outside the assistant spans, and `corrupt(valid=...)`
+    restricts both the masking and the denominator to that half. Row 3 has its own
+    token ids, so this is the row's copy rather than the 6400 track's -- but the
+    span logic is common/sft.py's and is not reimplemented here.
+    """
+    from common.sft import IGNORE
+
     def loss_fn(model, batch: torch.Tensor):
-        t = sample_t(batch.shape[0], batch.device, generator, epsilon=epsilon)
+        if batch.dim() == 3:
+            ids, labels = batch[0], batch[1]
+            valid = labels != IGNORE
+            n_target = int(valid[:, 1:].sum())
+        else:
+            ids, labels, valid = batch, batch, None
+            n_target = int(ids.shape[0] * (ids.shape[1] - 1))
+        t = sample_t(ids.shape[0], ids.device, generator, epsilon=epsilon)
         t_safe = t.clamp_min(1e-3)
-        x_t, masked = corrupt(batch, t, mask_id, generator)
-        return a2d_loss(forward_fn(model)(x_t), batch, masked, t_safe), {
-            "t_mean": float(t.mean())}
+        x_t, masked = corrupt(ids, t, mask_id, generator, valid=valid)
+        loss = a2d_loss(forward_fn(model)(x_t), ids, masked, t_safe, valid=valid)
+        return loss, {"t_mean": float(t.mean()), "target_tokens": n_target,
+                      "skipped": n_target == 0}
     return loss_fn
 
 

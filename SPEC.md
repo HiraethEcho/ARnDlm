@@ -137,7 +137,7 @@ ar-3.2m-hf-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 | `dlm-3.2m-dllm-sft` | G2 | ⬜ P2 |
 | `qwen3-0.6b-mini_a2d` | G4 | ✅ eval 4.8166 |
 | `qwen3-0.6b-dllm_a2d` | G4 | ✅ eval 4.8013 |
-| `qwen3-0.6b-mini_a2d-sft` | G4 | ⬜ P1 |
+| `qwen3-0.6b-mini_a2d-sft` | G4 | ✅ eval 3.8151|
 
 **两处偏离你的示例，需要确认**
 
@@ -428,7 +428,7 @@ notes/ logs/ scripts/patches/
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
 | **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ✅ · `{mini,dllm}_a2d-sft` ✅ · `sft-{mini,dllm}_a2d` ✅ | `…-sft-dpo` ⬜ P2 |
-| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ⬜ P1（M7） | ⬜ P2 |
+| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ✅ | ⬜ P2 |
 | **dlm**（直接预训练 DLM） | `dlm-3.2m-hf` ✅<br>`dlm-3.2m-dllm` ✅ | — 本来就是 DLM | `dlm-3.2m-{hf,dllm}-sft` ⬜ P2 | — DLM 无序列 logprob |
 
 ### 8.2 实践版（你写，根目录，Tier 1 ~50M / ctx 512）
