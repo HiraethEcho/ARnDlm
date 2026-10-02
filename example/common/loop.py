@@ -102,6 +102,7 @@ class Loop:
         n_tokens = self.cfg.batch_size * data.block_size
         limit = self.cfg.steps if max_steps is None else min(self.cfg.steps, self.step + max_steps)
         extra: dict = {}
+        totals: dict = {}
         # Snapshot the RNG the moment training stops. Evaluation and sampling
         # below both draw from it, and for a DLM cell the *loss* draws from it
         # too -- saving the state after them would resume with a different
@@ -114,6 +115,14 @@ class Loop:
             idx = stream.next()
             batch = data.batch(idx).to(self.device, non_blocking=True)
             value, step_seconds, extra = self._train_step(batch)
+            if isinstance(extra, dict) and "target_tokens" in extra:
+                # `extra` below is the *last* step's, which is per-step. For the
+                # SFT rows the interesting number is the run total -- how many
+                # tokens were actually supervised -- and "how many steps did
+                # nothing", which is the number that says the corpus was starved.
+                totals["target_tokens"] = totals.get("target_tokens", 0) + extra["target_tokens"]
+                totals["skipped_steps"] = totals.get("skipped_steps", 0) + bool(
+                    extra.get("skipped"))
 
             self.step += 1
             self.losses.append(value)
@@ -149,6 +158,7 @@ class Loop:
                         if self.device.type == "cuda" else None),
             "config": as_dict(self.cfg),
             "extra": extra if isinstance(extra, dict) else {},
+            "totals": totals,
         }
         if self.out_dir:
             self._write_logs(summary)
