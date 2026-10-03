@@ -28,6 +28,10 @@
 | C1–C7 对拍 | **DONE** — C7（SFT 路径 parity）= **0.000e+00** |
 | C4 resume 等价性 | **DONE** — 40 步 vs 30+resume+10 逐步差 0.0 |
 | 实验版教学计划 | **DONE** — `example/teach/` step 0-13 全部细化 |
+| **SFT 列 + DPO 列** | **DONE** — 19 格 · 展平器 / assistant spans / assistant-only loss / DPO 目标 |
+| **G3 结论** | **DONE** — 原路线（SFT→A2D→SFT）比新路线（A2D→SFT）**优约 0.40 nat**，四个实现对全同向 |
+| 一键复现 | `bash example/smoke_all.sh` + `bash example/smoke_sft.sh`（各 10 + 19 格，均支持 `--cells-only`） |
+| DPO 在 dlm 行 | **放弃** — 掩码扩散没有序列 logprob，需要 ELBO 形式化（研究问题，非配置开关） |
 | 实践版实现 | **PENDING** — 七个目录只有 docstring，按 `example/teach/` 逐步写 |
 | Tier 1 定档 | **READY** — 吞吐阶梯已测完（`configs/practical/tier1.yaml` 已填），缺 SFT 列的 6 格 |
 

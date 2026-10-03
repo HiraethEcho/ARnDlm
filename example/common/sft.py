@@ -172,11 +172,21 @@ def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
     """jsonl of conversations -> (blocks [n, L] int32, spans, stats).
 
     `n_dropped_turns_with_thinking` is the number the reviewer should look at
-    first: at ctx 128 almost every message carrying `reasoning_content` is longer
-    than a whole block, so turn-atomic dropping discards all of them and option A
-    ("supervise the think block") delivers nothing. Measured on 5,000 dialogues:
-    19.2% of messages carry thinking, 20.9% do not fit 128 tokens, and 18.6% of
-    all messages are think-bearing ones that get dropped. See ISSUES.md OPEN-7.
+    first, and it is why `reasoning_survival_rate` exists in meta.json rather than
+    a bare `reasoning_in_loss: true`.
+
+    At ctx 128 almost every message carrying `reasoning_content` is longer than a
+    whole block (median 276 tokens), so turn-atomic dropping discards them: a
+    5,000-dialogue sample gives **3.0% survival**. GOAL.md Q4 chose option A
+    (supervise the think block); at this context length that option delivers
+    almost nothing. Measured survival by block size:
+
+        block  128   192   256   384   512
+        surv  3.0% 19.5% 41.1% 82.4% 97.7%
+
+    The user accepted 3.0% for the experimental version -- it is a smoke test, not
+    a chat model. The practical version should not: its tier1.yaml is still empty,
+    so giving SFT a longer context costs nothing there. ISSUES.md OPEN-7.
     """
     blocks: list[list[int]] = []
     spans: list[list[tuple[int, int]]] = []
@@ -221,6 +231,21 @@ def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
                         "mean_used_tokens": round(float(np.mean(used)), 1) if used else 0.0}
 
 
+def _n_think_blocks(blocks, spans) -> int:
+    """How many blocks actually kept a think block. Counted from the data, not
+    estimated -- the survival rate in meta.json is what OPEN-7 turns on, so it has
+    to be measured from the blocks that were emitted."""
+    from .tokenizer import decode
+
+    n = 0
+    for i, row in enumerate(spans):
+        for a, b in row:
+            if THINK_OPEN in decode(blocks[i, a:b].tolist()):
+                n += 1
+                break
+    return n
+
+
 def write_prepared(jsonl: Path, out_dir: Path, block_size: int,
                    max_blocks: int = 0, max_docs: int = 0) -> dict:
     """Materialise a prepared directory the loader can memmap.
@@ -244,12 +269,21 @@ def write_prepared(jsonl: Path, out_dir: Path, block_size: int,
             np.asarray(rows, dtype=np.int64).reshape(-1, 3))
     lengths = np.asarray([sum(b - a for a, b in row) for row in spans], dtype=np.int64)
     np.save(out / "supervised_tokens.npy", lengths)
+    kept_think = _n_think_blocks(arr, spans)
+    dropped_think = stats["n_dropped_turns_with_thinking"]
+    survival = round(kept_think / max(kept_think + dropped_think, 1), 4)
     meta = dict(stats, vocab_size=C.VOCAB, block_size=block_size,
                 n_spans=int(sum(len(r) for r in spans)),
                 supervised_tokens=int(lengths.sum()),
                 mean_supervised_per_block=round(float(lengths.mean()) if lengths.size else 0.0, 1),
                 source=str(Path(jsonl).name),
-                reasoning_in_loss=True, loss_on_assistant_only=True,
+                loss_on_assistant_only=True,
+                # Option A was chosen, but at ctx 128 it keeps almost none of the
+                # think content. Writing `reasoning_in_loss: true` here would be
+                # the kind of field nobody re-checks; these two say what is
+                # actually in the corpus.
+                reasoning_option="A (fold <thinking> into the assistant text)",
+                reasoning_survival_rate=survival,
                 block_atomic=True)
     # Turn-atomicity buys correct spans at the cost of wasted padding: a block is
     # flushed early whenever the next turn does not fit. `mean_block_fill` is the

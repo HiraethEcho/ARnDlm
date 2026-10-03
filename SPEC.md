@@ -137,9 +137,9 @@ ar-3.2m-hf-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 | `ar-3.2m-native-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0485 |
 | `dlm-3.2m-hf` | G2 | ✅ eval 5.6427 |
 | `dlm-3.2m-dllm` | G2 | ✅ eval 5.6460|
-| `dlm-3.2m-hf-sft` | G2 | ⬜ P2 |
+
 | `ar-3.2m-hf-sft-dpo` | G3 DPO 对照 | ✅ 偏好准确率 0.0 → 0.75 |
-| `dlm-3.2m-dllm-sft` | G2 | ⬜ P2 |
+
 | `qwen3-0.6b-mini_a2d` | G4 | ✅ eval 4.8166 |
 | `qwen3-0.6b-dllm_a2d` | G4 | ✅ eval 4.8013 |
 | `qwen3-0.6b-mini_a2d-sft` | G4 | ✅ eval 3.8151|
@@ -449,8 +449,8 @@ notes/ logs/ scripts/patches/
 | base | pretrain | a2d | sft | rl |
 |---|---|---|---|---|
 | **ar**（hf / native） | `ar-3.2m-{hf,native}` ✅ | `ar-3.2m-{hf,native}-{mini,dllm}_a2d` ✅ | `…-sft` ✅ · `{mini,dllm}_a2d-sft` ✅ · `sft-{mini,dllm}_a2d` ✅ · `sft-{mini,dllm}_a2d-sft` ✅ | `…-sft-dpo` ✅ `ar-3.2m-hf-sft-dpo`（native 版与 dlm 版未做，见 OPEN-10） |
-| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ✅ | ⬜ P2 |
-| **dlm**（直接预训练 DLM） | `dlm-3.2m-hf` ✅<br>`dlm-3.2m-dllm` ✅ | — 本来就是 DLM | `dlm-3.2m-{hf,dllm}-sft` ⬜ P2 | — DLM 无序列 logprob |
+| **qwen3-0.6b** | — 用现成 checkpoint | `qwen3-0.6b-{mini,dllm}_a2d` ✅ | `…-sft` ✅ | ⬜ **放弃**（OPEN-10 同理） |
+| **dlm**（直接预训练 DLM） | `dlm-3.2m-hf` ✅<br>`dlm-3.2m-dllm` ✅ | — 本来就是 DLM | `dlm-3.2m-{hf,dllm}-sft` ✅ | **放弃**（DPO）—— DLM 无序列 logprob |
 
 ### 8.2 实践版（你写，根目录，Tier 1 ~50M / ctx 512）
 
@@ -460,7 +460,7 @@ notes/ logs/ scripts/patches/
 |---|---|---|---|---|
 | **ar-hf** | `models/hf_qwen/`+`training/ar_hf/` | `training/a2d_minimind/`（不用包）<br>`training/a2d_dllm/`（用包） | `training/sft_ar_hf/` | `training/dpo_ar_hf/` |
 | **ar-native** | `models/minimind_qwen/`+`training/ar_native/` | ↑ **同一对目录**，`--base` 切 | `training/sft_ar_native/` | `training/dpo_ar_native/` |
-| **qwen3-0.6b** | — | ↑ 同一对目录，行3 分支（LoRA） | 同 sft 目录，LoRA | ⬜ P2 |
+| **qwen3-0.6b** | — | ↑ 同一对目录，行3 分支（LoRA） | 同 sft 目录，LoRA | **放弃**（DPO） |
 | **dlm** | `training/direct_dlm/`（手写 masked CE）<br>同一目录 + `dllm` 包（调 `MDLMTrainer`） | — | 同 sft 目录 | — |
 
 **a2d / sft 三个 base 共用同一份代码**：`training/a2d_*/` 吃任意 AR checkpoint，

@@ -22,7 +22,7 @@ import torch
 
 from common import config as C
 from common.cell import finish_cell
-from common.cli import add_common_args, resolve
+from common.cli import add_common_args, resolve, dlm_steps
 from common.loop import Loop
 from base.hf.a2d_dllm import DLLMLoss
 from base.qwen3_0p6b.common_qwen import (BASE, CELL_DLLM, LORA_R, build_a2d_lora,
@@ -79,7 +79,7 @@ def main() -> int:
                                              prompts_for(tokenizer), 32,
                                              mask_id=ids["mask"],
                                              block_size=args.block_size,
-                                             steps=args.dlm_steps,
+                                             steps=dlm_steps(args, args.dlm_steps),
                                              temperature=args.temperature),
         eval_batches=eval_batches,
         notes=f"LoRA r{LORA_R} q/k/v/o, {trainable_report(model)['ratio_pct']}% trainable, "

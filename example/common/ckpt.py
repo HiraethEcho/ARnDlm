@@ -45,6 +45,46 @@ def load_state_dict(path: Path | str) -> dict[str, torch.Tensor]:
     return load_file(str(f))
 
 
+def _fits(state: dict[str, torch.Tensor], model: torch.nn.Module) -> bool:
+    want = set(model.state_dict())
+    return all(k in want or k[len("model."):] in want
+               for k in state if k != "lm_head.weight")
+
+
+def load_into_any(model: torch.nn.Module, path: Path | str,
+                  prefix: str = "model.") -> dict:
+    """Load a checkpoint, tolerating one extra wrapper level.
+
+    `dlm-3.2m-dllm` wraps its backbone in a `Bidirectional` module to flip the
+    attention mask, so its state_dict carries an extra `model.` level that a plain
+    `Qwen3ForCausalLM` does not have. SFT-ing that cell means the wrapper is the
+    only difference.
+
+    Deciding by inspection rather than by guessing: try the keys as they are, and
+    only strip the prefix if that is what makes them fit. A blanket "strip
+    `model.`" is wrong in the other direction -- a plain Qwen3 checkpoint's keys
+    *all* start with `model.`, so stripping leaves `embed_tokens.weight` and the
+    load fails on the first key. Both failures are silent in the sense that the
+    right answer is not obvious from the error.
+    """
+    state = load_state_dict(path)
+    want = set(model.state_dict())
+    if all(k in want or k == "lm_head.weight" for k in state):
+        return load_into(model, state)
+
+    stripped = {k[len(prefix):] if k.startswith(prefix) else k: v
+                for k, v in state.items()}
+    if all(k in want or k == "lm_head.weight" for k in stripped):
+        if len(stripped) != len(state):
+            raise ValueError(f"stripping {prefix!r} lost keys: "
+                             f"{len(state)} -> {len(stripped)}")
+        return load_into(model, stripped)
+
+    raise ValueError(
+        f"{path}: {len(state)} keys fit neither as-is nor with {prefix!r} "
+        f"stripped. First keys: {sorted(state)[:3]} vs model {sorted(want)[:3]}")
+
+
 def _storage(t: torch.Tensor):
     return (t.data_ptr(), tuple(t.shape), tuple(t.stride()))
 

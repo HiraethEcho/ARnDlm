@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import config as C
 from common.cell import finish_cell
-from common.cli import add_common_args, resolve
+from common.cli import add_common_args, resolve, dlm_steps
 from common.loop import Loop
 from common.verify import verify_checkpoint
 from base.hf.direct_dlm_dllm import (BASE, CELL, METHOD, Bidirectional,
@@ -61,7 +61,7 @@ def main() -> int:
         loop, data, cell=CELL, base=BASE, method=METHOD,
         ckpt_dir=CKPT, run_dir=C.run_dir(CELL), config=config,
         sample_fn=lambda lp: sample_direct(lp.model.model, block_size=args.block_size,
-                                           steps=args.dlm_steps,
+                                           steps=dlm_steps(args, args.dlm_steps),
                                            temperature=args.temperature),
         eval_batches=eval_batches,
         notes=f"random init, dllm MDLMTrainer, lr {train_cfg.lr:.0e}, "

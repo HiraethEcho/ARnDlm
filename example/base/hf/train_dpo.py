@@ -43,9 +43,14 @@ from common.verify import verify_checkpoint
 from base.hf.model import SFT_PROMPTS, build_model, sample_sft
 
 METHOD = "AR-SFT-DPO"
+# cell -> upstream SFT checkpoint. Same script for both rows: the objective does
+# not care which implementation produced the weights it is refining.
+CELLS = {
+    "ar-3.2m-hf-sft-dpo": "ar-3.2m-hf-sft",
+    "ar-3.2m-native-sft-dpo": "ar-3.2m-native-sft",
+}
 CELL = "ar-3.2m-hf-sft-dpo"
-UPSTREAM = C.cell_dir("ar-3.2m-hf-sft")
-CKPT = C.cell_dir(CELL)
+BASE_LABEL = "Qwen-mini-HF"
 
 
 def make_dpo_loss(policy, reference, beta: float):
@@ -87,29 +92,54 @@ class PairData:
 def main() -> int:
     ap = add_common_args(argparse.ArgumentParser(__doc__), C.DLM_TRAIN,
                          default_max_blocks=0)
+    ap.add_argument("--cell", default=CELL, choices=sorted(CELLS),
+                    help="SPEC cell name; decides the row and the upstream SFT checkpoint")
     ap.add_argument("--max-pairs", type=int, default=4000,
                     help="cap pairs read from dpo.jsonl; most do not fit ctx 128")
     ap.add_argument("--beta", type=float, default=0.1)
     ap.add_argument("--no-verify", action="store_true")
-    ap.add_argument("--init-from", type=Path, default=UPSTREAM)
+    ap.add_argument("--init-from", type=Path)
     ap.add_argument("--init-random", action="store_true",
                     help="skip the SFT checkpoint (ablation)")
     args = ap.parse_args()
 
-    if not (args.init_random or (args.init_from / "model.safetensors").exists()):
-        print(f"FAIL  no upstream checkpoint at {args.init_from}; run "
-              f"{UPSTREAM.name} first or pass --init-random")
+    cell = args.cell
+    upstream = args.init_from or C.cell_dir(CELLS[cell])
+    if not (args.init_random or (upstream / "model.safetensors").exists()):
+        print(f"FAIL  no upstream checkpoint at {upstream}; run "
+              f"{CELLS[cell]} first or pass --init-random")
         return 1
 
-    policy = build_model(C.TIER0, seed=args.seed)
+    # The row comes from the cell name: a `native` cell that ran the transformers
+    # model would be a different experiment wearing the same name.
+    native = "-native-" in cell
+    if native:
+        from base.native.model import build_native_model, sample_native
+        builder = build_native_model
+        base_label = "Qwen-mini-MiniMind"
+        # The row decides the sampler too, not just the model. Row 2's sampler is
+        # a hand-rolled loop without a KV cache and reads `model.cfg` for the
+        # device; the transformers row's `generate` reads `model.device`. Swapping
+        # the builder and not the sampler gives
+        # "'NativeQwen3ForCausalLM' object has no attribute 'device'".
+        def sampler(model, **kw):
+            return sample_native(model, prompts=[f"user\n{p}\nassistant\n"
+                                                for p in SFT_PROMPTS], **kw)
+    else:
+        from base.hf.model import build_model, sample_sft
+        builder = build_model
+        base_label = BASE_LABEL
+        sampler = sample_sft
+
+    policy = builder(C.TIER0, seed=args.seed)
     source = "random init"
     if not args.init_random:
-        load_into(policy, load_state_dict(args.init_from))
-        source = args.init_from.name
+        load_into(policy, load_state_dict(upstream))
+        source = upstream.name
     # The reference is the SFT checkpoint, frozen: that is what DPO anchors to,
     # not the current weights.
-    reference = build_model(C.TIER0, seed=args.seed)
-    load_into(reference, load_state_dict(args.init_from if not args.init_random
+    reference = builder(C.TIER0, seed=args.seed)
+    load_into(reference, load_state_dict(upstream if not args.init_random
                                          else C.cell_dir("ar-3.2m-hf")))
     for p in reference.parameters():
         p.requires_grad_(False)
@@ -141,12 +171,12 @@ def main() -> int:
 
     stream = BlockStream(len(data), train_cfg.batch_size, seed=train_cfg.seed)
     loop = Loop(policy, train_cfg, make_dpo_loss(policy, reference, args.beta),
-                out_dir=C.run_dir(CELL))
+                out_dir=C.run_dir(cell))
     # Loop moves the policy to the device; the reference is ours to place, and
     # leaving it on the CPU is a device mismatch inside the embedding lookup.
     reference.to(loop.device)
 
-    config = {"cell": CELL, "base": "Qwen-mini-HF", "method": METHOD,
+    config = {"cell": cell, "base": base_label, "method": METHOD,
               "model": C.as_dict(C.TIER0), "train": C.as_dict(train_cfg),
               "init_from": source, "reference": "frozen SFT checkpoint",
               "beta": args.beta, "data": str(src), "corpus": stats,
@@ -154,9 +184,9 @@ def main() -> int:
               "note": "AR row only: a DLM has no sequence logprob (OPEN-10)"}
 
     summary = finish_cell(
-        loop, data, cell=CELL, base="Qwen-mini-HF", method=METHOD,
-        ckpt_dir=CKPT, run_dir=C.run_dir(CELL), config=config,
-        sample_fn=lambda lp: sample_sft(lp.model),
+        loop, data, cell=cell, base=base_label, method=METHOD,
+        ckpt_dir=C.cell_dir(cell), run_dir=C.run_dir(cell), config=config,
+        sample_fn=lambda lp: sampler(lp.model),
         eval_batches=None, stream=stream,
         notes=f"from {source}, DPO beta {args.beta}, {n_pair}/{stats['n_pairs']} pairs "
               f"fit ctx {C.BLOCK_SIZE}, ref = frozen SFT")
@@ -168,7 +198,7 @@ def main() -> int:
 
     ok = True
     if not args.no_verify:
-        report = verify_checkpoint(CKPT, lambda: build_model(C.TIER0, seed=0),
+        report = verify_checkpoint(C.cell_dir(cell), lambda: builder(C.TIER0, seed=0),
                                    loop.model, data, eval_batches, loop.device)
         print(f"  verify  {'OK' if report['ok'] else 'FAIL'}  "
               f"max|dlogit| {report.get('max_logit_delta', float('nan')):.2e}")

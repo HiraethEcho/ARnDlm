@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import math
 from pathlib import Path
 
 from . import config as C
@@ -32,7 +33,31 @@ def add_common_args(parser: argparse.ArgumentParser, train_cfg: C.TrainCfg,
                         help="frozen batches used for the eval loss in RESULTS")
     parser.add_argument("--resume", action="store_true",
                         help="continue from the cell's checkpoint instead of starting fresh")
+    # OPEN-3: the two implementations of `steps` mean different things and
+    # passing one to the other silently changes the work done.
+    #   --dlm-steps       per BLOCK (this project's convention, notes/03 §7)
+    #   --dlm-total-steps whole SEQUENCE, divided over the blocks
+    # dllm's own sampler already does the division internally
+    # (dllm/core/samplers/mdlm.py: `steps = ceil(steps / num_blocks)`), so
+    # --dlm-total-steps 8 and --dlm-steps 2 run the same number of forwards.
+    parser.add_argument("--dlm-total-steps", type=int, default=0,
+                        help="whole-sequence denoising budget; overrides --dlm-steps "
+                             "when set. 0 = use --dlm-steps as-is (per block)")
     return parser
+
+
+def dlm_steps(args, per_block: int, gen_len: int = 32, block_size: int = 8) -> int:
+    """Resolve `--dlm-total-steps` into the per-block number the samplers take.
+
+    One place, so the nine DLM sampling call sites cannot drift apart. Returns
+    `per_block` unchanged when no total budget was given, which is what every cell
+    did before this existed.
+    """
+    total = getattr(args, "dlm_total_steps", 0)
+    if not total:
+        return per_block
+    n_blocks = max(1, gen_len // block_size)
+    return max(1, math.ceil(total / n_blocks))
 
 
 def resolve(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, PackedData, list]:

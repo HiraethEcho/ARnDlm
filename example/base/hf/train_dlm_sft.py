@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import config as C
 from common.cell import finish_cell
-from common.ckpt import load_into, load_state_dict
+from common.ckpt import load_into_any
 from common.cli import add_common_args, resolve_sft
 from common.cli import resume as resume_from
 from common.loop import Loop
@@ -69,6 +69,10 @@ CELLS = {
     "ar-3.2m-hf-sft-dllm_a2d-sft": ("hf", "dllm", "ar-3.2m-hf-sft-dllm_a2d"),
     "ar-3.2m-native-sft-mini_a2d-sft": ("native", "minimind", "ar-3.2m-native-sft-mini_a2d"),
     "ar-3.2m-native-sft-dllm_a2d-sft": ("native", "dllm", "ar-3.2m-native-sft-dllm_a2d"),
+    # G2: a DLM pretrained from scratch, then SFT'd. Same script, no special
+    # case -- the upstream is just a Direct-DLM checkpoint instead of an A2D one.
+    "dlm-3.2m-hf-sft": ("hf", "minimind", "dlm-3.2m-hf"),
+    "dlm-3.2m-dllm-sft": ("hf", "dllm", "dlm-3.2m-dllm"),
 }
 
 
@@ -147,7 +151,7 @@ def main() -> int:
             print(f"FAIL  no upstream checkpoint at {upstream}; run "
                   f"{upstream.name} first or pass --init-random")
             return 1
-        load_into(model, load_state_dict(upstream))
+        load_into_any(model, upstream)
         source = upstream.name
 
     loop = Loop(model, train_cfg, loss_factory(model), out_dir=C.run_dir(args.cell))

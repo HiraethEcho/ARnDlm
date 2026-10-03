@@ -150,12 +150,52 @@ def section_original_route() -> None:
               str(C.cell_dir(derived)))
 
 
+# --------------------------------------------------- 5. --dlm-total-steps
+
+def section_dlm_steps() -> None:
+    print("\n[5] OPEN-3: --dlm-total-steps means the same work as --dlm-steps")
+    import argparse
+
+    from common.cli import dlm_steps
+
+    def args(**kw):
+        return argparse.Namespace(**kw)
+
+    # Unset -> per-block value passes through untouched. This is what every cell
+    # did before the flag existed, so it has to be the default.
+    check("no total -> per-block unchanged",
+          dlm_steps(args(dlm_total_steps=0), 8) == 8)
+    check("no total attribute at all -> per-block unchanged",
+          dlm_steps(argparse.Namespace(), 8) == 8)
+
+    # gen_len 32, block_size 8 -> 4 blocks.
+    check("total 32 over 4 blocks = 8 per block", dlm_steps(args(dlm_total_steps=32), 8) == 8)
+    check("total 8 over 4 blocks = 2 per block", dlm_steps(args(dlm_total_steps=8), 8) == 2)
+    check("rounding is up, like dllm's ceil",
+          dlm_steps(args(dlm_total_steps=9), 8) == 3, "9/4 = 2.25 -> 3")
+    check("a total below the block count still gives 1",
+          dlm_steps(args(dlm_total_steps=2), 8) == 1, "never 0, that would decode nothing")
+    check("block_size 16 halves the block count",
+          dlm_steps(args(dlm_total_steps=8), 8, gen_len=32, block_size=16) == 4,
+          "2 blocks of 16")
+
+    # The invariant that matters: total x block count must agree whichever way the
+    # caller expresses it.
+    for total in (8, 16, 32, 33, 64):
+        per = dlm_steps(args(dlm_total_steps=total), 8)
+        forwards = per * 4
+        check(f"total {total} -> {per}/block -> {forwards} forwards",
+              forwards >= total and forwards - total < 4,
+              "ceil must not overshoot by a whole block")
+
+
 def main() -> int:
     section_spec_names()
     section_importable()
     section_refuses_without_upstream()
     section_rows()
     section_original_route()
+    section_dlm_steps()
     print()
     if FAILS:
         print(f"FAIL ({len(FAILS)}): " + ", ".join(FAILS))

@@ -158,26 +158,34 @@ export SWANLAB_API_KEY=...
 
 没 export 时训练脚本要正常跑通, 只是不上传。
 
-## 跑实验版（`example/`，已全部完成）
+## 跑实验版（`example/`，29 格全通）
 
-实验版是参考实现，10 格全通。这是目前**唯一能直接跑**的训练代码。
+**两条命令跑完全部 29 格。** 都支持 `--cells-only`（跳过单元测试）和 `--quick`
+（20 步小语料，不是 RESULTS.md 引用的那次）。
 
 ```sh
-# 一次跑完 10 格 + 全部跨格对拍 + 写 RESULTS.md (约 25 min)
+# 一半：预训练 / A2D / Direct-DLM / LoRA   10 格 + C1..C6 + decode-bench (约 25 min)
 bash example/smoke_all.sh
 
-# 快版: 20 步 + 小语料 (约 8 min), 代码路径完全相同, 但不是 RESULTS.md 引用的那次
-bash example/smoke_all.sh --quick
+# 另一半：SFT 列 + DPO 列                   19 格 + C7          (约 25 min)
+bash example/smoke_sft.sh
 
-# 只跑对拍 (check 可选: c1..c6 / decode-bench / all)
-.venv/bin/python example/check_ab.py all
+# 共享机器上加 --cells-only：跳过单元测试。它们是故意重 CPU 的
+# （一节在 CPU 上训 20 步模型，另一节重新 tokenize 1.7 GB 语料）。
+bash example/smoke_all.sh --cells-only
+bash example/smoke_sft.sh --cells-only
 
-# 单个测试文件 (8 个, 失败非零退出 —— 不是 pytest, 环境里没装)
-.venv/bin/python example/tests/test_common.py
+# 单个测试文件 (13 个, 失败非零退出 —— 不是 pytest, 环境里没装)
+.venv/bin/python example/tests/test_sft_flatten.py
 
 # 单格调试 (Tier 0, 200 步, 几十秒)
 .venv/bin/python example/base/hf/train_ar.py
+.venv/bin/python example/base/hf/train_dlm_sft.py --cell ar-3.2m-hf-sft
 ```
+
+**decode 步数的两个语义**（OPEN-3）：`--dlm-steps` 是**每块**步数（本项目的约定），
+`--dlm-total-steps` 是**全序列**预算，会按块数摊薄（`ceil(total / num_blocks)`，
+与 dllm 内部一致）。`--dlm-total-steps 8` 在 4 块下等于 `--dlm-steps 2`。
 
 配置从 YAML 来，**代码里没有字面量**：
 

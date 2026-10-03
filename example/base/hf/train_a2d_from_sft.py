@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import config as C
 from common.cell import finish_cell
 from common.ckpt import load_into, load_state_dict
-from common.cli import add_common_args, resolve
+from common.cli import add_common_args, resolve, dlm_steps
 from common.cli import resume as resume_from
 from common.loop import Loop
 from common.verify import verify_checkpoint
@@ -144,7 +144,7 @@ def main() -> int:
         loop, data, cell=args.cell, base=base_label, method=method,
         ckpt_dir=C.cell_dir(args.cell), run_dir=C.run_dir(args.cell), config=config,
         sample_fn=lambda lp: sampler(lp.model, block_size=args.block_size,
-                                    steps=args.dlm_steps,
+                                    steps=dlm_steps(args, args.dlm_steps),
                                     temperature=args.temperature,
                                     top_k=args.top_k),
         eval_batches=eval_batches,

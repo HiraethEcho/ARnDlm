@@ -3,12 +3,12 @@
 **规则**：解不了就记在这里（原因 / 影响 / 回头计划），继续做下一格，收尾时清理。
 **状态**：`OPEN` / `DEFERRED`（明确不做）/ `DONE`（已解决，写上怎么解决的）。
 
-## OPEN-1b · ~~实验版代码要不要跟着改成复用 151662~~ → **已改完，待重跑**
+## DONE-1b · 实验版已改为复用 151662，两格已重跑
 
-**状态**：代码已改完（DONE-1 的决定已落地），**但那两格的结果行尚未刷新**。
-`example/RESULTS.md` 末尾有注记：参数量从 598,071,296 变成 598,343,680，
-loss / 吞吐 / eval / rep-4 也要重跑才知道（mask token 不同 → 加噪用的
-embedding 行不同 → loss 会变）。
+**状态**：已结清（2026-10-02，M6 的全量 smoke 里重跑）。
+参数量 598,071,296 → **598,343,680**；eval 4.8013 → **4.8238**、4.8166 → **4.8397**。
+**不止 params 变了** —— mask token 不同 → 加噪时替换的 embedding 行不同 → loss 会变。
+这一点之前只是推测，现在有数字。
 
 已改的地方：
 
@@ -18,9 +18,8 @@ embedding 行不同 → loss 会变）。
 | `tests/test_lora_0p6b.py` | 断言改成 `mask == 151662`、`vocab == 151669`（原来断言 151670）、`embedding rows == 151936` |
 | `base/qwen3_0p6b/lora_common.py` · `train_lora_dllm.py` · `base/hf/a2d_dllm.py` | docstring / 注释里的 151669 → 151662 |
 
-`test_lora_0p6b.py` 已 PASS（含手写 loss vs dllm loss 相对差 1.55e-05）。
-**两格重跑尚未执行**（需 GPU，约 15 min）。在那之前不要引用 RESULTS.md
-最后两行的任何数字。
+`test_lora_0p6b.py` PASS（含手写 loss vs dllm loss 相对差 1.55e-05）。两格已重跑，
+RESULTS.md 里现在带一条说明「最后两行已重跑」并给出变化前后的数字。
 
 ---
 
@@ -75,7 +74,7 @@ embedding**。`SPEC.md` §3.2 已改。
 
 ---
 
-## OPEN-3 · decode 的 `steps` 在两套实现里含义不同
+## DONE-3 · decode 的 `steps` 语义：`--dlm-steps` 与 `--dlm-total-steps` 都已给
 
 **现象**：dllm 的 `steps` 是**全序列**预算，会按 block 数摊薄
 （`samplers/mdlm.py:131`：`steps = ceil(steps / num_blocks)`）；
@@ -146,20 +145,17 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 
 **原路线优约 0.40 nat，四对全部同向。** 结论写进 `SPEC.md` G3。
 
-## OPEN-10 · DPO 只能在 AR 行上跑，DLM 没有序列 logprob
+## DEFERRED-10 · DLM 行不做 DPO（用户 2026-10-02 决定放弃）
 
-**事实**：DPO 的目标是 `log pi(y|x)`（自回归因子的乘积）的差。掩码扩散模型
-**同时对所有位置去噪**，不定义这个量。SPEC 自己的矩阵就写了「DLM 无序列 logprob」。
+**为什么 DLM 行做不了**：DPO 的目标是 `log pi(y|x)`（自回归因子的乘积）的差。
+掩码扩散模型**同时对所有位置去噪**，不定义这个量。SPEC 自己的矩阵就写了
+「DLM 无序列 logprob」。要做得先有一个 ELBO 形式化的 `log pi(y|x)`，
+**那是研究问题，不是配置开关**。
 
-**现状**：`ar-3.2m-hf-sft-dpo` 已跑通，偏好准确率 **0.0 → 0.75**（200 步）。
-其余三格（`ar-3.2m-native-sft-dpo`、dlm 行的两格）**未做**。
+**用户决定：放弃**。所以 `dlm-3.2m-{hf,dllm}-sft-dpo` 与 `qwen3-0.6b-*-sft-dpo`
+**不做**，不是待办。AR 行两格已跑通（偏好准确率见 RESULTS.md）。
 
-**两个未解决的问题**：
-
-| | 问题 |
-|---|---|
-| **10.1** | native 版的 DPO 格没跑。代码路径与 hf 版相同（`train_dpo.py` 需要按 `--cell` 参数化），约 5 分钟 |
-| **10.2** | **dlm 行的 DPO 需要一个 ELBO 形式化的 `log pi(y|x)`，这是研究问题不是配置开关。** 在那之前 dlm 行的 DPO 格不能声称「跑通」 |
+**历史记录**：
 
 ## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
 
@@ -170,7 +166,7 @@ object`。本次在两个不同文件里各犯一次。
 正确形状是 `lambda m: minimind_loss(m)`。`train_a2d_from_sft.py` 的
 `build_parts` docstring 记了这条。
 
-## OPEN-7 · 方案 A（监督 think）与 ctx 128 自相矛盾
+## DONE-7 · 方案 A 与 ctx 128 的冲突：用户接受 3% 存活率
 
 **发现**：2026-10-02 写 SFT 展平器时实测。
 
