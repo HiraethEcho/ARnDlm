@@ -11,39 +11,38 @@ final loss can only come from the model.
     .venv/bin/python example/base/native/train_sft.py --steps 20 --no-verify
 """
 from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import config as C
+from base.hf.model import SFT_PROMPTS
+from base.native.model import BASE, build_native_model, sample_native
 from common.cell import finish_cell
 from common.ckpt import load_into, load_state_dict
 from common.cli import add_common_args, resolve_sft
 from common.cli import resume as resume_from
 from common.loop import Loop
 from common.losses import sft_ar_loss
+from common.sft import encode_prompt
 from common.verify import verify_checkpoint
-from base.hf.model import SFT_PROMPTS
-from base.native.model import BASE, build_native_model, sample_native
-
 METHOD = "AR-SFT"
 CELL = "ar-3.2m-native-sft"
 AR_CKPT = C.cell_dir("ar-3.2m-native")
 CKPT = C.cell_dir(CELL)
 
-
 def sample_sft_native(model, **kw):
-    """`sample_native` with the chat shape the SFT rows trained on.
+    """`sample_native` with the exact prefix an SFT block starts with.
 
     Row 2 keeps its own sampling loop (no KV cache, no `generate`), so the prompt
-    shaping lives here rather than being imported from row 1.
+    shaping lives here -- but it is `encode_prompt`, the same function row 1 uses,
+    not a second spelling of it. The turn separator is EOS, which an f-string
+    cannot produce.
     """
-    return sample_native(model, prompts=[f"user\n{p}\nassistant\n" for p in SFT_PROMPTS],
+    return sample_native(model, prompts=list(SFT_PROMPTS),
+                         prompt_ids=[encode_prompt(p) for p in SFT_PROMPTS],
                          **kw)
-
 
 def main() -> int:
     ap = add_common_args(argparse.ArgumentParser(__doc__), C.DLM_TRAIN)
@@ -98,7 +97,6 @@ def main() -> int:
     for row in summary["repetition"]["prompts"]:
         print(f"\n--- {row['prompt']!r}  rep4 {row['rep4']}\n{row['text'][:200]!r}")
     return 0 if ok else 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

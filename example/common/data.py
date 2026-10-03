@@ -100,26 +100,23 @@ def _stream(tokens: np.ndarray, lengths: np.ndarray) -> np.ndarray:
 def build_packed(
     prepared_dir: Path = DATA_DIR,
     block_size: int = 128,
-    val_frac: float = 0.0,
     max_blocks: int | None = None,
 ) -> PackedData:
     """Slice the corpus into fixed-length blocks; the ragged tail is dropped.
 
     max_blocks caps memory for the 332M-token corpora (int32 blocks):
     128-wide blocks are 512 B each, so 100k blocks is ~50 MB.
+
+    No validation split. Evaluation uses `fixed_batches`, a frozen batch set
+    drawn from the same corpus, so that two implementations are scored on
+    identical tokens -- a held-out split would make that comparison a claim
+    about sampling rather than about the model.
     """
     meta, tokens, lengths = _load(Path(prepared_dir))
     if meta.get("vocab_size") != C.VOCAB:
         # A corpus tokenized with a different BPE would index the embedding
         # wrongly, and the only symptom would be a mysteriously high loss.
         raise ValueError(f"{prepared_dir}: vocab {meta.get('vocab_size')} != {C.VOCAB}")
-    if val_frac > 0:
-        n_val = int(lengths.shape[0] * val_frac)
-        train_lengths = lengths[:-n_val] if n_val else lengths
-        tokens = tokens[: int(train_lengths.sum())]      # docs are stored contiguously
-        lengths = train_lengths
-        meta = dict(meta, n_docs=int(lengths.shape[0]))
-
     stream = _stream(tokens, lengths)
     # meta.json can disagree with the binary, and a corpus containing the MASK
     # id would be indistinguishable from a masked slot during A2D training.

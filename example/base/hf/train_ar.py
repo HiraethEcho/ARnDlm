@@ -54,7 +54,7 @@ def main() -> int:
         sample_fn=lambda lp: sample_ar(lp.model),
         eval_batches=eval_batches,
         notes=f"{data.n_tokens:,} tok, Tier 0"
-              + (f", resumed from step {args.resume}" if args.resume else ""))
+              + (f", resumed from step {loop.step}" if args.resume else ""))
 
     if not args.no_verify:
         report = verify_checkpoint(CKPT, lambda: build_model(C.TIER0, seed=0),

@@ -119,8 +119,15 @@ def make_a2d_loss(loss: DLLMLoss):
 def sample_dllm(model, prompts=C.PROMPTS, max_new_tokens: int = 32, block_size: int = 8,
                 steps: int = 8, temperature: float = 0.3,
                 mask_token_id: int | None = None,
-                eos_token_id: int = C.EOS) -> dict:
-    """MDLMSampler over the project's prompts."""
+                eos_token_id: int = C.EOS,
+                prompt_labels: list | None = None) -> dict:
+    """MDLMSampler over the project's prompts.
+
+    `prompts` entries may be strings or pre-encoded id lists. An SFT cell has to
+    pass ids: its turn separator is EOS, which `encode(f"user\\n{q}\\nassistant\\n")`
+    cannot reproduce. `prompt_labels` is what the repetition table prints --
+    without it the table would show raw id lists under a "prompt" column.
+    """
     from dllm.core.samplers.mdlm import MDLMSampler, MDLMSamplerConfig
 
     sampler = MDLMSampler(model=model, tokenizer=_ProcessingStub(*(
@@ -128,6 +135,7 @@ def sample_dllm(model, prompts=C.PROMPTS, max_new_tokens: int = 32, block_size: 
     device = next(model.parameters()).device
     prompt_ids = [torch.tensor(p, device=device) if not isinstance(p, str)
                   else torch.tensor(encode(p, bos=True), device=device) for p in prompts]
+    labels = list(prompts) if prompt_labels is None else list(prompt_labels)
     cfg = MDLMSamplerConfig(max_new_tokens=max_new_tokens, block_size=block_size,
                             steps=steps, temperature=temperature)
     out = sampler.sample(prompt_ids, config=cfg)
@@ -142,7 +150,7 @@ def sample_dllm(model, prompts=C.PROMPTS, max_new_tokens: int = 32, block_size: 
             gen = gen[: int((gen == eos_token_id).nonzero()[0])]
         ids.append(gen.tolist())
         texts.append(decode(gen))
-    return {"prompts": list(prompts), "ids": ids, "texts": texts,
+    return {"prompts": labels, "ids": ids, "texts": texts,
             "params": {"sampler": "dllm.MDLMSampler", "max_new_tokens": max_new_tokens,
                        "block_size": block_size, "steps": steps,
                        "temperature": temperature}}

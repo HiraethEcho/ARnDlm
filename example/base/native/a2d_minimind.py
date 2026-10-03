@@ -62,12 +62,23 @@ def make_a2d_loss(model, generator: torch.Generator | None = None,
 @torch.no_grad()
 def sample_native_dlm(model, prompts=C.PROMPTS, gen_len: int = 32, block_size: int = 8,
                       steps: int = 8, temperature: float = 0.3,
-                      top_k: int = 50) -> dict:
+                      top_k: int = 50,
+                      prompt_ids: list[list[int]] | None = None,
+                      prompt_labels: list | None = None) -> dict:
+    """Block-wise sampling for the native row.
+
+    `prompt_ids` takes over from `prompts` when the prefix cannot be spelled as
+    one string -- the SFT cells, whose turn separator is EOS. Without it those
+    cells sample from `user\n{q}\nassistant\n`, a prefix the model was never
+    trained on, and a 200-step model answers it with an immediate EOS: rep-4
+    comes back `nan` on an empty generation and the cell still reports OK.
+    """
     ids, texts, raw_texts = [], [], []
     logits_fn = native_forward(model)
     device = next(model.parameters()).device      # nn.Module has no .device
-    for prompt in prompts:
-        prompt_ids = torch.tensor([encode(prompt, bos=True)], device=device)
+    for prompt in (prompt_ids if prompt_ids is not None else
+                   [[*encode(p, bos=True)] for p in prompts]):
+        prompt_ids = torch.tensor([prompt], device=device)
         out = sample_dlm(logits_fn, prompt_ids, gen_len, mask_id=C.MASK,
                          block_size=block_size, steps=steps,
                          temperature=temperature, top_k=top_k)
@@ -77,7 +88,8 @@ def sample_native_dlm(model, prompts=C.PROMPTS, gen_len: int = 32, block_size: i
             generated = generated[: int((generated == C.EOS).nonzero()[0])]
         ids.append(generated.tolist())
         texts.append(decode(generated))
-    return {"prompts": list(prompts), "ids": ids, "texts": texts,
+    labels = list(prompts) if prompt_labels is None else list(prompt_labels)
+    return {"prompts": labels, "ids": ids, "texts": texts,
             "raw_texts": raw_texts,
             "params": {"gen_len": gen_len, "block_size": block_size, "steps": steps,
                        "temperature": temperature, "top_k": top_k, "kv_cache": False}}

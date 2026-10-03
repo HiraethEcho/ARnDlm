@@ -103,11 +103,6 @@ class Loop:
         limit = self.cfg.steps if max_steps is None else min(self.cfg.steps, self.step + max_steps)
         extra: dict = {}
         totals: dict = {}
-        # Snapshot the RNG the moment training stops. Evaluation and sampling
-        # below both draw from it, and for a DLM cell the *loss* draws from it
-        # too -- saving the state after them would resume with a different
-        # corruption sequence, which is exactly the equivalence C4 checks.
-        self._rng_after_train = rng_state()
         if self.device.type == "cuda":
             torch.cuda.reset_peak_memory_stats()
 
@@ -147,6 +142,15 @@ class Loop:
                 print(f"step {self.step:>4}/{limit}  loss {value:.4f}  "
                       f"lr {lr:.2e}  train {meter.train_tps:,.0f} tok/s  "
                       f"wall {meter.wall_tps:,.0f} tok/s", flush=True)
+
+        # Snapshot the RNG the moment training stops -- before the eval and
+        # sampling below, both of which draw from it. This must go *after* the
+        # loop: taken before it, the snapshot is the state training started
+        # from, and a resumed run replays the same corruptions from the top
+        # (worst_step_delta 5.2e-01 against a straight run, measured).
+        # `ar_loss` never touches the RNG, which is why C4 has to exercise this
+        # with a loss that does -- see check_ab.c4.
+        self._rng_after_train = rng_state()
 
         # Evaluation and sampling run *before* the summary is assembled, so the
         # wall-clock number includes them while train-only does not. That gap is

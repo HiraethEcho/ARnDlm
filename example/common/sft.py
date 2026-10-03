@@ -32,9 +32,17 @@ for the same reason: a turn that cannot fit is dropped, not cut.
 
 Shape of a block:
 
-    [BOS] user\n{q}\n[EOS] assistant\n<thinking>{r}</thinking>{a}\n[EOS]
-                                              ^^^^^^ span ^^^^^^^^^^
-                                                  supervised, header excluded
+    [BOS] user\n{q}[EOS] assistant\n<thinking>{r}</thinking>{a}[EOS] user\n{q2}[EOS] ...
+             ^^^^^^^^^^ not supervised   ^^^^^^^^^^^^^^^^^^^^^^^ supervised
+                                                ^^^^^^^^ header, not supervised
+
+    One BOS per *block*, not per turn: `_pack` seeds `cur` with it once and then
+    separates turns with EOS alone. The docstring used to claim a BOS before
+    every turn, which the corpus does not contain, and a `\n` before each EOS,
+    which it also does not contain.
+
+    The span is half-open and stops at the last body token; the EOS that follows
+    is **not** inside it.
 """
 from __future__ import annotations
 
@@ -74,7 +82,45 @@ class Turn:
         return self.content
 
     def text(self) -> str:
+        """The turn as a human reads it, **including a trailing newline that
+        `_pack` never emits**.
+
+        Only the too-long check uses it, and that check now charges
+        `header + body + 1 EOS` explicitly rather than measuring this string --
+        counting the newline would over-report `n_long_turns` by the turns that
+        land exactly on the block boundary.
+        """
         return f"{self.header()}{self.body()}\n"
+
+
+def encode_prompt(question: str, enc=encode, eos: int | None = C.EOS) -> list[int]:
+    """`[user header][question][EOS][assistant header]` -- the prefix a trained
+    SFT block actually starts with.
+
+    Must be built the way `_turn_ids` builds the corpus: header and body encoded
+    **separately**. The obvious f-string, `f"user\\n{question}\\nassistant\\n"`,
+    puts a `\\n` where the corpus has EOS, and the two do not tokenize alike --
+    measured on "1+1等于几":
+
+        trained  user\\n{question}[EOS]assistant\\n   13 ids
+        f-string user\\n{question}\\nassistant\\n     13 ids, different ones
+
+    Same length, different content, no error. Every sampled text and every
+    rep-4 number in RESULTS.md would then be measured on a prefix the model was
+    never trained to continue.
+    """
+    head = enc(f"user\n{question}")
+    return head + ([eos] if eos is not None else []) + enc("assistant\n")
+
+
+def encode_response(answer: str, enc=encode, eos: int | None = C.EOS) -> list[int]:
+    """The supervised half of a trained turn: body then EOS.
+
+    Kept next to `encode_prompt` because the pair has to agree: the corpus spells
+    both, and a sampler that spells only one of them is silently off-distribution.
+    """
+    out = enc(answer)
+    return out + ([eos] if eos is not None else [])
 
 
 def _turn_ids(turn: Turn, enc=encode) -> tuple[list[int], int]:
@@ -117,6 +163,12 @@ def _pack(turns: list[Turn], block_size: int, atomic: bool = True, enc=encode,
 
     def flush():
         nonlocal cur, cur_spans
+        # Both halves of the guard matter. `len(cur) > 1` drops a block holding
+        # nothing but the BOS; `cur_spans` drops a block of user turns only,
+        # which would otherwise be a full-width block that supervises nothing.
+        # Either one alone would emit an all-IGNORE batch, and sft_ar_loss has
+        # to special-case those (it returns 0 rather than nan) precisely because
+        # such a batch can still reach the loader from a padding tail.
         if len(cur) > 1 and cur_spans:
             blocks.append((cur, cur_spans))
         cur = ([bos] if bos is not None else [])
@@ -145,16 +197,23 @@ def _pack(turns: list[Turn], block_size: int, atomic: bool = True, enc=encode,
                     continue
                 start = len(cur) + (len(whole) - body_len if turn.supervised else 0)
                 cur.extend(whole[:room])
-                if turn.supervised and start < len(cur):
-                    cur_spans.append((start, len(cur)))
                 cur.append(eos)
+                if turn.supervised and start < len(cur):
+                    # Half-open, so the EOS written just above is the last
+                    # supervised token -- same as the whole-turn branch.
+                    cur_spans.append((start, len(cur)))
                 flush()
                 continue
         start = len(cur) + (len(whole) - body_len if turn.supervised else 0)
         cur.extend(whole)
-        if turn.supervised:
-            cur_spans.append((start, len(cur)))
         cur.append(eos)
+        if turn.supervised:
+            # End *after* the EOS, not before it. This is the only place the model
+            # is taught to stop: an assistant body with no supervised terminator
+            # leaves P(EOS) untrained, and the model then runs to max_new_tokens
+            # every time. Measured before this change -- 64 tokens generated,
+            # zero EOS emitted, on both fixed SFT prompts.
+            cur_spans.append((start, len(cur)))
     flush()
     return blocks
 
@@ -214,7 +273,10 @@ def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
                 spans.append(sp)
                 used.append(len(ids))
             for t in turns:
-                if len(enc(t.text())) + 2 > block_size:
+                # Same arithmetic as `_pack`'s `need`, not `len(enc(t.text()))`:
+                # _pack charges header + body + one EOS, and text() has a
+                # trailing newline _pack never emits.
+                if len(enc(t.header())) + len(enc(t.body())) + 1 > block_size:
                     n_long += 1
                     n_long_think += bool(t.reasoning)
             if len(blocks) == before:
@@ -267,8 +329,11 @@ def write_prepared(jsonl: Path, out_dir: Path, block_size: int,
     rows = [(i, a, b) for i, row in enumerate(spans) for a, b in row]
     np.save(out / "assistant_spans.npy",
             np.asarray(rows, dtype=np.int64).reshape(-1, 3))
+    # Per-block supervised counts were written here as supervised_tokens.npy.
+    # The array is still needed for the two meta.json numbers below; the file is
+    # not written any more, because nothing read it and an unread artefact is one
+    # more thing that can go stale without anyone noticing.
     lengths = np.asarray([sum(b - a for a, b in row) for row in spans], dtype=np.int64)
-    np.save(out / "supervised_tokens.npy", lengths)
     kept_think = _n_think_blocks(arr, spans)
     dropped_think = stats["n_dropped_turns_with_thinking"]
     survival = round(kept_think / max(kept_think + dropped_think, 1), 4)
@@ -293,7 +358,7 @@ def write_prepared(jsonl: Path, out_dir: Path, block_size: int,
 
 
 class SFTData(PackedData):
-    """Packed blocks plus labels; `.batch` returns both stacked as [B, 2, L].
+    """Packed blocks plus labels; `.batch` returns both stacked as [2, B, L].
 
     `Loop.fit` hands `data.batch(idx)` straight to `loss_fn(model, batch)`, so
     row 0 is input ids and row 1 is labels with IGNORE outside assistant spans.

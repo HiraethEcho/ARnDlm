@@ -41,7 +41,8 @@ from common.loop import Loop
 from base.qwen3_0p6b.common_qwen import (BASE, LORA_R, build_a2d_lora,
                                           build_sft_data, special_ids,
                                           trainable_report)
-from base.qwen3_0p6b.lora_common import make_minimind_loss, sample_lora_dlm
+from base.qwen3_0p6b.lora_common import (make_minimind_loss, sample_lora_dlm,
+                                         sft_prompts_for)
 from base.qwen3_0p6b.common_qwen import CELL_MINIMIND
 
 METHOD = "MiniMind-DLM-A2D-SFT"
@@ -105,9 +106,8 @@ def main() -> int:
                                              # strings -- cell 10 uses
                                              # prompts_for(tokenizer) for the same
                                              # reason.
-                                             [tokenizer.encode(f"user\n{p}\nassistant\n",
-                                                              add_special_tokens=False)
-                                              for p in SFT_PROMPTS], 32,
+                                             sft_prompts_for(tokenizer, SFT_PROMPTS,
+                                                             ids["eos"]), 32,
                                              mask_id=ids["mask"],
                                              block_size=args.block_size,
                                              steps=args.dlm_steps,

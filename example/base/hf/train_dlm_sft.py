@@ -31,22 +31,20 @@ outside the assistant spans):
         --cell ar-3.2m-native-dllm_a2d-sft
 """
 from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import config as C
+from base.hf.model import SFT_PROMPTS
 from common.cell import finish_cell
 from common.ckpt import load_into_any
 from common.cli import add_common_args, resolve_sft
 from common.cli import resume as resume_from
 from common.loop import Loop
+from common.sft import encode_prompt
 from common.verify import verify_checkpoint
-from base.hf.model import SFT_PROMPTS
-
 # SPEC 2.3's SFT column: cell -> (row, objective). `--cell` must be one of
 # these; an unknown name is an error rather than a new row in RESULTS.md,
 # because a typo would otherwise create a cell no SPEC review ever looks at.
@@ -75,39 +73,86 @@ CELLS = {
     "dlm-3.2m-dllm-sft": ("hf", "dllm", "dlm-3.2m-dllm"),
 }
 
-
 def _hf_parts(objective: str):
-    from base.hf.a2d_dllm import DLLMLoss, make_a2d_loss as dllm_loss
+    from base.hf.a2d_dllm import (DLLMLoss, build_a2d_model, make_a2d_loss as dllm_loss,
+                                  sample_dllm)
     from base.hf.a2d_minimind import make_a2d_loss as minimind_loss
+    from base.hf.a2d_minimind import sample_dlm_row
     from base.hf.model import build_model, sample_sft
+    from common.sft import encode_prompt
 
     if objective == "minimind":
         return (build_model, sample_sft, lambda m: minimind_loss(m),
                 "hand-written A2D, assistant spans only")
+
+    def sample_sft_dllm(model, **kw):
+        """dllm's sampler on the exact prefix an SFT block starts with.
+
+        The sampler cannot be `sample_sft`: that goes through `generate`, which
+        assumes causal decoding, and the A2D model is bidirectional. Passing it
+        one blew up in `create_causal_mask` with "expanded size of the tensor (1)
+        must match the existing size (22)".
+        """
+        return sample_dllm(model,
+                           prompts=[encode_prompt(p) for p in SFT_PROMPTS],
+                           prompt_labels=list(SFT_PROMPTS),
+                           block_size=kw.get("block_size", 8),
+                           steps=kw.get("steps", 8),
+                           temperature=kw.get("temperature", 0.3))
+
     # dllm's `time_epsilon` stays at the package default 1e-3 rather than taking
     # a flag: OPEN-2 keeps the two `t` conventions documented and aligned at
     # comparison time, and a flag here would make the convention a per-run choice
     # nobody records.
-    return (build_model, sample_sft, lambda m: dllm_loss(DLLMLoss()),
+    #
+    # `build_a2d_model`, not `build_model`: dllm's loss forwards with
+    # `attention_mask=None`, so the model itself has to be bidirectional.
+    # Same bug as DONE-13, second copy -- the trailing `*-a2d-sft` cells were
+    # causal for the same reason the `*-sft-*_a2d` ones were. The minimind
+    # objective is safe either way: its loss passes an explicit 4D zero mask.
+    return (build_a2d_model, sample_sft_dllm, lambda m: dllm_loss(DLLMLoss()),
             "dllm MDLMTrainer.compute_loss, labels==-100 outside spans")
-
 
 def _native_parts(objective: str):
     from base.native.a2d_dllm import make_dllm_loss
     from base.native.a2d_minimind import make_a2d_loss as minimind_loss
+    from base.native.a2d_minimind import sample_native_dlm
     from base.native.model import build_native_model, sample_native
+    from common.sft import encode_prompt
 
     def sample_sft(model, **kw):
-        """`sample_native` with the chat shape the SFT rows trained on."""
-        return sample_native(model, prompts=[f"user\n{p}\nassistant\n"
-                                            for p in SFT_PROMPTS], **kw)
+        """`sample_native` with the exact prefix an SFT block starts with."""
+        return sample_native(model, prompts=list(SFT_PROMPTS),
+                             prompt_ids=[encode_prompt(p) for p in SFT_PROMPTS], **kw)
+
+    def builder(cfg, seed):
+        # Bidirectionality has to come from the model here too -- see the hf
+        # branch above. The native port keeps it in `_last_is_causal`.
+        m = build_native_model(cfg, seed=seed)
+        if objective == "dllm":
+            m.set_causal(False)
+        return m
 
     if objective == "minimind":
         return (build_native_model, sample_sft, lambda m: minimind_loss(m),
                 "hand-written A2D, assistant spans only")
-    return (build_native_model, sample_sft, lambda m: make_dllm_loss(m),
-            "dllm MDLMTrainer.compute_loss on the native model")
+    def sample_sft_dllm(model, **kw):
+        """The block sampler on the exact prefix an SFT block starts with.
 
+        Not `sample_sft`: the AR sampler forces `is_causal=True` on every step,
+        which is wrong for a model switched to bidirectional for A2D.
+        `sample_native_dlm` reads logits through `native_forward`, so it is
+        implementation-agnostic -- dllm supplies the objective here, not the
+        sampler. Same shape as `train_a2d_from_sft.py`.
+        """
+        return sample_native_dlm(model, prompt_ids=[encode_prompt(p) for p in SFT_PROMPTS],
+                                 prompt_labels=list(SFT_PROMPTS),
+                                 block_size=kw.get("block_size", 8),
+                                 steps=kw.get("steps", 8),
+                                 temperature=kw.get("temperature", 0.3))
+
+    return (builder, sample_sft_dllm, lambda m: make_dllm_loss(m),
+            "dllm MDLMTrainer.compute_loss on the native model")
 
 def build_parts(row: str, objective: str):
     """(model builder, sampler, loss factory, loss note).
@@ -124,7 +169,6 @@ def build_parts(row: str, objective: str):
     builder, sampler, factory, note = parts
     base_label = "Qwen-mini-HF" if row == "hf" else "Qwen-mini-MiniMind"
     return builder, sampler, factory, note, base_label
-
 
 def main() -> int:
     ap = add_common_args(argparse.ArgumentParser(__doc__), C.DLM_TRAIN)
@@ -188,7 +232,6 @@ def main() -> int:
     for srow in summary["repetition"]["prompts"]:
         print(f"\n--- {srow['prompt']!r}  rep4 {srow['rep4']}\n{srow['text'][:200]!r}")
     return 0 if ok else 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -226,20 +226,25 @@ def build_native_model(cfg: ModelCfg, seed: int = 42) -> NativeQwen3ForCausalLM:
 @torch.no_grad()
 def sample_native(model: NativeQwen3ForCausalLM, prompts=PROMPTS, max_new_tokens: int = 32,
                   temperature: float = 0.3, top_k: int = 50,
-                  max_context: int | None = None) -> dict:
+                  max_context: int | None = None,
+                  prompt_ids: list[list[int]] | None = None) -> dict:
     """Autoregressive sampling without `generate`, and without a KV cache.
 
     Same recipe as row 1 (top_k 50, temperature 0.3) so the two rows' samples are
     comparable. Each step re-runs the whole prefix: at Tier 0 that is cheap, and
     it keeps this row free of transformers' cache machinery.
+
+    `prompt_ids` mirrors sample_ar's: the SFT turn separator is EOS, which an
+    f-string cannot spell. See common/sft.py::encode_prompt.
     """
     was_training = model.training
     model.eval()
 
     max_context = max_context or model.cfg.context_length
     ids, texts = [], []
-    for prompt in prompts:
-        prefix = torch.tensor([encode(prompt, bos=True)], device=next(model.parameters()).device)
+    for prompt in (prompt_ids if prompt_ids is not None else
+                   [[*encode(p, bos=True)] for p in prompts]):
+        prefix = torch.tensor([prompt], device=next(model.parameters()).device)
         generated: list[int] = []
         for _ in range(max_new_tokens):
             window = prefix[:, -max_context:]

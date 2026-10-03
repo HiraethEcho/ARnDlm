@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-**实验版（`example/`）SPEC 2.3 矩阵已跑通 26 格**，全部在 Tier 0（3.21M 参数 · ctx 128 · 200 步）。
+**实验版（`example/`）SPEC 2.3 矩阵已跑通 29 格**，全部在 Tier 0（3.21M 参数 · ctx 128 · 200 步）。
 实测数字见 `example/RESULTS.md`，格状态见 `SPEC.md` §2.3。
 
 | 项目 | 状态 |
@@ -18,18 +18,18 @@
 | T2b dllm A2D | **DONE** — hf + native 两格 · **C5 = 0 丢失 / 0 漂移** |
 | T2c Qwen3-0.6B A2D | **DONE** — LoRA r=8（0.38% 可训）两格 · eval 4.8238 / 4.8397 |
 | T3 Direct DLM | **DONE** — `dlm-3.2m-hf` + `dlm-3.2m-dllm` · eval 5.6427 / 5.6460 |
-| **SFT 展平器** | **DONE** — `common/sft.py` · assistant spans · `data/prepared/sft-mini-6400/` 4096 块 · 填充率 0.72 |
+| **SFT 展平器** | **DONE** — `common/sft.py` · assistant spans **含 EOS** · 4096 块 · 填充率 0.72 · 监督 token 260,590 |
 | **assistant-only 损失** | **DONE** — `common/losses.py::sft_ar_loss` · 全监督 batch 返回 0 不返回 nan |
-| **G3 对照（AR-SFT）** | **DONE** — hf + native · eval 6.3639 / 6.3462 |
-| **G3 新路线尾部 SFT** | **DONE** — `{mini,dllm}_a2d-sft` 四格 · eval 6.4880 – 6.5279 |
-| **G3 原路线尾部 SFT** | **DONE** — `sft-{mini,dllm}_a2d-sft` 四格 · eval 6.0485 – 6.1029 |
+| **G3 对照（AR-SFT）** | **DONE** — hf + native · eval 6.2659 / 6.2475 |
+| **G3 新路线尾部 SFT** | **DONE** — `{mini,dllm}_a2d-sft` 四格 · eval 6.3845 – 6.4133 |
+| **G3 原路线尾部 SFT** | **DONE** — `sft-{mini,dllm}_a2d-sft` 四格 · eval 5.9709 – 5.9776 |
 | **G4 SFT（0.6B）** | **DONE** — `qwen3-0.6b-mini_a2d-sft` · eval 3.8151（**跨 track 不可比**） |
 | **G3 DPO（AR 行）** | **DONE** — `ar-3.2m-hf-sft-dpo` · 偏好准确率 **0.0 → 0.75** |
 | C1–C7 对拍 | **DONE** — C7（SFT 路径 parity）= **0.000e+00** |
 | C4 resume 等价性 | **DONE** — 40 步 vs 30+resume+10 逐步差 0.0 |
-| 实验版教学计划 | **DONE** — `example/teach/` step 0-13 全部细化 |
+| 实验版教学计划 | **DONE** — `example/teach/README.md` 按 `ar-hf → ar-hf-sft → ar-hf-sft-dllm_a2d` 排成 4 个轨道 |
 | **SFT 列 + DPO 列** | **DONE** — 19 格 · 展平器 / assistant spans / assistant-only loss / DPO 目标 |
-| **G3 结论** | **DONE** — 原路线（SFT→A2D→SFT）比新路线（A2D→SFT）**优约 0.40 nat**，四个实现对全同向 |
+| **G3 结论** | **DONE** — 原路线（SFT→A2D→SFT）比新路线（A2D→SFT）**优 0.4251 nat**，四个实现对全同向 |
 | 一键复现 | `bash example/smoke_all.sh` + `bash example/smoke_sft.sh`（各 10 + 19 格，均支持 `--cells-only`） |
 | DPO 在 dlm 行 | **放弃** — 掩码扩散没有序列 logprob，需要 ELBO 形式化（研究问题，非配置开关） |
 | 实践版实现 | **PENDING** — 七个目录只有 docstring，按 `example/teach/` 逐步写 |
@@ -41,13 +41,13 @@
 
 | 路线 | hf/mini | hf/dllm | native/mini | native/dllm |
 |---|---:|---:|---:|---:|
-| 新路线 A2D → SFT | 6.4958 | 6.4880 | 6.5279 | 6.5088 |
-| 原路线 SFT → A2D → SFT | **6.1029** | **6.0851** | **6.0851** | **6.0485** |
+| 新路线 A2D → SFT | 6.3872 | 6.3845 | 6.4133 | 6.4125 |
+| 原路线 SFT → A2D → SFT | **5.9773** | **5.9776** | **5.9713** | **5.9709** |
 
-**原路线稳定优约 0.40 nat，四个实现对全部同向。** 与 SPEC 把原路线排在前面
+**原路线稳定优 0.4251 nat，四个实现对全部同向。** 与 SPEC 把原路线排在前面
 （业界已有的 A2D 全部落在已经能 chat 的模型上）一致。
 
-⚠️ AR-SFT 对照（6.3639 / 6.3462）是 AR 的 next-token CE，**与上表不同量**，
+⚠️ AR-SFT 对照（6.2659 / 6.2475）是 AR 的 next-token CE，**与上表不同量**，
 不能比大小。跨模型族要看「能 chat」四条门槛或 DPO 偏好准确率。
 
 **rep-4 不可用于排名**：同一方法换一个 base，A2D 在 0.40 ~ 0.97 之间跳
@@ -70,6 +70,11 @@
 | OPEN-8 | ✅ 已结清，G3 有了结论 |
 | OPEN-10 | DLM 的 DPO 缺 ELBO 形式化；native DPO 格未跑 |
 | OPEN-4 / OPEN-6 | packing 无 attention 隔离；rep-4 不可排名（均已记录，本轮不处理） |
+
+## 学习路径
+
+`ar-hf → ar-hf-sft → ar-hf-sft-dllm_a2d`，逐步索引见 `example/teach/README.md`（9 个文件按依赖排好）。
+动手写的入口见 `LEARN.md`，工作区在 `../ARnDlm-learn`（`learn` 分支）。
 
 ## Implementation phases
 

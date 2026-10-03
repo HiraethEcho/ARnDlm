@@ -22,26 +22,23 @@ run's config so nobody mistakes it for the full set.
     .venv/bin/python example/base/hf/train_dpo.py --steps 20 --max-pairs 200
 """
 from __future__ import annotations
-
 import argparse
 import copy
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import torch
-
 from common import config as C
+from base.hf.model import SFT_PROMPTS, build_model, sample_sft
 from common.cell import finish_cell
 from common.ckpt import load_into, load_state_dict
 from common.cli import add_common_args
 from common.data import BlockStream
 from common.dpo import IGNORE, dpo_blocks, dpo_loss
 from common.loop import Loop
+from common.sft import encode_prompt
 from common.verify import verify_checkpoint
-from base.hf.model import SFT_PROMPTS, build_model, sample_sft
-
 METHOD = "AR-SFT-DPO"
 # cell -> upstream SFT checkpoint. Same script for both rows: the objective does
 # not care which implementation produced the weights it is refining.
@@ -51,7 +48,6 @@ CELLS = {
 }
 CELL = "ar-3.2m-hf-sft-dpo"
 BASE_LABEL = "Qwen-mini-HF"
-
 
 def make_dpo_loss(policy, reference, beta: float):
     """`loss_fn(model, batch)` for common.loop.Loop.
@@ -64,7 +60,6 @@ def make_dpo_loss(policy, reference, beta: float):
         ids, labels = batch
         return dpo_loss(model, reference, ids, labels, beta=beta)
     return loss_fn
-
 
 class PairData:
     """The smallest PackedData-compatible surface `Loop.fit` actually touches.
@@ -87,7 +82,6 @@ class PairData:
 
     def batch(self, idx: torch.Tensor) -> torch.Tensor:
         return torch.stack([self.ids[idx].long(), self.labels[idx].long()])
-
 
 def main() -> int:
     ap = add_common_args(argparse.ArgumentParser(__doc__), C.DLM_TRAIN,
@@ -123,8 +117,8 @@ def main() -> int:
         # the builder and not the sampler gives
         # "'NativeQwen3ForCausalLM' object has no attribute 'device'".
         def sampler(model, **kw):
-            return sample_native(model, prompts=[f"user\n{p}\nassistant\n"
-                                                for p in SFT_PROMPTS], **kw)
+            return sample_native(model, prompts=list(SFT_PROMPTS),
+                             prompt_ids=[encode_prompt(p) for p in SFT_PROMPTS], **kw)
     else:
         from base.hf.model import build_model, sample_sft
         builder = build_model
@@ -204,7 +198,6 @@ def main() -> int:
               f"max|dlogit| {report.get('max_logit_delta', float('nan')):.2e}")
         ok &= report["ok"]
     return 0 if ok else 1
-
 
 if __name__ == "__main__":
     sys.exit(main())

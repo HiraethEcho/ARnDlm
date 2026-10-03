@@ -117,38 +117,40 @@ ar-3.2m-hf-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 |---|---|---|
 | `ar-3.2m-hf` | G1 | ✅ eval 4.6356 |
 | `ar-3.2m-native` | G1 | ✅ eval 4.6283 |
-| `ar-3.2m-hf-sft` | G3 对照 | ✅ eval 6.3639|
-| `ar-3.2m-native-sft` | G3 对照 | ✅ eval 6.3462|
+| `ar-3.2m-hf-sft` | G3 对照 | ✅ eval 6.2659 |
+| `ar-3.2m-native-sft` | G3 对照 | ✅ eval 6.2475 |
 | `ar-3.2m-hf-mini_a2d` | G2/G3 新 | ✅ eval 4.9723 |
 | `ar-3.2m-native-mini_a2d` | G2/G3 新 | ✅ eval 4.9692 |
 | `ar-3.2m-hf-dllm_a2d` | G5 | ✅ eval 4.9765 |
 | `ar-3.2m-native-dllm_a2d` | G5 | ✅ eval 4.9728 |
-| `ar-3.2m-hf-mini_a2d-sft` | G3 新路线 | ✅ eval 6.4958|
-| `ar-3.2m-native-mini_a2d-sft` | G3 新路线 | ✅ eval 6.5279|
-| `ar-3.2m-hf-dllm_a2d-sft` | G3/G5 | ✅ eval 6.4880|
-| `ar-3.2m-native-dllm_a2d-sft` | G3/G5 | ✅ eval 6.5088|
-| `ar-3.2m-hf-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0425|
-| `ar-3.2m-native-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0410|
-| `ar-3.2m-hf-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0685|
-| `ar-3.2m-native-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0283|
-| `ar-3.2m-hf-sft-mini_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.1029 |
-| `ar-3.2m-native-sft-mini_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0851 |
-| `ar-3.2m-hf-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0851 |
-| `ar-3.2m-native-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 6.0485 |
+| `ar-3.2m-hf-mini_a2d-sft` | G3 新路线 | ✅ eval 6.3872 |
+| `ar-3.2m-native-mini_a2d-sft` | G3 新路线 | ✅ eval 6.4133 |
+| `ar-3.2m-hf-dllm_a2d-sft` | G3/G5 | ✅ eval 6.3845 |
+| `ar-3.2m-native-dllm_a2d-sft` | G3/G5 | ✅ eval 6.4125 |
+| `ar-3.2m-hf-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0315 |
+| `ar-3.2m-native-sft-mini_a2d` | G3 原路线 | ✅ eval 5.0335 |
+| `ar-3.2m-hf-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0378 |
+| `ar-3.2m-native-sft-dllm_a2d` | G3/G5 原路线 | ✅ eval 5.0376 |
+| `ar-3.2m-hf-sft-mini_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 5.9773 |
+| `ar-3.2m-native-sft-mini_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 5.9713 |
+| `ar-3.2m-hf-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 5.9776 |
+| `ar-3.2m-native-sft-dllm_a2d-sft` | G3 原路线（尾部 DLM-SFT） | ✅ eval 5.9709 |
+| `ar-3.2m-native-sft-dpo` | G3 DPO | ✅ loss 0.8853 -> 0.7623 |
 | `dlm-3.2m-hf` | G2 | ✅ eval 5.6427 |
 | `dlm-3.2m-dllm` | G2 | ✅ eval 5.6460|
 
-| `ar-3.2m-hf-sft-dpo` | G3 DPO 对照 | ✅ 偏好准确率 0.0 → 0.75 |
+| `ar-3.2m-hf-sft-dpo` | G3 DPO 对照 | ✅ loss 0.8704 -> 0.7744 · acc 0.5 |
 
-| `qwen3-0.6b-mini_a2d` | G4 | ✅ eval 4.8166 |
-| `qwen3-0.6b-dllm_a2d` | G4 | ✅ eval 4.8013 |
-| `qwen3-0.6b-mini_a2d-sft` | G4 | ✅ eval 3.8151|
+| `qwen3-0.6b-mini_a2d` | G4 | ✅ eval 4.8397 |
+| `qwen3-0.6b-dllm_a2d` | G4 | ✅ eval 4.8238 |
+| `qwen3-0.6b-mini_a2d-sft` | G4 | ✅ eval 3.7559 |
 
 **两处偏离你的示例，需要确认**
 
 | 你的示例 | 我写的 | 原因 |
 |---|---|---|
 | `dlm-size-sft` | `dlm-3.2m-hf-sft` | Direct-DLM 也有两种写法（transformers / dllm 包），不带 `impl` 分不开 |
+| `dlm-3.2m-dllm-sft` | G2 | ✅ eval 6.6878 |
 | — | 加 `dpo` 段 | RL 阶段目前只排在 P2，先把位置定下来 |
 
 ---

@@ -1,6 +1,6 @@
 """transformer — 调用 transformers 包做训练 / 后训练。
 
-对应 PLAN.md 的 T1a。产出是 AR baseline。
+对应教学计划 Step A2 (`example/teach/02-ar-hf.md`)。产出是 AR baseline。
 
     pretrain.py         AutoModelForCausalLM + 自己的 loop 或 Trainer
     sft.py              chat template + 只在 assistant 区算 loss
@@ -13,5 +13,5 @@
 坑: tie_word_embeddings=True 时 embed_tokens.weight 和 lm_head.weight 是
 同一个对象, 传给 optimizer 前必须按 id() 去重, 否则 lr 翻倍。
 
-依赖: transformers 4.57.0, peft, accelerate, ../../base
+依赖: transformers 4.57.0, accelerate, ../../models/hf_qwen, ../../utils
 """

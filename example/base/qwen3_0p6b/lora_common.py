@@ -95,5 +95,21 @@ def prompts_for(tokenizer) -> list[list[int]]:
     return [tokenizer.encode(text, add_special_tokens=False) for text in C.PROMPTS]
 
 
+def sft_prompts_for(tokenizer, prompts, eos: int) -> list[list[int]]:
+    """`prompts_for`, but shaped like a real SFT block.
+
+    The SFT corpus separates a turn with EOS, not a newline, so the obvious
+    `f"user\\n{p}\\nassistant\\n"` builds a prefix the model never trained on --
+    same token count, different tokens, and no error to notice. Built here rather
+    than at the call site so the two tracks cannot answer this differently.
+    """
+    out = []
+    for p in prompts:
+        ids = tokenizer.encode(f"user\n{p}", add_special_tokens=False)
+        out.append(ids + [eos]
+                   + tokenizer.encode("assistant\n", add_special_tokens=False))
+    return out
+
+
 def stream_for(blocks: torch.Tensor, batch_size: int, seed: int) -> BlockStream:
     return BlockStream(blocks.shape[0], batch_size, seed)

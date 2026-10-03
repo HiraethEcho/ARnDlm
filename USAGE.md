@@ -158,6 +158,15 @@ export SWANLAB_API_KEY=...
 
 没 export 时训练脚本要正常跑通, 只是不上传。
 
+## 先学哪一步
+
+```sh
+ar-hf  →  ar-hf-sft  →  ar-hf-sft-dllm_a2d
+```
+
+**逐步索引在 [`example/teach/README.md`](example/teach/README.md)**，9 个文件按依赖排好。
+`LEARN.md` 是在独立工作区动手写实践版时的入口。
+
 ## 跑实验版（`example/`，29 格全通）
 
 **两条命令跑完全部 29 格。** 都支持 `--cells-only`（跳过单元测试）和 `--quick`

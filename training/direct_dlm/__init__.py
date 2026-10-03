@@ -1,6 +1,6 @@
 """dllm — 直接用 dllm 包训练 DLM。
 
-对应 PLAN.md 的 T3。这条线不自己写任何模型代码。
+对应教学计划 Step D6 (`example/teach/10-direct-dlm.md`)。这条线不自己写任何模型代码。
 
     pretrain.py          用 dllm 的 Trainer 从零训 (或从开源权重续)
     sample.py            dllm 的采样
@@ -13,5 +13,5 @@
 **核心指标是重复率, 不是 loss。** DLM 失败最典型的表现就是复读而 loss
 照样下降。见 notes/03-minimind-dlm.md。
 
-依赖: dllm, ../base
+依赖: dllm, ../../utils, ../../evaluation
 """

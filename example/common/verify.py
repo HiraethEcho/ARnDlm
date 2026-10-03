@@ -41,19 +41,43 @@ def verify_checkpoint(ckpt_dir: Path | str, build_fn, live_model: torch.nn.Modul
 
     The control matters: rebuilding twice and comparing those would return 0.0
     for the wrong reason. `live_model` is the only independent reference.
+
+    `live_model` must already be on `device` and in fp32. An earlier version
+    called `.to(device).float().eval()` on it and then restored only the train
+    flag -- `to`/`float` mutate in place, so the comment promising not to move
+    or cast the reference was describing something the code did not do. It was
+    harmless at every call site (they all pass loop.device, and the master
+    weights are fp32 by design), and would not have been on the next one. So
+    those two requirements are asserted instead of silently applied.
+
+    The train flag *is* handled: `Loop.fit` leaves the model in train mode, and
+    this is called straight after it, so dropping into eval and putting it back
+    is the only mutation done here.
     """
+    live_device = next(live_model.parameters()).device
+    want = torch.device(device)
+    # `torch.device("cuda")` has index None while a real tensor is always
+    # "cuda:0", so comparing the two objects directly would reject every caller.
+    if live_device.type != want.type or (want.index is not None
+                                         and live_device.index != want.index):
+        raise RuntimeError(f"verify_checkpoint: live model is on {live_device}, "
+                           f"not {torch.device(device)}. Moving it would mutate "
+                           f"the caller's model.")
+    if next(live_model.parameters()).dtype != torch.float32:
+        raise RuntimeError("verify_checkpoint: live model must be fp32; casting "
+                           "it in place would mutate the caller's model.")
+
     fresh = build_fn().to(device).float().eval()
     try:
         report = load_into(fresh, load_state_dict(ckpt_dir))
     except RuntimeError as exc:
         return {"ok": False, "reason": str(exc)}
 
-    # The live model is only a reference: do not leave it moved to another
-    # device, cast, or stuck in eval mode for whatever the caller does next.
     was_training = live_model.training
-    live = live_model.to(device).float().eval()
-    delta = logits_delta(fresh, live, data, batches, device)
-    if was_training:
-        live_model.train()
+    live_model.eval()
+    try:
+        delta = logits_delta(fresh, live_model, data, batches, device)
+    finally:
+        live_model.train(was_training)
     return {"ok": delta <= 1e-5, "max_logit_delta": delta,
             "tensors": report["tensors"], "aliased_tied": report["aliased_tied"]}

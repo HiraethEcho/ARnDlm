@@ -62,7 +62,7 @@ def build_parts(row: str, objective: str):
     fixed in one place rather than at each call site.
     """
     if row == "hf":
-        from base.hf.a2d_dllm import DLLMLoss
+        from base.hf.a2d_dllm import DLLMLoss, build_a2d_model
         from base.hf.a2d_dllm import make_a2d_loss as dllm_loss
         from base.hf.a2d_dllm import sample_dllm
         from base.hf.a2d_minimind import make_a2d_loss as minimind_loss
@@ -77,7 +77,17 @@ def build_parts(row: str, objective: str):
             lambda model, **kw: sample_dllm(model, block_size=kw.get("block_size", 8),
                                             steps=kw.get("steps", 8),
                                             temperature=kw.get("temperature", 0.3)))
-        return (build_model, sampler, factory,
+        # The dllm objective calls MDLMTrainer.compute_loss, which forwards with
+        # `attention_mask=None` -- so the *model* has to be bidirectional. A
+        # plain Qwen3ForCausalLM answers that with a causal mask, and the cell
+        # trains a causal model under a name that says A2D. Measured: editing the
+        # last token left every earlier logit bit-identical (delta 0.0) for
+        # `build_model` and moved them by 8.3e-01 for `build_a2d_model`.
+        #
+        # The minimind objective is safe either way: its loss passes an explicit
+        # 4D all-zero mask at forward time, so it never depends on the builder.
+        builder = build_model if objective == "minimind" else build_a2d_model
+        return (builder, sampler, factory,
                 "hand-written A2D" if objective == "minimind"
                 else "dllm MDLMTrainer.compute_loss")
 
@@ -87,7 +97,17 @@ def build_parts(row: str, objective: str):
     from base.native.model import build_native_model
     factory = (lambda m: minimind_loss(m)) if objective == "minimind" \
         else (lambda m: make_dllm_loss(m))
-    return (build_native_model, sample_native_dlm, factory,
+
+    def builder(cfg, seed):
+        # Same reason as the transformers row above: dllm's loss forwards with no
+        # mask, so bidirectionality has to come from the model. The native port
+        # keeps it in `self._last_is_causal`, which `set_causal` flips.
+        m = build_native_model(cfg, seed=seed)
+        if objective == "dllm":
+            m.set_causal(False)
+        return m
+
+    return (builder, sample_native_dlm, factory,
             "hand-written A2D on native torch" if objective == "minimind"
             else "dllm MDLMTrainer.compute_loss on native torch")
 

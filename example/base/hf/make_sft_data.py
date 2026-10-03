@@ -4,7 +4,7 @@
     .venv/bin/python example/base/hf/make_sft_data.py --max-blocks 4096
 
 Writes `data/prepared/sft-mini-6400/`: tokens.bin, assistant_spans.npy,
-supervised_tokens.npy, meta.json. The numbers in meta.json are the ones to read
+meta.json. The numbers in meta.json are the ones to read
 before trusting the corpus -- `n_dropped_turns_with_thinking` is the one that
 bit us (ISSUES.md OPEN-7).
 """

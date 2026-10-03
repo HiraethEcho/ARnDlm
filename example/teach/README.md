@@ -1,34 +1,48 @@
 # example/teach/ — 实践版教学计划
 
-**这里是你（实践版）要写的东西的施工图。** 每完成一格 实验版，就补细对应的一步。
+**这里是你（实践版）要写的东西的施工图。**
 
-实验版在 `example/` 全部跑通之前，这些步骤只是骨架；跑通一个 milestone 补一节。
-执行顺序见 [`../PLAN.md`](../PLAN.md) §10。
+## 你的学习路径
 
-## 步骤索引
+```
+ar-hf  →  ar-hf-sft  →  ar-hf-sft-dllm_a2d
+  A0 → A1 → A2        B1 → B2        C1 → C2 → C3 → C4
+```
 
-| Step | 你写什么 | 实验版参考 | 对应矩阵格 | 状态 |
-|---|---|---|---|---|
-| 0 | `utils/` | `example/common/` | 全部（底座） | ✅ 已细化 |
-| 1 | `models/hf_qwen/` | `example/base/hf/model.py` | 行1 base | ✅ 已细化 |
-| 2 | `training/ar_hf/` | `example/base/hf/train_ar.py` | 行1 base | ✅ 已细化 |
-| 3 | `models/minimind_qwen/` | `example/base/native/model.py` | 行2 base | ✅ 已细化 |
-| 4 | `training/ar_native/` | `example/base/native/train_ar.py` | 行2 base | ✅ 已细化 |
-| 5 | `diffusion/` corruption + scheduler | `example/base/*/a2d_minimind.py` | 三格方法 | ✅ 已细化 |
-| 6 | `diffusion/loss.py` | 同上 + `test/04` | 三格方法 | ✅ 已细化 |
-| 7 | `diffusion/sampler.py` | 同上 | 三格方法 | ✅ 已细化 |
-| 8 | `training/a2d_minimind/` | `example/base/*/a2d_minimind.py` | MiniMind-A2D 列 | ✅ 已细化 |
-| 9 | `training/a2d_dllm/` | `example/base/*/a2d_dllm.py` | dLLM-A2D 列 | ✅ 已细化 |
-| 10 | `training/direct_dlm/` | `example/base/*/direct_dlm.py` | Direct-DLM 列 | ✅ 已细化 |
-| 11 | `evaluation/` | `example/common/metrics.py` + 各格采样 | 全部 | ✅ 已细化 |
-| 12 | Qwen3-0.6B LoRA 两格 | `example/base/qwen3_0p6b/` | 行3 两格 | ✅ 已细化 |
-| 13 | Tier 1 定档 | `logs/dev/02-hardware-perf.md` | 收尾 | ✅ 已细化 |
+| 顺序 | 文件 | 你写什么 | 对应矩阵格 |
+|---:|---|---|---|
+| 1 | [`A0` = `00-common-base.md`](00-common-base.md) | `utils/`：训练循环、计时、存盘、指标 | 底座 |
+| 2 | [`A1` = `01-hf-qwen.md`](01-hf-qwen.md) | `models/hf_qwen/`：加载并冻结 Qwen3 | 行1 base |
+| 3 | [`A2` = `02-ar-hf.md`](02-ar-hf.md) | `training/ar_hf/`：自回归训练 | **`ar-hf`** ✅ |
+| 4 | [`B1` = `14-sft-data.md`](14-sft-data.md) | `data/sft/`：对话 → 块 + assistant spans（含 EOS） | SFT 数据 |
+| 5 | [`B2` = `15-sft-train.md`](15-sft-train.md) | `training/sft_ar_hf/`：assistant-only loss | **`ar-hf-sft`** ✅ |
+| 6 | [`C1` = `05-corruption-scheduler.md`](05-corruption-scheduler.md) | `diffusion/corruption.py`：掩码 + 时间步 | 三格方法 |
+| 7 | [`C2` = `06-diffusion-loss.md`](06-diffusion-loss.md) | `diffusion/loss.py`：A2D 目标 | 三格方法 |
+| 8 | [`C3` = `07-diffusion-sampler.md`](07-diffusion-sampler.md) | `diffusion/sampler.py`：迭代去噪 | 三格方法 |
+| 9 | [`C4` = `09-a2d-dllm.md`](09-a2d-dllm.md) | `training/a2d_dllm/`：调 dllm 包 | **`ar-hf-sft-dllm_a2d`** ✅ |
+
+走完 9 个文件，第 3 步那三格矩阵就齐了。每格在 `RESULTS.md` 里都有实测数字
+可对。
+
+## 后面再看（不在你的路径上）
+
+| 文件 | 你写什么 | 什么时候需要 |
+|---|---|---|
+| [`03-minimind-qwen.md`](03-minimind-qwen.md) | `models/minimind_qwen/` | 想跑 G1 的第 2 行 |
+| [`04-ar-native.md`](04-ar-native.md) | `training/ar_native/` | 同上 |
+| [`08-a2d-minimind.md`](08-a2d-minimind.md) | `training/a2d_minimind/` | 想手写 A2D 而不是调 dllm 包 |
+| [`10-direct-dlm.md`](10-direct-dlm.md) | `training/direct_dlm/` | 想看 G2 |
+| [`11-evaluation.md`](11-evaluation.md) | `evaluation/` | 任何时候 |
+| [`12-qwen3-lora.md`](12-qwen3-lora.md) | 行3 LoRA 两格 | 想跑 0.6B 真模型 |
+| [`13-tier1.md`](13-tier1.md) | Tier 1 定档 | 准备上正式规模 |
 
 ## 怎么用
 
-1. 读对应的一节，看「你要写什么」和「实验版在哪个文件」。
+1. 按上面的顺序读。**每一步都建立在前面所有步之上**，跳步会缺东西。
 2. 自己写 实践版，**不要复制 实验版代码** —— 复制过来就没有对照意义了。
-3. 跑该节的验收命令。两个实现不一致的地方就是你写错了的地方。
+   实践版目录里**只能写注释/docstring**，不能写实现。
+3. 跑该节的验收命令。**两个实现不一致的地方就是你写错了的地方**——
+   这正是每个验收命令都是「跑 实验版 + 跑你的 + 比」的原因。
 
 ## 通则（每一步都适用）
 
@@ -39,3 +53,29 @@
 | DLM 必须报 repetition rate，不能只报 loss | `notes/03-minimind-dlm.md` §11 |
 | 用 4.57.0 的 API，不要写 5.x | `AGENTS.md` |
 | 数值先在 CPU 上对拍，再上 GPU | `logs/dev/01-local-state.md` |
+| 注释只写「这行为什么这么写」，不写教科书段落 | `AGENTS.md` |
+
+## 这一轮 review 抓到的三个「不报错但错」的例子
+
+都在 SFT 这一段，都让 loss 曲线看起来正常：
+
+1. **assistant 后的 EOS 不在监督 span 内** → 模型不会停，生成永远跑满。
+   更糟的是**测试在断言这个错误行为**，所以它躲过了一轮 review。
+2. **采样 prompt 写成 `f"user\n{p}\nassistant\n"`** → 换行占了 EOS 的位置。
+   长度相同、token 不同、不报错，但每个样本文本和 rep-4 都在描述一个没训过的前缀。
+3. **`*-sft-dllm_a2d` 四格训的是因果模型** → dllm 的 loss 不传 mask，
+   双向性必须由模型自己带，而那个脚本用了普通 builder。
+   格子的名字写着 A2D，训出来的是因果模型。
+
+详见 `example/ISSUES.md` 的 DONE-11 / DONE-12 / DONE-13。
+
+## 三条反复踩到的经验
+
+这三条在多个文件里都出现过，所以先说：
+
+1. **错的测试比错的代码更危险。** 一个「不可能失败」的断言会给你假的安心感。
+   实验版有两个断言曾经永远通过，因为它们检查的东西根本不参与计算。
+2. **loss 下降不代表模型学对了。** 复读（repetition）是 DLM 失败最典型的表现，
+   而 loss 照样下降。所有 DLM 评测都要报 repetition rate。
+3. **静默错误比崩溃危险。** span 存 2 元组靠反推块号、padding 的 label 填 0、
+   全忽略 batch 不特判——这三个都不报错，loss 曲线都好看。

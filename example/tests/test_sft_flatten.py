@@ -168,11 +168,6 @@ def section_boundaries() -> None:
 
     check("no span starts at 0 (BOS must stay out of the loss)",
           all(a > 0 for a, _ in spans))
-    check("no span reaches the final EOS",
-          all(b <= len(ids) - 1 for _, b in spans),
-          "half-open [a, b): b == index of EOS means EOS is outside the span")
-    check("no span contains EOS",
-          all(C.EOS not in ids[a:b] for a, b in spans))
     check("no span contains BOS",
           all(C.BOS not in ids[a:b] for a, b in spans))
     check("no span contains PAD",
@@ -180,6 +175,22 @@ def section_boundaries() -> None:
     check("no span contains the MASK id",
           all(C.MASK not in ids[a:b] for a, b in spans),
           "a mask token inside a supervised span is the A2D marker leaking in")
+
+    # These two used to assert the opposite, which is how DONE-12a survived a
+    # review: the corpus put the assistant's EOS *outside* the span, and the
+    # tests below were written to match. The model then never learned to stop --
+    # 64 generated tokens, zero EOS. The terminator is the one token that
+    # teaches "stop", so it has to be supervised.
+    check("every supervised span ends with EOS",
+          all(ids[b - 1] == C.EOS for _, b in spans),
+          "an EOS-terminated answer is the only place the model learns to stop")
+    check("EOS appears exactly once per span, at the end",
+          all([i for i, t in enumerate(ids[a:b]) if t == C.EOS] == [b - a - 1]
+              for a, b in spans),
+          "a second EOS inside the span means the turn was cut")
+    check("the last span may reach the block's last token",
+          spans[-1][1] <= len(ids),
+          f"last span ends at {spans[-1][1]}, block is {len(ids)} tokens")
 
 
 # ------------------------------------------------------------- 5. loss mask
@@ -414,6 +425,61 @@ def section_roundtrip() -> None:
               "assistant" not in text and "user" not in text, repr(text[:60]))
 
 
+def section_sampler_prefix() -> None:
+    """The sampler must continue the string the corpus actually contains.
+
+    DONE-12b: `sample_sft` built its prefix with `f"user\\n{p}\\nassistant\\n"`,
+    which puts a newline where the corpus has EOS. Same token count, different
+    tokens, no error -- and every sampled text and rep-4 number then described a
+    prefix the model was never trained on.
+    """
+    print("\n[7] sampler prefix matches the corpus, token for token")
+    from common.sft import encode_prompt
+
+    for q in ("1+1等于几", "什么是深度学习？"):
+        naive = encode(f"user\n{q}\nassistant\n")
+        proper = encode_prompt(q)
+        check(f"encode_prompt != f-string form: {q!r}", naive != proper,
+              "if these are equal the test below cannot distinguish them")
+        check(f"prompt ends with the assistant header: {q!r}",
+              proper[-len(encode("assistant\n")):] == encode("assistant\n"))
+        check(f"exactly one EOS, one token before the header: {q!r}",
+              [i for i, t in enumerate(proper) if t == C.EOS]
+              == [len(proper) - len(encode("assistant\n")) - 1],
+              "the corpus separates turns with EOS, not a newline")
+
+    # The decisive one: the same question, taken from a real block, must have its
+    # prefix reproduced exactly.
+    from common.cli import SFT_DATA_DIR
+
+    meta_path = Path(SFT_DATA_DIR) / "tokens.bin"
+    if not meta_path.exists():
+        print("  (skipping the corpus check: no prepared SFT data)")
+        return
+    tok = np.memmap(meta_path, dtype="<u2", mode="r")
+    spans = np.load(meta_path.parent / "assistant_spans.npy")
+    blk, start, end = int(spans[0][0]), int(spans[0][1]), int(spans[0][2])
+    base = blk * C.BLOCK_SIZE
+    prefix = tok[base: base + start].tolist()
+    answer = decode(tok[base + start: base + end].tolist())
+    check("real block: span ends with EOS", int(tok[base + end - 1]) == C.EOS)
+
+    # Slice by token, never by decoded text: `decode` expands <|im_start|> into
+    # literal characters, so recovering the question by string surgery gives
+    # back a different string than the one that was encoded.
+    check("real block: prefix opens with BOS", prefix[0] == C.BOS)
+    check("real block: the turn is closed by exactly one EOS before the header",
+          [i for i, t in enumerate(prefix) if t == C.EOS] == [len(prefix) - 5],
+          f"EOS at {[i for i, t in enumerate(prefix) if t == C.EOS]}, "
+          f"prefix is {len(prefix)} tokens")
+    header = encode("assistant\n")
+    question = decode(prefix[1:len(prefix) - 1 - len(header)])
+    check("real block: encode_prompt reproduces the prefix",
+          encode_prompt(question) == prefix[1:],
+          f"corpus {prefix[1:8]}... vs built {encode_prompt(question)[:7]}...")
+    check("real block: the supervised answer is non-empty", len(answer.strip()) > 0)
+
+
 def main() -> int:
     rows = section_schema()
     if rows:
@@ -425,6 +491,7 @@ def main() -> int:
         section_real_corpus(rows)
     section_packing()
     section_roundtrip()
+    section_sampler_prefix()
     print()
     if FAILS:
         print(f"FAIL ({len(FAILS)}): " + ", ".join(FAILS))

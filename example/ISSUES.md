@@ -140,10 +140,14 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 
 | 路线 | hf/mini | hf/dllm | native/mini | native/dllm |
 |---|---:|---:|---:|---:|
-| 新路线 A2D → SFT | 6.4958 | 6.4880 | 6.5279 | 6.5088 |
-| 原路线 SFT → A2D → SFT | **6.1029** | **6.0851** | **6.0851** | **6.0485** |
+| 新路线 A2D → SFT | 6.3872 | 6.3845 | 6.4133 | 6.4125 |
+| 原路线 SFT → A2D → SFT | **5.9773** | **5.9776** | **5.9713** | **5.9709** |
 
-**原路线优约 0.40 nat，四对全部同向。** 结论写进 `SPEC.md` G3。
+**原路线优 0.4251 nat，四对全部同向。** 结论写进 `SPEC.md` G3。
+
+⚠️ 这组数字是 **2026-10-03 重跑后的**：修完 DONE-13（8 格训成因果模型）之前
+这里是 6.4880–6.5279 / 6.0485–6.1029，差 0.40 nat。结论方向没变，
+但那批数字里 dllm 那一臂量的是因果模型。
 
 ## DEFERRED-10 · DLM 行不做 DPO（用户 2026-10-02 决定放弃）
 
@@ -156,6 +160,152 @@ dllm 跑 8 次 forward，实验版跑 32 次。
 **不做**，不是待办。AR 行两格已跑通（偏好准确率见 RESULTS.md）。
 
 **历史记录**：
+
+## DONE-11 · 续训的 RNG 快照取错了位置，C4 又恰好测不到
+
+**这个是本轮 review 抓到的最严重的一个。**
+
+`common/loop.py::fit` 把「训练结束时的 RNG 状态」的快照写在了 **while 循环之前**：
+
+```python
+self._rng_after_train = rng_state()     # 循环之前 —— 取到的是训练【开始】时的状态
+while self.step < limit: ...            # 训练在这里消耗 RNG
+```
+
+`save()` 于是把训练**开始前**的 RNG 存进 checkpoint。
+
+**后果**：任何用 `--resume` 的 **DLM** 格，续训时会从头重放同一串掩码，
+而不是接着上次那串。`ar-3.2m-*-sft-*a2d` 这一类格的续训**静默地训在错误的噪声序列上**。
+实测 `worst_step_delta = 5.2e-01`（对照 1e-6 的容差）。
+
+**为什么没被发现**：C4 就是为「续训 == 一次跑完」设的验收，但
+**C4 用的是 `ar_loss`，而 `ar_loss` 根本不消耗 RNG**。
+代码注释还写着「for a DLM cell the loss draws from it too — which is exactly
+the equivalence C4 checks」——**这句话描述的检查并不存在**。
+
+**这就是「错的测试比错的代码更危险」的实例**：注释给了假的安心感，
+而不是代码缺一个特判。
+
+**已修**：
+1. 快照移到 while 循环**之后**、eval 与采样之前（两者都消耗 RNG）。
+2. C4 拆成两个臂：`ar_loss` 臂（测 batch 流 + optimizer）和
+   新增的 `_rng_loss` 臂（随机掩码，测 RNG 快照）。
+   **新臂确实会失败**——把修复回退掉，它报 `rng_worst_step_delta=2.356e-01` FAIL；
+   恢复后 `0.000e+00` PASS。同一时刻 `ar_loss` 臂在两种情况下都是 `0.000e+00`，
+   证明它从来没覆盖过这一项。
+
+**教训**：验收项的注释不能声称覆盖它实际没覆盖的东西。
+要问「这个检查真的会在 bug 存在时失败吗」，而不只是「它现在是 PASS 吗」。
+
+## DONE-12 · SFT 三处静默偏差：span 不含 EOS、采样 prompt 差一个 token、docstring 与代码不符
+
+一轮 review 抓到三条，**全部不报错、全部让 loss 曲线看起来正常**。
+
+### 12a · assistant 后的 EOS 不在监督 span 内（最严重）
+
+`_pack` 先 `cur_spans.append((start, len(cur)))` 再 `cur.append(eos)`，
+所以 EOS 落在半开区间**之外**。EOS 是唯一教模型「说完了」的那一票。
+
+实测：SFT 后的模型生成 64 token，**零个 EOS**，每次跑满。
+pretrain 的 `ar_loss` 注释明说 EOS 位置的 loss 教模型停止，SFT 却没给这个信号。
+
+**已修**：span 结束位置移到 `cur.append(eos)` 之后。
+监督 token 255,451 → **260,590**（+5,139 = span 数，每个一个 EOS）。
+修完生成 4 / 19 token 就在 EOS 停下。
+
+### 12b · 采样 prompt 与训练语料差一个 token
+
+语料里 turn 用 **EOS** 分隔，所以 prompt 前缀是
+`[user\n]{question}[EOS][assistant\n]`。
+而采样写的是 f-string `f"user\n{p}\nassistant\n"`——**换行**占了 EOS 的位置。
+
+实测 `"1+1等于几"`：两种写法**都是 13 个 token，内容不同**。
+不报错，但每个样本文本和每个 rep-4 数字都在描述一个模型没训过的前缀。
+
+`sample_sft` 的 docstring 还写着「with the chat shape the SFT rows actually
+trained on」——**这句话是错的**。
+
+**已修**：`common/sft.py::encode_prompt` 在 token 级拼接，5 个调用点统一走它；
+两个 sampler 加 `prompt_ids` 通道（f-string 表达不了中间的 EOS）。
+已对真实语料验证逐位一致：`训练前缀 == encode_prompt(q)` → True。
+Qwen track 另有 `lora_common.sft_prompts_for`（不同 tokenizer track）。
+
+**附带**：`sample_ar` 返回的 `"prompts"` 标签用的是默认 AR prompts，
+所以 repetition 表把 SFT 样本标成了 `'Once upon a time'`。一并修。
+
+### 12c · 模块 docstring 的块结构图与代码不符
+
+图里写 `[BOS] user\n{q}\n[EOS] assistant\n{a}\n[EOS]`，
+实际是 `[BOS] user\n{q}[EOS] assistant\n{a}[EOS] user\n{q2}[EOS]`——
+**每条 turn 前没有 BOS**，EOS 前也没有换行。
+图是下游写 prompt 的人的唯一步规格，12b 就是从它来的。
+
+顺带：`Turn.text()` 带尾部换行而 `_pack` 不发这个换行，
+`n_long_turns` 用 `len(enc(t.text())) + 2` 统计，与 `_pack` 的判据差一个 token。
+改为直接用 `len(enc(header)) + len(enc(body)) + 1`。
+`n_long_turns` 3,420 → **3,398**（22 个恰好卡边界的 turn 之前被误报）。
+
+## DONE-13 · `*-dllm_a2d` **八格**训的是因果模型，不是 A2D
+
+`train_a2d_from_sft.py::build_parts` 和 `train_dlm_sft.py::_hf_parts/_native_parts`
+对**两个 objective 都**返回 `build_model`（HF）/ `build_native_model`（native）。
+两个脚本是同一个 bug 的两份拷贝——先修第一份时，第二份还在。
+
+但 dllm 的 objective 走 `MDLMTrainer.compute_loss`，那个函数
+**forward 时不传 `attention_mask`** —— transformers 于是按因果建 mask。
+实测：改末位 token，前面所有 logits 位位不变（delta `0.0e+00`）= 因果；
+换成 `build_a2d_model` 则是 `8.3e-01` = 双向。
+
+**后果：8 个格训的是因果模型，却叫 A2D**：
+
+| 格 | 脚本 |
+|---|---|
+| `ar-3.2m-{hf,native}-sft-dllm_a2d` | `train_a2d_from_sft.py` |
+| `ar-3.2m-{hf,native}-sft-dllm_a2d-sft` | `train_dlm_sft.py` |
+| `dlm-3.2m-dllm-sft` | `train_dlm_sft.py` |
+
+于是 G3 的那个结论在 dllm 那一臂上比较的是
+**双向模型 vs 因果模型**，不是两个实现；G5 的对拍也失去意义。
+
+`minimind` 那一臂没事——它在 forward 时显式传 4D 全零掩码，不依赖 builder。
+四种组合现在的实测：
+
+| row | objective | 掩码来源 |
+|---|---|---|
+| hf | dllm | 模型自带双向（`A2DQwen3LMHeadModel`） |
+| hf | minimind | 显式 4D 全零掩码 |
+| native | dllm | `set_causal(False)` |
+| native | minimind | forward 的 `is_causal=False` 参数 |
+
+**已修**：两个脚本都按 objective 选 builder（HF 用 `build_a2d_model`，
+native 用 `set_causal(False)` 包装）。A2D 模型与普通模型的 state_dict 键完全一致，
+所以 `load_into` 不用改。
+
+**另外加了一道会响的**：`native/a2d_dllm.py::make_dllm_loss` 现在检查
+`model._last_is_causal` 并直接抛错。静默接受一个因果模型，就是这 8 格发生的方式。
+
+**修完暴露出第三份拷贝：采样器。** `train_dlm_sft.py` 对两个 objective 都用
+AR 采样器，而 AR 采样器走 `generate`，那假设因果解码。以前能用**只是因为模型
+本来就是因果的**；换成真的 A2D 模型立刻炸：
+
+```
+RuntimeError: The expanded size of the tensor (1) must match the existing
+size (22) at non-singleton dimension 2.  Target sizes: [1, 2, 1, 22]
+```
+
+`train_a2d_from_sft.py` 一直按 objective 选了 sampler，所以只有 `train_dlm_sft.py`
+漏了。HF 臂改用 `sample_dllm`（dllm 的 MDLMSampler，额外加了 `prompt_labels`
+——SFT 的 prompt 是 id 列表，不加的话 repetition 表的「prompt」列会打印裸 id）；
+native 臂改用 `sample_native_dlm`，它通过 `native_forward` 取 logits，
+所以与实现无关（dllm 在这一格提供的是 objective，不是 sampler）。
+
+**这个 bug 只有在修好上一个之后才存在。** 因果模型让错误的采样器看起来是对的，
+两个错误互相掩护。
+
+**教训**：`train_a2d_dllm.py`（G2 的格）一直用的是 `build_a2d_model`。
+三个脚本长得几乎一样，只有这一行不同——而**修复也必须做三遍**，
+因为修一处不会让另两处自动正确。下一步应该是把 `(row, objective) -> builder`
+收进一个共享函数。
 
 ## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
 
@@ -186,19 +336,27 @@ object`。本次在两个不同文件里各犯一次。
 **后果**：按整轮丢弃（GOAL.md §8），带 think 的消息几乎**全部**被丢掉。
 **方案 A 的收益为零，代价是丢掉 19% 的 assistant 消息。**
 
-**代码现在跑在 A2**（保持 ctx 128，接受丢弃），丢弃量写在
-`data/prepared/sft-mini-6400/meta.json` 的 `n_dropped_turns_with_thinking`
-（4,096 块切片里 3,164 / 3,420），不是静默的。
+**代码跑在 A2**（保持 ctx 128，接受丢弃）。
 
-**三个选项，等拍板**：
+**用户 2026-10-02 拍板**：实验版按 A2 接受这个代价——原话是
+「实验版用最小代价，能跑就行，不关心效果和训练量」。
 
-| | 做法 | 后果 |
-|---|---|---|
-| **A1** | SFT 格用 `context_length: 256` 或 384 | think 大部分能装下。**代价：Tier 0 的 ctx 是已完成的 10 格配置，改它让那 10 格的数字全部作废**（它们是 ctx 128） |
-| **A2** | 保持 ctx 128，接受丢弃 | 数字干净，但 GOAL.md §4.3 的 A 变成空头支票 |
-| **A3** | 装不下时只丢 think、保留答案 | 两种口径混在一份语料里，最难解释 |
+**已落实**：`meta.json` 不再写 `reasoning_in_loss: true`（那是假的——95% 的 think
+根本不在语料里），改成两个从**落盘的块里数出来**的字段：
 
-**影响范围**：13 个 SFT 格的**数据内容**，不阻断代码。
+```
+"reasoning_option": "A (fold <thinking> into the assistant text)",
+"reasoning_survival_rate": 0.0551
+```
+
+配套计数（4,096 块切片）：`n_dropped_turns_with_thinking 3,158` / `n_long_turns 3,398`。
+
+**给实践版的建议（未执行，`configs/practical/tier1.yaml` 仍是空的，现在改零成本）**：
+`context_length` 与参数量**无关**，放大参数解决不了这个问题——它是独立旋钮，
+而且参数量越大越慢。正确做法是给 SFT 单独一个更长的 context。
+
+**没做 A1 的代价要说清楚**：Tier 0 的 ctx 128 是已完成的 20+ 格的配置，
+改它会让那些格子的数字全部作废。实验版不值得。
 
 ---
 

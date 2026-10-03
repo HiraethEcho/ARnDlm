@@ -18,9 +18,23 @@ from .report import append_result
 
 
 def repetition_from_sample(sample: dict | None) -> tuple[float | None, list[dict]]:
-    """rep-4 over generated ids. Returns (rep4, per-prompt rows)."""
+    """rep-4 over generated ids. Returns (rep4, per-prompt rows).
+
+    An empty generation is reported, not averaged in. `repetition_rates([])`
+    divides by nothing and yields nan, and a nan in the rep-4 column is the
+    number a reviewer actually looks at for DLM failure -- so it has to mean
+    "this cell produced no text", not "this cell's repetition rate is
+    unavailable". One real instance: the native dllm SFT cell sampled from a
+    prefix the model had never trained on, answered with an immediate EOS, and
+    wrote `nan` into RESULTS.md while reporting OK.
+    """
     if not sample or not sample.get("ids"):
         return None, []
+    empty = [i for i, ids in enumerate(sample["ids"]) if not ids]
+    if empty:
+        print(f"[warn] prompt(s) {empty} generated nothing (0 tokens before EOS). "
+              f"rep-4 is reported as '-' for those; an empty generation usually "
+              f"means the sampled prefix is not the one the cell trained on.")
     rates = repetition_rates(sample["ids"], ns=(4,))
     rows = []
     for prompt, ids, text in zip(sample.get("prompts", []), sample["ids"],
@@ -29,7 +43,7 @@ def repetition_from_sample(sample: dict | None) -> tuple[float | None, list[dict
             "prompt": prompt,
             "ids": [int(i) for i in ids],
             "text": text,
-            "rep4": round(repetition_rates([ids], ns=(4,))[4], 4),
+            "rep4": (round(repetition_rates([ids], ns=(4,))[4], 4) if ids else None),
         })
     return rates[4], rows
 

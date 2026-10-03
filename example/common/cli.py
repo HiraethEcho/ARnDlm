@@ -29,7 +29,7 @@ def add_common_args(parser: argparse.ArgumentParser, train_cfg: C.TrainCfg,
     parser.add_argument("--max-blocks", type=int, default=default_max_blocks,
                         help="cap corpus blocks: 4096 blocks x 128 = 524,288 tokens")
     parser.add_argument("--data-dir", type=Path, default=C.DATA_DIR)
-    parser.add_argument("--eval-batches", type=int, default=4,
+    parser.add_argument("--eval-batches", type=int, default=C.EVAL_BATCHES,
                         help="frozen batches used for the eval loss in RESULTS")
     parser.add_argument("--resume", action="store_true",
                         help="continue from the cell's checkpoint instead of starting fresh")
@@ -66,14 +66,7 @@ def resolve(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, PackedData, list]:
                               seed=args.seed)
     data = build_packed(args.data_dir, block_size=C.BLOCK_SIZE,
                         max_blocks=args.max_blocks)
-    batches = fixed_batches(args.eval_batches, cfg.batch_size, len(data))
-    if not batches:
-        # An empty batch set makes eval_loss return 0.0, which reads as a
-        # perfect model and makes the checkpoint verifier report OK.
-        raise ValueError(
-            f"no eval batches: corpus has {len(data)} blocks, batch size is "
-            f"{cfg.batch_size}. Raise --max-blocks or lower --batch-size.")
-    return cfg, data, batches
+    return cfg, data, _eval_batches(args, cfg, len(data))
 
 
 def resolve_sft(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, SFTData, list]:
@@ -87,19 +80,36 @@ def resolve_sft(args, train_cfg: C.TrainCfg) -> tuple[C.TrainCfg, SFTData, list]
     cfg = dataclasses.replace(train_cfg, steps=args.steps, batch_size=args.batch_size,
                               seed=args.seed)
     prepared = Path(args.data_dir) if args.data_dir != C.DATA_DIR else SFT_DATA_DIR
-    if not (prepared / "meta.json").exists():
+    # meta.json alone does not identify an SFT corpus -- every prepared dir has
+    # one -- so the spans file is what the check has to look for. Without it the
+    # mistake surfaces later as FileNotFoundError on assistant_spans.npy, which
+    # says nothing about what the caller got wrong.
+    if not (prepared / "assistant_spans.npy").exists():
         raise FileNotFoundError(
-            f"{prepared} does not look like an SFT prepared directory. Build it "
-            f"first: .venv/bin/python example/base/hf/make_sft_data.py")
+            f"{prepared} has no assistant_spans.npy, so it is not an SFT prepared "
+            f"directory. Build it first: .venv/bin/python example/base/hf/make_sft_data.py")
     data = load_sft(prepared, block_size=C.BLOCK_SIZE, max_blocks=args.max_blocks)
-    batches = fixed_batches(args.eval_batches, cfg.batch_size, len(data))
+    return cfg, data, _eval_batches(args, cfg, len(data))
+
+
+def _eval_batches(args, cfg: C.TrainCfg, n_blocks: int) -> list:
+    """The frozen cross-implementation comparison batches, with the guard.
+
+    An empty batch set makes eval_loss return 0.0, which reads as a perfect
+    model and makes the checkpoint verifier report OK.
+    """
+    batches = fixed_batches(args.eval_batches, cfg.batch_size, n_blocks)
     if not batches:
         raise ValueError(
-            f"no eval batches: corpus has {len(data)} blocks, batch size is "
+            f"no eval batches: corpus has {n_blocks} blocks, batch size is "
             f"{cfg.batch_size}. Raise --max-blocks or lower --batch-size.")
-    return cfg, data, batches
-
-
+    if len(batches) < args.eval_batches:
+        # Not fatal, but the summary will quote a smaller eval set than the
+        # number in --help, and two cells would then be scored on different
+        # amounts of data without anything saying so.
+        print(f"[warn] asked for {args.eval_batches} eval batches, got {len(batches)} "
+              f"({n_blocks} blocks, batch size {cfg.batch_size})")
+    return batches
 def resume(loop, ckpt_dir: Path):
     """`--resume`: weights + optimizer + RNG + batch position.
 

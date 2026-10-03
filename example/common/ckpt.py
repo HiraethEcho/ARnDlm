@@ -45,12 +45,6 @@ def load_state_dict(path: Path | str) -> dict[str, torch.Tensor]:
     return load_file(str(f))
 
 
-def _fits(state: dict[str, torch.Tensor], model: torch.nn.Module) -> bool:
-    want = set(model.state_dict())
-    return all(k in want or k[len("model."):] in want
-               for k in state if k != "lm_head.weight")
-
-
 def load_into_any(model: torch.nn.Module, path: Path | str,
                   prefix: str = "model.") -> dict:
     """Load a checkpoint, tolerating one extra wrapper level.
@@ -69,12 +63,12 @@ def load_into_any(model: torch.nn.Module, path: Path | str,
     """
     state = load_state_dict(path)
     want = set(model.state_dict())
-    if all(k in want or k == "lm_head.weight" for k in state):
+    if all(k in want for k in state):
         return load_into(model, state)
 
     stripped = {k[len(prefix):] if k.startswith(prefix) else k: v
                 for k, v in state.items()}
-    if all(k in want or k == "lm_head.weight" for k in stripped):
+    if all(k in want for k in stripped):
         if len(stripped) != len(state):
             raise ValueError(f"stripping {prefix!r} lost keys: "
                              f"{len(state)} -> {len(stripped)}")
@@ -108,8 +102,11 @@ def load_into(model: torch.nn.Module, state: dict[str, torch.Tensor],
         raise RuntimeError(f"state_dict mismatch: missing={missing} unexpected={unexpected}")
 
     model.load_state_dict(state, strict=False)
-    return {"tensors": len(state), "aliased_tied": sorted(aliased),
-            "max_abs_gap": 0.0}
+    # No gap measurement here. An earlier version reported "max_abs_gap": 0.0 as a
+    # literal -- a field that always reads "no drift" and so can never be the
+    # reason a mismatch is caught. The check that matters is the strict
+    # missing/unexpected comparison above, which raises.
+    return {"tensors": len(state), "aliased_tied": sorted(aliased)}
 
 
 def load_config(path: Path | str) -> dict:

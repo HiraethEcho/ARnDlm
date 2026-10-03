@@ -58,9 +58,13 @@ def make_a2d_loss(model, generator: torch.Generator | None = None):
         t = sample_t(ids.shape[0], ids.device, generator)
         x_t, masked = corrupt(ids, t, C.MASK, generator, valid=valid)
         # t=0 would divide by ~1e-6; that sample contributes nothing anyway.
-        t = t.clamp_min(1e-3)
+        # Clamped into a *new* name: this used to overwrite `t`, so the logged
+        # t_mean was the post-clamp mean while the native row logged the drawn
+        # one. The two rows then reported different quantities under the same
+        # key, which makes a cross-row comparison of t_mean meaningless.
+        t_safe = t.clamp_min(1e-3)
         logits = dlm_forward(model)(x_t)
-        return a2d_loss(logits, ids, masked, t, valid=valid), {"t_mean": float(t.mean())}
+        return a2d_loss(logits, ids, masked, t_safe, valid=valid), {"t_mean": float(t.mean())}
     return loss_fn
 
 

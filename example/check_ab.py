@@ -336,6 +336,19 @@ def c4(args) -> dict:
     and still missed this once, because the resumed run restarted the epoch's
     batch order and nothing raised.
 
+    Runs twice, once per RNG consumption, because there are two independent
+    things to restore and `ar_loss` exercises only the first:
+
+      * `ar_loss` draws nothing from the RNG, so this arm tests the batch
+        stream and the optimizer.
+      * `_rng_loss` masks with `torch.rand`, so this arm also tests the RNG
+        snapshot. It is the arm that matters for every DLM cell: the loss
+        itself consumes randomness, so a resumed DLM run would train on a
+        different corruption sequence than a straight one. The snapshot was
+        once taken before the training loop instead of after it, and this arm
+        is what catches that -- the `ar_loss` arm passed the whole time
+        (worst_step_delta 5.2e-01 on the `_rng_loss` arm).
+
     Tolerance is 1e-6 rather than 0: SDPA backward kernels on CUDA are not
     bit-reproducible across runs, so an exact comparison fails intermittently
     on noise and hides a real regression.
@@ -346,6 +359,14 @@ def c4(args) -> dict:
     from common.loop import Loop
     from common.losses import ar_loss
     from base.hf.model import build_model as build_hf
+
+    def _rng_loss(model, batch):
+        """A2D-shaped objective: random mask, then CE on the visible tokens."""
+        mask = torch.rand(batch.shape, device=batch.device) < 0.5
+        noisy = batch.clone()
+        noisy[mask] = C.MASK
+        loss, extra = ar_loss(model, noisy)
+        return loss, extra
 
     if args.steps < 20:
         # With steps - 10 <= 0 the "partial" run trains nothing and the
@@ -381,9 +402,41 @@ def c4(args) -> dict:
 
     worst = max((abs(a - b) for a, b in zip(straight.losses, cont.losses)), default=0.0)
     same_len = len(straight.losses) == len(cont.losses) == args.steps
-    return {"status": "PASS" if worst <= 1e-6 and same_len else "FAIL",
+
+    rng_worst, rng_len = _c4_rng_arm(args, cfg, data, build_hf, _rng_loss, device)
+
+    return {"status": "PASS" if worst <= 1e-6 and same_len and rng_worst <= 1e-6 else "FAIL",
             "worst_step_delta": worst, "tol": 1e-6, "steps": args.steps,
-            "matched": same_len}
+            "matched": same_len,
+            "rng_worst_step_delta": rng_worst, "rng_matched": rng_len}
+
+
+def _c4_rng_arm(args, cfg, data, build_hf, loss_fn, device) -> tuple[float, bool]:
+    """The same straight-vs-resume comparison with a loss that consumes the RNG."""
+    import dataclasses
+    import shutil
+    import tempfile
+
+    from common.data import BlockStream
+    from common.loop import Loop
+
+    straight = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, loss_fn, device=device)
+    straight.fit(data)
+
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        part = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, loss_fn, device=device)
+        part.fit(data, max_steps=args.steps - 10)
+        part.save(tmp, {})
+        cont = Loop(build_hf(C.TIER0, seed=cfg.seed), cfg, loss_fn, device=device)
+        stream = BlockStream(len(data), cfg.batch_size, cfg.seed)
+        cont.load(tmp, stream=stream)
+        cont.fit(data, stream=stream)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    worst = max((abs(a - b) for a, b in zip(straight.losses, cont.losses)), default=0.0)
+    return worst, len(straight.losses) == len(cont.losses) == args.steps
 
 
 def c6(args) -> dict:

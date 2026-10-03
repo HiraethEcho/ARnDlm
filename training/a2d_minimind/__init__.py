@@ -1,10 +1,10 @@
 """a2d — 用 minimind-dlm 的思路手动实现 A2D。
 
-对应 PLAN.md 的 T2a。原理全在 notes/03-minimind-dlm.md。
+对应教学计划 Step D5 (`example/teach/08-a2d-minimind.md`)。原理全在 notes/03-minimind-dlm.md。
 
 A2D = AR-to-Diffusion, 两步:
     1. is_causal: True -> False        关掉因果约束
-    2. vocab += [MASK]                 扩词表 (minimind tokenizer 直接用 id 27)
+    2. vocab += [MASK]                 扩词表
 
 然后用 DLM 目标微调:
     corrupt(input_ids, t)  按 p_mask = 1 - alpha(t) 随机替换成 MASK
@@ -20,5 +20,5 @@ A2D = AR-to-Diffusion, 两步:
 
 **必须在同一 checkpoint 上与 dllm-a2d/ 跑出同一个 loss**, 否则不知道是谁错了。
 
-依赖: torch (原生), ../base, ../minimind (拿 AR 权重) 或 ../transformer
+依赖: torch (原生), ../../diffusion, ../../utils
 """
