@@ -58,7 +58,7 @@
 |---|---|
 | `ar-3.2m-native-sft-dpo` | 代码路径与 hf 版相同，`train_dpo.py` 加 `--cell` 即可，约 5 min |
 | `dlm-3.2m-{hf,dllm}-sft` | P2 |
-| `…-sft-dpo`（dlm 行） | **DPO 需要自回归序列 logprob，DLM 不定义这个量**，需 ELBO 形式化（OPEN-10） |
+| `dlm-3.2m-{hf,dllm}-sft-dpo`（2 格） | **DPO 需要自回归序列 logprob，DLM 不定义这个量**，需 ELBO 形式化（OPEN-10） |
 
 | 开放问题 | 性质 |
 |---|---|
