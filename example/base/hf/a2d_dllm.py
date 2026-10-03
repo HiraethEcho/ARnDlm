@@ -144,7 +144,11 @@ def sample_dllm(model, prompts=C.PROMPTS, max_new_tokens: int = 32, block_size: 
     ids, texts = [], []
     for i, prompt in enumerate(prompts):
         plen = len(encode(prompt, bos=True)) if isinstance(prompt, str) else len(prompt)
-        prompt_ids = prompt if not isinstance(prompt, str) else encode(prompt, bos=True)
+        # `prefix`, not a second `prompt_ids`: the first `prompt_ids` above is the
+        # list of tensors handed to the sampler, and reusing the name for a
+        # list[int] / list[str] here made the reader re-derive which type it was
+        # on every line after the reuse.
+        prefix = prompt if not isinstance(prompt, str) else encode(prompt, bos=True)
         gen = sequences[i, plen: plen + max_new_tokens]
         if eos_token_id in gen:
             gen = gen[: int((gen == eos_token_id).nonzero()[0])]

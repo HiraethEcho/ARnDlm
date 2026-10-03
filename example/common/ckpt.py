@@ -83,14 +83,16 @@ def _storage(t: torch.Tensor):
     return (t.data_ptr(), tuple(t.shape), tuple(t.stride()))
 
 
-def load_into(model: torch.nn.Module, state: dict[str, torch.Tensor],
-              atol: float = 1e-5) -> dict:
+def load_into(model: torch.nn.Module, state: dict[str, torch.Tensor]) -> dict:
     """Load with a completeness check that tolerates tied aliases.
 
     A tied checkpoint stores one tensor per storage, so `lm_head.weight` is
     absent on disk and refilled from the embedding -- `strict=True` (and a naive
     `strict=False` missing-key check) would reject every correct tied model.
     The returned report is what the cells print.
+
+    No `atol`: an earlier version took the parameter, never used it, and a
+    caller tuning it thought it was changing something.
     """
     model_state = model.state_dict()
     absent = [k for k in model_state if k not in state]
@@ -127,12 +129,14 @@ def describe(model: torch.nn.Module) -> dict:
         if id(p) not in seen:
             seen.add(id(p))
             unique += p.numel()
+    sd = model.state_dict()
+    stored = _unique_state_dict(model)
     return {
         "params_unique": unique,
         "params_trainable": sum(p.numel() for p in model.parameters() if p.requires_grad),
-        "state_dict_entries": len(model.state_dict()),
-        "stored_tensors": len(_unique_state_dict(model)),
-        "tied": len(_unique_state_dict(model)) < len(model.state_dict()),
+        "state_dict_entries": len(sd),
+        "stored_tensors": len(stored),
+        "tied": len(stored) < len(sd),
     }
 
 

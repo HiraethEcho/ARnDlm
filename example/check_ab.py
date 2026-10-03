@@ -141,7 +141,6 @@ def c2(args) -> dict:
     from common.a2d import a2d_loss, corrupt, sample_t
     from base.hf.a2d_dllm import DLLMLoss, build_a2d_model
     from base.hf.a2d_minimind import dlm_forward
-    from base.hf.model import build_model as build_hf
 
     if not (HF_AR / "model.safetensors").exists():
         return {"status": "SKIP", "detail": "no AR checkpoint; run cell 1"}
@@ -198,6 +197,11 @@ def c5(args) -> dict:
     Compares a *freshly built* A2D model against the AR checkpoint before any
     load. An earlier version compared after the load, i.e. compared the values
     it had just written with themselves, which can never fail.
+
+    `args` is unused: every other check reads at least `--tol` or `--seed` and
+    this is a pure weight-census check, so a separate `c5()` would break the
+    `CHECKS[name](args)` dispatch. Keeping the parameter keeps the signature
+    uniform, and a future `--ckpt`-like knob lands here without touching main.
     """
     from base.hf.a2d_dllm import TIED_ALIASES, build_a2d_model
 
@@ -358,7 +362,6 @@ def c4(args) -> dict:
     from common.data import BlockStream
     from common.loop import Loop
     from common.losses import ar_loss
-    from base.hf.model import build_model as build_hf
 
     def _rng_loss(model, batch):
         """A2D-shaped objective: random mask, then CE on the visible tokens."""
@@ -450,7 +453,6 @@ def c6(args) -> dict:
     from common.a2d import a2d_loss, corrupt, sample_t
     from base.hf.direct_dlm import make_direct_loss
     from base.hf.direct_dlm_dllm import Bidirectional, make_dllm_loss
-    from base.hf.model import build_model as build_hf
 
     device = torch.device("cuda" if torch.cuda.is_available() and not args.cpu else "cpu")
     eps = 1e-3
@@ -489,8 +491,8 @@ def c7(args) -> dict:
 
     The SFT cells start from *their own* AR checkpoints, and those two were
     trained independently, so `ar-3.2m-hf-sft` and `ar-3.2m-native-sft` are
-    expected to end at slightly different losses (measured: 6.5408 vs 6.5252,
-    0.23% apart) -- and that difference is upstream, not the SFT step.
+    expected to end at slightly different losses (measured: 6.4502 vs 6.4344,
+    0.24% apart) -- and that difference is upstream, not the SFT step.
 
     So this check does what C1 does for the AR rows: load **one** checkpoint into
     both implementations and run the same assistant-only loss over the same
@@ -498,7 +500,6 @@ def c7(args) -> dict:
     """
     from common.losses import sft_ar_loss
     from common.sft import load_sft
-    from base.native.model import build_native_model
 
     prepared = C.ROOT / "data" / "prepared" / "sft-mini-6400"
     if not (prepared / "meta.json").exists():

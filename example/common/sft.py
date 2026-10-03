@@ -245,7 +245,7 @@ def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
 
     The user accepted 3.0% for the experimental version -- it is a smoke test, not
     a chat model. The practical version should not: its tier1.yaml is still empty,
-    so giving SFT a longer context costs nothing there. ISSUES.md OPEN-7.
+    so giving SFT a longer context costs nothing there. ISSUES.md DONE-7.
     """
     blocks: list[list[int]] = []
     spans: list[list[tuple[int, int]]] = []
@@ -295,7 +295,7 @@ def build_sft_blocks(jsonl: Path, block_size: int, max_blocks: int = 0,
 
 def _n_think_blocks(blocks, spans) -> int:
     """How many blocks actually kept a think block. Counted from the data, not
-    estimated -- the survival rate in meta.json is what OPEN-7 turns on, so it has
+    estimated -- the survival rate in meta.json is what DONE-7 turns on, so it has
     to be measured from the blocks that were emitted."""
     from .tokenizer import decode
 

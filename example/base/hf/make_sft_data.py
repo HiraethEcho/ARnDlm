@@ -6,7 +6,7 @@
 Writes `data/prepared/sft-mini-6400/`: tokens.bin, assistant_spans.npy,
 meta.json. The numbers in meta.json are the ones to read
 before trusting the corpus -- `n_dropped_turns_with_thinking` is the one that
-bit us (ISSUES.md OPEN-7).
+bit us (ISSUES.md DONE-7).
 """
 from __future__ import annotations
 

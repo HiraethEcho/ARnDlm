@@ -307,6 +307,77 @@ native 臂改用 `sample_native_dlm`，它通过 `native_forward` 取 logits，
 因为修一处不会让另两处自动正确。下一步应该是把 `(row, objective) -> builder`
 收进一个共享函数。
 
+## DONE-14 · 静态检查：引用漂移、死参数、重复 import、一个 shell label
+
+**这轮只做静态分析，没有跑任何测试或训练。**
+
+### 14a · 五处 ISSUES 引用指向已改名的标题
+
+代码里 `ISSUES.md OPEN-7` / `OPEN-8` / `OPEN-10` 共 5 处，但那些标题已经改成了
+`DONE-7` / `DONE-8` / `DEFERRED-10`。照着注释去找会找不到条目。
+
+**已修**：全部改指现在的标题。核对脚本（逐个引用对照 ISSUES 的标题集合）：
+剩余漂移 0。
+
+### 14b · 死参数：接受、忽略、没人检查
+
+| | 问题 | 改法 |
+|---|---|---|
+| `ckpt.load_into` 的 `atol` | 声明了、没用。**调用方调它以为在改什么** | 删。docstring 写明原因 |
+| `dpo.sequence_logprob` 的 `ids` | 只用 logits 和 labels | 删。3 个调用点同步 |
+| `check_ab.c5` 的 `args` | 唯一未用 args 的 check | 保留（`CHECKS[name](args)` 统一签名），docstring 说明 |
+| `hf/direct_dlm.loss_fn` 的 `model` | Loop 的 `loss_fn(model, batch)` 契约 | 保留，不是 bug |
+| `train_dpo.make_dpo_loss` 的 `policy` | Loop 已把 model 当 policy 传入，重复 | 删，docstring 说明 |
+
+**这一类最值得记**：一个接受但忽略、没人检查的参数，等于**邀请调用方传错的
+tensor 并保持沉默**。它比抛错更危险，因为它让错误调用看起来正常。
+
+### 14c · 未使用的 import（3 处真冗余）
+
+`train_dlm_sft.py` 的 `sample_dlm_row`（改用 dllm 采样器后遗留）、
+`train_dpo.py` 的 `copy`、`common/dpo.py` 的 `encode`。
+
+### 14d · 函数内重复 import（4 处）
+
+`train_dlm_sft.py` 在模块级和函数体内各 `from common.sft import encode_prompt`
+一次（×3 处，模块级已有）；`train_dpo.py` / `check_ab.py`（×4 处）/ 
+`test_sft_flatten.py` 里同样有模块级已有的延迟 import。
+已删函数内冗余那份，**延迟 import 本身保留**（那是避免循环依赖的正统写法）。
+
+### 14e · `BASE_OF`：三个脚本写同一字符串两次
+
+`"Qwen-mini-HF" if row == "hf" else "Qwen-mini-MiniMind"` 在 3 个脚本里出现，
+`config.py` 里已有 `BASE_OF`。收进 `common/config.py::BASE_OF`，3 处改用它。
+一处曾漂移（DONE-13 之前 dllm 臂标签错），统一后不会再漂。
+
+### 14f · `smoke_all.sh` 的 cell 9/10 label 重复了 `qwen3-0.6b-`
+
+`"qwen3-0.6b-qwen3-0.6b-dllm_a2d"` → `"qwen3-0.6b-dllm_a2d"`。
+只影响日志显示，不影响行为。
+
+### 14g · `check_ab.py` 里 `6.5408 vs 6.5252` 的实测注释已过时
+
+换成 `6.4502 vs 6.4344`（本轮重跑后的数字）。
+
+### 14h · `sample_dllm` 里局部变量 `prompt_ids` 类型漂移
+
+行 136 赋值为 `list[Tensor]`，行 147 同名赋值 `list[int] | str`。
+**没坏，但同一个名字两种类型**，读的人得回头确认哪次是哪次。
+改名后者为 `prefix`。
+
+### 14i · Qwen track 的 EOS 注释写错
+
+`common_qwen.py` 写「its EOS is `endoftext>` = 151643」，实际 `eos_token_id`
+是 **151645**（`<|im_end|>`）。151643 也在词表里，所以不报错。
+数据与采样都用的是 151645（对），只是注释写错。
+
+### 一个反面教训
+
+本轮差点把 `loss_windows` 的 `k = min(k, len//2 or 1)` 标成「头尾窗口重叠」的
+bug——因为我凭脑内推演 `losses[:k]` 和 `losses[-k:]` 在 n=2k 时重叠。
+**实测**（严格递增序列）显示它们各占一半，不重叠，注释是对的。
+静态分析最容易犯的错：不跑数就下「正确/错误」的结论。
+
 ## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
 
 `lambda: minimind_loss` 求值得到**函数对象**，于是 Loop 把工厂当 loss 调

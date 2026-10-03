@@ -71,7 +71,7 @@ done
 run "qwen3-0.6b-mini_a2d-sft" \
     "$PY" example/base/qwen3_0p6b/train_lora_sft.py --n-docs 1500
 
-# --- 6. DPO on the AR rows. The dlm row has no sequence logprob (OPEN-10), so
+# --- 6. DPO on the AR rows. The dlm row has no sequence logprob (DEFERRED-10), so
 #        there is deliberately no `dlm-*-dpo` cell here.
 for c in ar-3.2m-hf-sft-dpo ar-3.2m-native-sft-dpo; do
   run "$c" "$PY" example/base/hf/train_dpo.py --cell "$c" --max-pairs 4000

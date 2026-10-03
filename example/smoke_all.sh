@@ -72,9 +72,9 @@ run "cell 8  dlm-3.2m-dllm" \
     "$PY" example/base/hf/train_direct_dlm_dllm.py $STEPS_FLAG
 
 # --- row 3: real 0.6B with LoRA (slow; --quick still runs 20 steps) ---
-run "cell 9  qwen3-0.6b-qwen3-0.6b-dllm_a2d" \
+run "cell 9  qwen3-0.6b-dllm_a2d" \
     "$PY" example/base/qwen3_0p6b/train_lora_dllm.py --n-docs 400
-run "cell 10 qwen3-0.6b-qwen3-0.6b-mini_a2d" \
+run "cell 10 qwen3-0.6b-mini_a2d" \
     "$PY" example/base/qwen3_0p6b/train_lora_minimind.py --n-docs 400
 
 # --- cross-checks ---

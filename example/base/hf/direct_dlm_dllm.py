@@ -63,5 +63,9 @@ def make_dllm_loss(mask_id: int = C.MASK, epsilon: float = 1e-3):
     return loss_fn
 
 
+# Re-exports: a Direct-DLM cell built through the dllm package needs the same
+# objective pieces as the hand-written one, and both live in those two modules.
+# Kept in __all__ so `from ... import *` in a notebook still sees them; nothing
+# here calls them directly.
 __all__ = ["CELL", "BASE", "METHOD", "Bidirectional", "make_dllm_loss",
            "make_direct_loss", "dlm_forward", "sample_dlm_row"]

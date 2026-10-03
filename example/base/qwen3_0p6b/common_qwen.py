@@ -169,11 +169,12 @@ def build_sft_data(tokenizer, n_docs: int = 4000, block_size: int = BLOCK_SIZE,
     the encoder as a parameter, so the template is identical on both tracks and
     only the ids differ.
 
-    Qwen3 has no BOS (`bos_token_id is None`) and its EOS is
-    `<|endoftext|>` = 151643, while on the 6400 track id 1 is `<|im_start|>`
-    and id 2 is an ordinary BPE token. Using the 6400 ids here would put
-    meaningful text in meaningless positions, so all three ids are taken from
-    the tokenizer.
+    Qwen3 has no BOS (`bos_token_id is None`), and the id a Qwen3 conversation
+    ends with is `eos_token_id` = 151645 (`<|im_end|>`) -- *not* `endoftext>`,
+    which is 151643, also in the vocabulary. An earlier comment here named the
+    wrong one. On the 6400 track id 1 is `<|im_start|>` and id 2 is an ordinary
+    BPE token. Using the 6400 ids here would put meaningful text in
+    meaningless positions, so all three ids are taken from the tokenizer.
     """
     from common.sft import IGNORE, build_sft_blocks
 

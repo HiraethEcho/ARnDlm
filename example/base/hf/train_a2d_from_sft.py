@@ -13,7 +13,7 @@ is which checkpoint it starts from.
 
 SPEC is inconsistent about whether a trailing DLM-SFT belongs here: §2.3's
 pipeline column stops at A2D while G3's cell row says `ar-sft -> A2D -> DLM-SFT`.
-That gap is recorded in ISSUES.md OPEN-8. This script implements the four cells
+That gap is recorded in ISSUES.md DONE-8. This script implements the four cells
 the table lists, each ending after the A2D stage.
 
     .venv/bin/python example/base/hf/train_a2d_from_sft.py \
@@ -130,7 +130,7 @@ def main() -> int:
     row, objective = CELLS[args.cell]
     builder, sampler, loss_factory, loss_note = build_parts(row, objective)
     model = builder(C.TIER0, seed=args.seed)
-    base_label = "Qwen-mini-HF" if row == "hf" else "Qwen-mini-MiniMind"
+    base_label = C.BASE_OF[row]
     method = f"{objective.upper()}-A2D"
 
     upstream = args.init_from or C.cell_dir(args.cell.replace("-mini_a2d", "")

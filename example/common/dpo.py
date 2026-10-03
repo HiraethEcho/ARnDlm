@@ -15,7 +15,7 @@ Two facts that decide what is runnable here, both measured:
   logprob"). DPO's objective is built on `log pi(y|x)` as a product over
   autoregressive factors; a masked-diffusion model denoises all positions at
   once, so that product is not a quantity it defines. The AR rows can run this
-  objective; the DLM rows need an ELBO formulation first. ISSUES.md OPEN-10.
+  objective; the DLM rows need an ELBO formulation first. ISSUES.md DEFERRED-10.
 
 So the loss here is the AR-shaped one, written so the pairing and the assistant
 mask are explicit rather than implied by the caller's batch layout.
@@ -31,9 +31,13 @@ import torch.nn.functional as F
 from .sft import IGNORE
 
 
-def sequence_logprob(logits: torch.Tensor, ids: torch.Tensor,
-                     labels: torch.Tensor) -> torch.Tensor:
+def sequence_logprob(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     """log pi(y | x) summed over the supervised positions. One scalar per row.
+
+    `ids` used to be a parameter and was never read: scoring is logits against
+    labels, and the scored positions are the non-IGNORE labels. An argument that
+    is accepted, ignored and unchecked invites passing the wrong tensor and
+    staying quiet about it, so it is gone.
 
     Position i predicts token i+1, so a supervised label at index i is scored
     from the logits at i-1. Summing over *labels* rather than over ids is what
@@ -69,9 +73,9 @@ def dpo_loss(policy, reference, ids: torch.Tensor, labels: torch.Tensor,
         return zero, {"accuracy": 0.5, "margin": 0.0, "target_tokens": 0,
                       "skipped": True}
 
-    pol = sequence_logprob(policy(input_ids=ids).logits, ids, labels)
+    pol = sequence_logprob(policy(input_ids=ids).logits, labels)
     with torch.no_grad():
-        ref = sequence_logprob(reference(input_ids=ids).logits, ids, labels)
+        ref = sequence_logprob(reference(input_ids=ids).logits, labels)
 
     pol_c, pol_r = pol[0::2], pol[1::2]
     ref_c, ref_r = ref[0::2], ref[1::2]
@@ -91,7 +95,6 @@ def dpo_blocks(jsonl: Path, block_size: int, max_pairs: int = 0,
     turn only -- the same rule as SFT, and for the same reason.
     """
     from .sft import Turn, _pack
-    from .tokenizer import encode
     from . import config as C
 
     ids_rows: list[list[int]] = []

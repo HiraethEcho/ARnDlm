@@ -369,12 +369,12 @@ def section_coverage(rows: list[dict]) -> None:
 
     # And the cost, stated rather than hidden: at ctx 128 that same turn does not
     # fit, so turn-atomic dropping discards it. Option A delivers nothing at this
-    # context length. ISSUES.md OPEN-7 tracks the decision.
+    # context length. ISSUES.md DONE-7 records the decision.
     small = _pack(turns, C.BLOCK_SIZE)
     covered_small = "".join(decode(b[a:e]) for b, sp in small for a, e in sp)
-    check("at ctx 128 the think block is dropped (known cost, OPEN-7)",
+    check("at ctx 128 the think block is dropped (known cost, DONE-7)",
           msg["reasoning_content"][:40] not in covered_small,
-          "if this ever passes, the block size changed and OPEN-7 is stale")
+          "if this ever passes, the block size changed and DONE-7 is stale")
     think_turn = Turn(role="assistant", content=msg["content"],
                       reasoning=msg["reasoning_content"])
     check("that turn is genuinely longer than the block",
@@ -385,7 +385,6 @@ def section_coverage(rows: list[dict]) -> None:
 def section_roundtrip() -> None:
     print("\n[8] write_prepared -> load_sft round trip")
     import tempfile
-    from common.sft import load_sft, write_prepared
     src = C.ROOT / "data" / "raw" / "minimind_dataset" / "sft_t2t_mini.jsonl"
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "sft"

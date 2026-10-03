@@ -108,6 +108,11 @@ QWEN3_LORA = TrainCfg(**{**asdict(AR_TRAIN), "steps": 20, "batch_size": 2,
                          "lr": AR_TRAIN.dlm_lr, "warmup_steps": 2, "log_every": 5})
 
 BLOCK_SIZE = TIER0.context_length                  # packing block == context
+
+# Row -> the base label that goes into every RESULTS row and meta.json. One
+# spelling, kept next to the config it belongs to: three scripts wrote the same
+# string twice, and one of them drifted to a different literal once.
+BASE_OF = {"hf": "Qwen-mini-HF", "native": "Qwen-mini-MiniMind"}
 MAX_BLOCKS = _RAW["data"]["max_blocks"]
 DTYPE = _RAW["runtime"]["dtype"]
 

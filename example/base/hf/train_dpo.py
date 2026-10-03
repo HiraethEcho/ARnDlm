@@ -10,7 +10,7 @@ peft does for free -- that cell is not built here.
 logprob", and it is right: DPO's objective is a product of autoregressive
 factors, while a masked-diffusion model denoises every position at once. Running
 DPO on a DLM needs an ELBO formulation first, which is a research question, not a
-configuration flag. ISSUES.md OPEN-10.
+configuration flag. ISSUES.md DEFERRED-10.
 
 **Why so little of the corpus.** Measured on 800 pairs: prompt 40 tokens
 (median), chosen 577, rejected 626 -- only 10.5% fit a 128-token block. Turn-atomic
@@ -23,7 +23,6 @@ run's config so nobody mistakes it for the full set.
 """
 from __future__ import annotations
 import argparse
-import copy
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -49,12 +48,17 @@ CELLS = {
 CELL = "ar-3.2m-hf-sft-dpo"
 BASE_LABEL = "Qwen-mini-HF"
 
-def make_dpo_loss(policy, reference, beta: float):
+def make_dpo_loss(reference, beta: float):
     """`loss_fn(model, batch)` for common.loop.Loop.
 
     The batch is [B, L] ids plus a parallel label tensor; the reference is the
     second model. Row 2i/2i+1 must be one pair -- `common.dpo.dpo_loss` rejects an
     odd batch rather than dropping a row.
+
+    Takes the policy through `loss_fn`'s `model` argument, so `make_dpo_loss`
+    itself does not need one: Loop calls `loss_fn(self.model, batch)`, and the
+    model *is* the policy. Carrying a separate `policy` parameter would give the
+    same object two names.
     """
     def loss_fn(model, batch):
         ids, labels = batch
@@ -110,7 +114,7 @@ def main() -> int:
     if native:
         from base.native.model import build_native_model, sample_native
         builder = build_native_model
-        base_label = "Qwen-mini-MiniMind"
+        base_label = C.BASE_OF["native"]
         # The row decides the sampler too, not just the model. Row 2's sampler is
         # a hand-rolled loop without a KV cache and reads `model.cfg` for the
         # device; the transformers row's `generate` reads `model.device`. Swapping
@@ -118,9 +122,11 @@ def main() -> int:
         # "'NativeQwen3ForCausalLM' object has no attribute 'device'".
         def sampler(model, **kw):
             return sample_native(model, prompts=list(SFT_PROMPTS),
-                             prompt_ids=[encode_prompt(p) for p in SFT_PROMPTS], **kw)
+                                 prompt_ids=[encode_prompt(p) for p in SFT_PROMPTS],
+                                 **kw)
     else:
-        from base.hf.model import build_model, sample_sft
+        # build_model / sample_sft are already module-level imports -- the hf row
+        # is the default cell -- so this branch only names them.
         builder = build_model
         base_label = BASE_LABEL
         sampler = sample_sft
@@ -164,7 +170,7 @@ def main() -> int:
     eval_batches = [torch.arange(train_cfg.batch_size) % len(data)]
 
     stream = BlockStream(len(data), train_cfg.batch_size, seed=train_cfg.seed)
-    loop = Loop(policy, train_cfg, make_dpo_loss(policy, reference, args.beta),
+    loop = Loop(policy, train_cfg, make_dpo_loss(reference, args.beta),
                 out_dir=C.run_dir(cell))
     # Loop moves the policy to the device; the reference is ours to place, and
     # leaving it on the CPU is a device mismatch inside the embedding lookup.
@@ -175,7 +181,7 @@ def main() -> int:
               "init_from": source, "reference": "frozen SFT checkpoint",
               "beta": args.beta, "data": str(src), "corpus": stats,
               "n_pairs_kept": n_pair, "supervised_tokens": n_sup,
-              "note": "AR row only: a DLM has no sequence logprob (OPEN-10)"}
+              "note": "AR row only: a DLM has no sequence logprob (DEFERRED-10)"}
 
     summary = finish_cell(
         loop, data, cell=cell, base=base_label, method=METHOD,

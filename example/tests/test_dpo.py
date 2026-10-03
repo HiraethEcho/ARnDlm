@@ -105,7 +105,7 @@ def section_logprob() -> None:
     print("\n[1] sequence_logprob sums assistant tokens and nothing else")
     ids, labels = make_batch()
     model = random_lm(3, ids.shape[1], 32, seed=0)
-    lp = sequence_logprob(model(ids).logits, ids, labels)
+    lp = sequence_logprob(model(ids).logits, labels)
     check("one scalar per row", tuple(lp.shape) == (3,), str(tuple(lp.shape)))
     check("finite", bool(torch.isfinite(lp).all()),
           str([round(float(x), 4) for x in lp]))

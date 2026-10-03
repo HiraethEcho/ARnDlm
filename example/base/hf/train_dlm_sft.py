@@ -57,7 +57,7 @@ from common.verify import verify_checkpoint
 # the **original** arm: pretrain, SFT, A2D, then SFT again -- the trailing stage is
 # what G3's cell row asks for ("ar-sft -> A2D -> DLM-SFT") and it is what puts both
 # routes on the same evaluation (assistant spans, same objective), so that the
-# difference between them is the order and nothing else. ISSUES.md OPEN-8.
+# difference between them is the order and nothing else. ISSUES.md DOEN-8.
 CELLS = {
     "ar-3.2m-hf-mini_a2d-sft": ("hf", "minimind", "ar-3.2m-hf-mini_a2d"),
     "ar-3.2m-hf-dllm_a2d-sft": ("hf", "dllm", "ar-3.2m-hf-dllm_a2d"),
@@ -77,9 +77,7 @@ def _hf_parts(objective: str):
     from base.hf.a2d_dllm import (DLLMLoss, build_a2d_model, make_a2d_loss as dllm_loss,
                                   sample_dllm)
     from base.hf.a2d_minimind import make_a2d_loss as minimind_loss
-    from base.hf.a2d_minimind import sample_dlm_row
     from base.hf.model import build_model, sample_sft
-    from common.sft import encode_prompt
 
     if objective == "minimind":
         return (build_model, sample_sft, lambda m: minimind_loss(m),
@@ -118,7 +116,6 @@ def _native_parts(objective: str):
     from base.native.a2d_minimind import make_a2d_loss as minimind_loss
     from base.native.a2d_minimind import sample_native_dlm
     from base.native.model import build_native_model, sample_native
-    from common.sft import encode_prompt
 
     def sample_sft(model, **kw):
         """`sample_native` with the exact prefix an SFT block starts with."""
@@ -167,7 +164,7 @@ def build_parts(row: str, objective: str):
     """
     parts = _hf_parts(objective) if row == "hf" else _native_parts(objective)
     builder, sampler, factory, note = parts
-    base_label = "Qwen-mini-HF" if row == "hf" else "Qwen-mini-MiniMind"
+    base_label = C.BASE_OF[row]
     return builder, sampler, factory, note, base_label
 
 def main() -> int:
