@@ -1,0 +1,68 @@
+# 实践版 · smoketest —— pipeline smoke only. Not a comparison tier.
+# Shape is 512/2 layers/ctx 128, which is NOT configs/example/tier0.yaml
+# (256/2/ctx 128). This file proves the code runs and the config loads;
+# cross-version parity needs a config with the example's exact shape.
+# Everything here loads through utils/version.py::load_config, and the
+# field names must stay identical to configs/example/tier0.yaml -- a missing
+# field is a second code path, which kills the comparison.
+
+version: practical
+tier: smoketest
+purpose: The code is runable and the config is valid. Not for performance comparison.
+
+model:
+  hidden_size: 512
+  num_layers: 2
+  # num_heads != num_kv_heads keeps the GQA repeat path live. With 4/2 the
+  # repeat direction is exercised; 2/2 would make it a no-op and a wrong
+  # repeat direction would go unnoticed.
+  num_heads: 4
+  num_kv_heads: 2
+  intermediate_size: 408
+  context_length: 128
+  vocab_size: 6400
+  rope_theta: 10000.0
+  rms_norm_eps: 1e-6
+  tie_word_embeddings: true
+
+tokens:
+  pad: 0
+  bos: 1
+  eos: 2
+  mask: 27
+
+train:
+  steps: 1024
+  batch_size: 8
+  # Required by TrainCfg -- it has no defaults (SPEC 1.1.1: no hard-coded
+  # numbers). A missing key is a TypeError at load, not a silent default.
+  # Values are copied from the example tier; smoke does not judge them.
+  lr: 3e-4
+  dlm_lr: 1e-4
+  min_lr_ratio: 0.1
+  # warmup < steps, so both schedule branches run: linear warmup for the
+  # first 256 updates, cosine afterwards. warmup >= steps would leave the
+  # cosine branch unexecuted.
+  warmup_steps: 256
+  weight_decay: 0.1
+  grad_clip: 1.0
+  beta1: 0.9
+  beta2: 0.95
+  seed: 42
+  log_every: 128
+  loss_window: 100
+
+data:
+  prepared_dir: data/prepared/minimind3-6400
+  # This file's own arithmetic (the tier1 numbers this comment used to carry
+  # are for ctx 512 / 81,174 steps, neither of which applies here):
+  #   4096 blocks x 128 token = 524,288 token consumed
+  #   4096 / batch 8          = 512 batches per epoch, and steps is 1024
+  #   -> the run crosses into epoch 1, which is what exercises BlockStream's
+  #      rollover (permutation re-derived from seed + epoch).
+  # 0 = unlimited. Changing `steps` here changes what this cap means.
+  max_blocks: 4096
+
+runtime:
+  dtype: bfloat16
+  loss_window: 100
