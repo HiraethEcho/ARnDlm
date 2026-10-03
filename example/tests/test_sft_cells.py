@@ -111,11 +111,51 @@ def section_rows() -> None:
         check(f"{cell} accepts --cell", cell in dlmsft.CELLS)
 
 
+CELLS_G3_ORIGINAL = {
+    "ar-3.2m-hf-sft-mini_a2d": "ar-3.2m-hf-sft",
+    "ar-3.2m-hf-sft-dllm_a2d": "ar-3.2m-hf-sft",
+    "ar-3.2m-native-sft-mini_a2d": "ar-3.2m-native-sft",
+    "ar-3.2m-native-sft-dllm_a2d": "ar-3.2m-native-sft",
+}
+
+
+def section_original_route() -> None:
+    print("\n[5] the SFT-then-A2D script has no coverage of its own -- this is it")
+    import base.hf.train_a2d_from_sft as a2dsft
+    spec = (C.ROOT / "SPEC.md").read_text()
+    for cell, (row, obj) in sorted(a2dsft.CELLS.items()):
+        check(f"{cell} is in SPEC.md", f"`{cell}`" in spec)
+        check(f"{cell} names the {row} row", row in cell,
+              "a native cell running the transformers model is the wrong experiment")
+        builder, sampler, factory, note = a2dsft.build_parts(row, obj)
+        module = builder.__module__
+        check(f"{cell} builds its row's model",
+              ("base.hf" in module) if row == "hf" else ("base.native" in module), module)
+        check(f"{cell} factory takes the model", "<lambda>" in repr(factory)
+              or hasattr(factory, "__code__") and factory.__code__.co_argcount >= 1,
+              "a bare `lambda: make_loss` evaluates to the function object, so Loop "
+              "calls the factory with (model, batch) and gets a closure back")
+        check(f"{cell} sampler is callable", callable(sampler))
+        check(f"{cell} upstream is the -sft cell",
+              a2dsft.CELLS[cell][0] and f"`{a2dsft.CELLS[cell][0]}`" in spec,
+              a2dsft.CELLS[cell][0])
+
+    # The derived upstream must equal the cell with `-mini_a2d`/`-dllm_a2d`
+    # stripped, and every one of those upstreams must actually exist on disk.
+    for cell in a2dsft.CELLS:
+        derived = cell.replace("-mini_a2d", "").replace("-dllm_a2d", "")
+        check(f"{cell} -> {derived} is a real cell", f"`{derived}`" in spec)
+        check(f"{derived} has a checkpoint",
+              (C.cell_dir(derived) / "model.safetensors").exists(),
+              str(C.cell_dir(derived)))
+
+
 def main() -> int:
     section_spec_names()
     section_importable()
     section_refuses_without_upstream()
     section_rows()
+    section_original_route()
     print()
     if FAILS:
         print(f"FAIL ({len(FAILS)}): " + ", ".join(FAILS))

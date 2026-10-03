@@ -19,16 +19,16 @@ Tier 0 · 200 steps · tinystories-6400 · 只验 pipeline，不看模型能力�
 
 | cell | base | method | params | steps | loss first->last | train-only tok/s | wall tok/s | eval loss | rep-4 | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| ar-3.2m-hf | Qwen-mini-HF | AR | 3213056 | 200 | 8.4414 -> 4.6970 | 47,096 | 41,046 | 4.6356 | 0.1724 | 524,288 tok, Tier 0 |
-| ar-3.2m-native | Qwen-mini-MiniMind | AR | 3213056 | 200 | 8.4165 -> 4.6932 | 46,428 | 41,402 | 4.6283 | 0.3276 | 524,288 tok, Tier 0, native torch |
-| ar-3.2m-hf-mini_a2d | Qwen-mini-HF | MiniMind-DLM-A2D | 3213056 | 200 | 5.8107 -> 5.2759 | 45,110 | 40,145 | 4.9723 | 0.8103 | from ar-3.2m-hf-example, A2D lr 1e-04, block 8, steps 8 |
-| ar-3.2m-hf-dllm_a2d | Qwen-mini-HF | dLLM-A2D | 3213056 | 200 | 5.7631 -> 5.2761 | 28,781 | 27,091 | 4.9765 | 0.0000 | from ar-3.2m-hf-example, dllm MDLMTrainer, block 8, steps 8 |
-| dlm-3.2m-hf | Qwen-mini-HF | Direct-DLM | 3213056 | 200 | 8.4999 -> 5.8585 | 44,983 | 40,094 | 5.6427 | 0.7759 | random init, lr 3e-04, block 8, steps 8 |
-| ar-3.2m-native-mini_a2d | Qwen-mini-MiniMind | MiniMind-DLM-A2D | 3213056 | 200 | 5.7642 -> 5.2846 | 48,448 | 42,900 | 4.9692 | 0.3966 | from ar-3.2m-native-example, lr 1e-04, block 8, steps 8 |
-| ar-3.2m-native-dllm_a2d | Qwen-mini-MiniMind | dLLM-A2D | 3213056 | 200 | 5.7136 -> 5.2850 | 28,561 | 26,441 | 4.9728 | 0.4138 | from ar-3.2m-native-example, dllm loss on native torch, block 8 |
-| dlm-3.2m-dllm | Qwen-mini-HF | Direct-DLM | 3213056 | 200 | 8.3498 -> 5.8577 | 28,989 | 26,862 | 5.6460 | 0.7586 | random init, dllm MDLMTrainer, lr 3e-04, block 8 |
-| qwen3-0.6b-dllm_a2d | Qwen3-0.6B | dLLM-A2D | 598343680 | 200 | 12.9856 -> 5.0268 | 472 | 456 | 4.8238 | 0.7586 | LoRA r8 q/k/v/o, 0.3834% trainable, 76,160 tok, dllm loss |
-| qwen3-0.6b-mini_a2d | Qwen3-0.6B | MiniMind-DLM-A2D | 598343680 | 200 | 13.5252 -> 5.0172 | 682 | 650 | 4.8397 | 0.7586 | LoRA r8 q/k/v/o, 0.3834% trainable, 76,160 tok |
+| ar-3.2m-hf | Qwen-mini-HF | AR | 3213056 | 200 | 8.4414 -> 4.6970 | 46,816 | 41,108 | 4.6356 | 0.1724 | 524,288 tok, Tier 0 |
+| ar-3.2m-native | Qwen-mini-MiniMind | AR | 3213056 | 200 | 8.4165 -> 4.6932 | 48,384 | 42,990 | 4.6283 | 0.3276 | 524,288 tok, Tier 0, native torch |
+| ar-3.2m-hf-mini_a2d | Qwen-mini-HF | MiniMind-DLM-A2D | 3213056 | 200 | 5.8107 -> 5.2759 | 45,432 | 40,043 | 4.9723 | 0.8103 | from ar-3.2m-hf-example, A2D lr 1e-04, block 8, steps 8 |
+| ar-3.2m-hf-dllm_a2d | Qwen-mini-HF | dLLM-A2D | 3213056 | 200 | 5.7631 -> 5.2761 | 30,078 | 28,026 | 4.9765 | 0.0000 | from ar-3.2m-hf-example, dllm MDLMTrainer, block 8, steps 8 |
+| dlm-3.2m-hf | Qwen-mini-HF | Direct-DLM | 3213056 | 200 | 8.4999 -> 5.8585 | 46,603 | 40,738 | 5.6427 | 0.7759 | random init, lr 3e-04, block 8, steps 8 |
+| ar-3.2m-native-mini_a2d | Qwen-mini-MiniMind | MiniMind-DLM-A2D | 3213056 | 200 | 5.7642 -> 5.2846 | 49,366 | 43,659 | 4.9692 | 0.3966 | from ar-3.2m-native-example, lr 1e-04, block 8, steps 8 |
+| ar-3.2m-native-dllm_a2d | Qwen-mini-MiniMind | dLLM-A2D | 3213056 | 200 | 5.7136 -> 5.2850 | 31,779 | 29,120 | 4.9728 | 0.4138 | from ar-3.2m-native-example, dllm loss on native torch, block 8 |
+| dlm-3.2m-dllm | Qwen-mini-HF | Direct-DLM | 3213056 | 200 | 8.3498 -> 5.8577 | 30,403 | 27,809 | 5.6460 | 0.7586 | random init, dllm MDLMTrainer, lr 3e-04, block 8 |
+| qwen3-0.6b-dllm_a2d | Qwen3-0.6B | dLLM-A2D | 598343680 | 200 | 12.9856 -> 5.0268 | 526 | 507 | 4.8238 | 0.7586 | LoRA r8 q/k/v/o, 0.3834% trainable, 76,160 tok, dllm loss |
+| qwen3-0.6b-mini_a2d | Qwen3-0.6B | MiniMind-DLM-A2D | 598343680 | 200 | 13.5252 -> 5.0172 | 792 | 751 | 4.8397 | 0.7586 | LoRA r8 q/k/v/o, 0.3834% trainable, 76,160 tok |
 
 > **最后两行已重跑**（2026-10-02，OPEN-1b 结清）。它们之前是**旧 mask 方案**
 > （新增 `<|diff-mask|>` + `resize_token_embeddings(151670)`）的数，`params` 记的是
