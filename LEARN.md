@@ -31,6 +31,22 @@ ar-hf  →  ar-hf-sft  →  ar-hf-sft-dllm_a2d
 
 **跑参考实现拿基准数，再跑你的，比。** 不一致的地方就是你写错了的地方。
 
+本工作区已经软链好了，**三条都能直接用**：
+
+```sh
+.venv    -> /home/revo/Projects/ARnDlm/.venv      # 与 main 共用同一个环境
+data     -> /mnt/extra/data                        # 与 main 共用同一份语料
+checkpoints -> /mnt/extra/ckpt
+```
+
+已验证：`python 3.14.7` / `torch 2.12.0+rocm10.0.0` / `transformers 4.57.0` /
+CUDA 可用，以及 `example/base/hf/train_ar.py --steps 20` 能跑出 loss
+`8.7091 -> 8.1712`（小语料，仅用于确认通路）。
+
+⚠️ **data 和 checkpoints 是与 main 共用的。** 你在 learn 里重建 SFT 语料
+（`make_sft_data.py`）会覆盖 main 的那份，而两边的 checkpoint 目录也相同。
+要保留对比就自己指定 `--out`。
+
 ```sh
 # 0. 先确认环境
 ../.venv/bin/python -c "import torch, transformers; print(torch.__version__, transformers.__version__)"
