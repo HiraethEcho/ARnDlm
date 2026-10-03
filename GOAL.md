@@ -1,202 +1,120 @@
-# GOAL — 实验版全流程
+# GOAL — 教我写实践版
 
-**创建**：2026-10-02 21:48 CST　**状态**：待批准，未执行
-**授权**：本文件获批后，本次长跑允许 AI 每个 milestone 自动 commit。不 push。
+**创建**：2026-10-03　**状态**：进行中
+**前置**：旧 GOAL（实验版全流程）已完成——SPEC 2.3 矩阵 29 格全绿，
+G3 结论「原路线优 0.4251 nat、四对全同向」，见 `example/RESULTS.md`。
 
 ---
 
 ## 1. 目标
 
-把 `example/`（实验版）从「10 格跑通」推进到 **SPEC 2.3 全部剩余格跑通**，
-并让 `example/RESULTS.md` 里每一行都对得上磁盘上的 checkpoint。
+我（用户）在 `learn` 工作区**亲手写实践版**，你（AI）当导师：
 
-**不做**：实践版（根目录七个目录）的任何实现代码。**不 push。**
-
----
-
-## 2. 访谈结论（用户逐条拍板）
-
-| # | 问题 | 决定 |
-|---|---|---|
-| Q1 | GPU | **自由使用**，不设限制 |
-| Q2 | 范围 | 先做完 SFT 列 13 格 + `dlm-3.2m-dllm`；**若在截止时间前完成，继续做 DPO 列** → 后经澄清：**无条件全做** |
-| Q3 | SFT 数据 | `sft_t2t_mini.jsonl`（1.74 GB / 905,718 行，已软链到 `minimind_dataset/`） |
-| Q4 | `assistant_spans` 语义 | **只在 assistant 段算 loss**（标准 SFT） |
-| Q5 | OPEN-2 `t` 分布 | **保持两套**，对拍时两边都用 `epsilon=1e-3` 并重新播种 |
-| Q6 | OPEN-3 `steps` 语义 | **CLI 上两个参数都给**：`--dlm-steps`（每块）+ `--dlm-total-steps`（全序列预算） |
-| Q7 | commit | **每个 milestone 自动 commit** |
-
----
-
-## 3. 期限：无截止，做完为止；10:00 是后续任务的闸门
-
-用户 2026-10-02 21:48 答复：「**一直做直到完成**」——M1–M9 全部做完，包括 DPO。
-
-**但有一个条件链**（闸门时刻 = **2026-10-03 10:00 CST**）：
-
-| 条件 | 任务 |
+| 你的角色 | 做什么 |
 |---|---|
-| 本文件 M1–M9 在 10:00 CST 前完成 | 用一个**不自动关闭的 subagent** 执行 `~/Projects/minimind/GOAL.md` |
-| 上一个也在 10:00 CST 前完成 | 回头对本任务做一遍 review：查 bug + 完善教程 |
+| **教** | 每一步先讲「要写什么、为什么、坑在哪」，再让我动手 |
+| **改我代码里的 bug** | 直接改，改完**解释为什么** |
+| **查实验版源码的 bug** | 静态检查为主；发现 bug 直接修并记录 |
+| **不跑训练** | **不主动跑任何训练/测试**。除非 (a) 我主动要求，或 (b) 要做正式训练 |
 
-时钟基准：`date` 与 `TZ=Asia/Shanghai date` 同为 CST，本机无时区偏差。
+**不改**：`example/`（那是参考答案）。你只改**我的**代码和文档。
+不 push。
 
 ---
 
-## 4. 数据事实（2026-10-02 实测，不是推测）
+## 2. 工作区
 
-### 4.1 `sft_t2t_mini.jsonl`
+```
+~/Projects/ARnDlm         main     ← 参考答案，example/ 全部跑通
+~/Projects/ARnDlm-learn   learn    ← 我写代码的地方
+```
 
-| 项 | 值 |
-|---|---|
-| 大小 / 行数 | 1,739,201,170 B / **905,718** 行 |
-| 顶层结构 | `{"conversations": [ {...}, ... ]}` —— **没有 `text` 键** |
-| 消息结构 | `{"role": "user"\|"assistant", "content": str}` |
-| 采样 20,000 行 | 平均 7.2 条消息/对话，范围 2–16 |
-| role 分布 | user 71,745 · assistant 71,669 |
-| 是否有 system | **无**。20,000 条对话的首条消息全是 `user` |
-| `reasoning_content` | **19.0% 的 assistant 消息带这个字段**（约 300 字符的 think 块） |
+learn 里软链了 `.venv` / `data` / `checkpoints`（与 main 共用）。
+**注意**：两边共用同一份语料和 checkpoint 目录——我重建 SFT 语料会覆盖
+main 的那份。
 
-### 4.2 `notes/06-datasets.md` 需要更正的地方
+---
 
-记的是 `{"conversations": [{"role": "user", "content": ...}]}` —— **正确**。
-但**漏了 `reasoning_content`**，而它是 19% 的 assistant 消息都有的字段。
-展平脚本若按 `content` 单字段处理，会静默丢掉这 19% 的思考内容。
+## 3. 我的路径（已定，不重开）
 
-### 4.3 `reasoning_content` 怎么处理　→ **用户已定：方案 A**
+```
+ar-hf  →  ar-hf-sft  →  ar-hf-sft-dllm_a2d
+  A0 → A1 → A2        B1 → B2        C1 → C2 → C3 → C4
+```
 
-三个选项，本文件按 **A** 写入计划（**用户 2026-10-02 已确认**）：
+| 步骤 | 我写 | 参考实现 | 对应格 |
+|---:|---|---|---|
+| A0 | `utils/`（训练循环/计时/存盘/指标） | `example/common/{loop,data,ckpt,metrics,seeds}.py` | 底座 |
+| A1 | `models/hf_qwen/` | `example/base/hf/model.py` | `ar-hf` |
+| A2 | `training/ar_hf/` | `example/base/hf/train_ar.py` | `ar-hf` |
+| B1 | `data/sft/`（对话→块+assistant spans） | `example/common/sft.py` | SFT 数据 |
+| B2 | `training/sft_ar_hf/` + `training/sft_a2d_hf/` | `example/base/hf/{train_sft,train_dlm_sft}.py` | `ar-hf-sft` |
+| C1 | `diffusion/corruption.py` | `example/common/a2d.py::corrupt` | 方法 |
+| C2 | `diffusion/loss.py` | `example/common/a2d.py::a2d_loss` | 方法 |
+| C3 | `diffusion/sampler.py` | `example/common/a2d.py::sample_dlm` | 方法 |
+| C4 | `training/a2d_dllm/` | `example/base/hf/train_a2d_from_sft.py` | `ar-hf-sft-dllm_a2d` |
 
-| | 做法 | 后果 |
+每一步的详细说明在 `example/teach/README.md` → 对应文件。
+
+---
+
+## 4. 每一步怎么走
+
+固定流程，不加东西：
+
+1. **讲**：我把该写的接口/坑先讲一遍（基于 `example/teach/` 对应文件，
+   不复制代码给你）。
+2. **我写**：你在 learn 里写实现。**只能写 Python 代码，不复制 example**。
+3. **你查**：我**静态检查**你的代码（读 + 对比参考实现），列出 bug 和偏差。
+   改我的 bug 时**解释为什么**。
+4. **查实验版**：同一轮我顺带静态检查参考实现里相关的部分，有 bug 一起修。
+5. **commit**：每完成一步 commit 一次（在 learn 分支）。不 push。
+6. **对拍**：只有你**主动要求**时才跑训练对拍；否则我把「验收命令写在这里」，
+   由你决定何时跑。
+
+---
+
+## 5. 静态检查清单（第 3/4 步每次都过一遍）
+
+| # | 检查什么 | 为什么 |
 |---|---|---|
-| **A（已选）** | 拼进 assistant 的文本，`<thinking>...</thinking>` + `content`，**loss 覆盖它** | 保留 think 能力，与 MiniMind 上游一致 |
-| B | 拼进文本但 **loss 不覆盖**（进 assistant span 的前缀部分） | 模型学不到 think |
-| C | 完全丢弃 | 丢掉 19% 的内容，上游是当正常文本训的 |
+| 1 | `batch.dim() == 3` 的分支是否都覆盖 `[2,B,L]` | 这是 SFT 的 batch 形状，漏一个分支就是静默错 |
+| 2 | span 的 `end` 是否含 EOS | assistant 的 EOS 是教模型停止的唯一一票 |
+| 3 | 采样 prompt 是否与训练语料**逐 token** 一致 | turn 用 EOS 分隔，不用换行 |
+| 4 | resume 是否恢复 optimizer / RNG / stream position | 否则续训不是同一条曲线 |
+| 5 | eval 是否在 fp32、是否用冻结 batch | bf16 舍入差比要测的差异大 |
+| 6 | tied embedding 是否按 `id()` 去重 | 否则等效 lr 翻倍 |
+| 7 | 死代码 / 未用 import / 未用参数 | 一个没人检查的参数是邀请静默错 |
+| 8 | 注释与代码是否矛盾 | 注释比代码先失效，而它看起来还对 |
 
-**A 的已知代价**（写在这里而不是忘了）：think 块比答案长 10 倍
-（298 vs 28 字符），算进 loss 会让 loss 主要由 think 驱动而不是最终答案。
-所以 SFT 格的 eval loss 与预训练格**不可直接比大小**，只能在 SFT 之间比。
-
-> 旁证：`~/Projects/minimind/GOAL.md` 里同一个数据集选的是**方案 C（去
-> `reasoning_content`）**。两边口径不同，**两个项目的 loss 数字不可互引**。
+**已知不用再报的**（实验版已接受）：OPEN-4 packing 无 attention 隔离、
+OPEN-6 rep-4 不能排名、ctx 128 下 think 存活率 5.5%。
 
 ---
 
-## 5. Milestone 清单（14 项 + 收尾）
+## 6. 「跑测试」什么时候可以发生
 
-每个 milestone 走固定四步：**correct（先写能失败的测试）→ quality（去死代码）
-→ iterate 2–3 轮 → record（写进文件）→ commit**。
-
-### M1 · SFT 展平器　`example/common/sft.py`
-
-产出 `prepared/sft-mini-6400/`：`tokens.bin` + `doc_lengths.npy` +
-**`assistant_spans.npy`** + `meta.json`。
-
-| 内容 | 验收 |
+| 情况 | 做不做 |
 |---|---|
-| `conversations` → 展平成 ChatML 风格文本 | `test_sft_flatten.py`：展平后 decode 回来能对上一条真实对话 |
-| **每条 assistant 消息的 token 区间写进 spans** | spans 的区间 decode 出来必须是 assistant 的内容，不得含 user 段 |
-| `reasoning_content` 按 §4.3 的 A 处理 | 19% 的消息带 think，测试要专门覆盖 |
-| 只在 assistant 段算 loss | 人工构造「user 段 token 全对、assistant 段全错」的 batch，loss 必须非零 |
-| tokenizer 用项目 6400 BPE，`--append-eos` | vocab 6400 · MASK 27 不得出现在语料里（沿用 `data.py` 的检查） |
+| 我（用户）没说 | **不跑** |
+| 我说「跑一下」 | 跑 |
+| 完成某一步、要正式训练验证 | 跑，但先告诉我预计时长 |
+| 你想自己确认代码对 | **用静态检查，不跑** |
 
-**阻断**：§4.3 的 A/B/C 未点头前不动手。
-
-### M2 · 带 loss mask 的训练循环
-
-`example/common/loop.py` 加 span 加权的 CE。多边形：一个 batch 里不同样本的
-assistant 比例不同，必须**按 token 数归一**，不能按样本数。
-
-验收：`test_loss_mask.py` —— 全部 mask 掉的 batch loss = 0；部分 mask 时 loss
-等于只在被 mask 位置上算的值。
-
-### M3 · `ar-3.2m-{hf,native}-sft`　G3 对照（P0 ×2）
-
-AR 预训练 → SFT。**这两格是后面所有 SFT 格的基线**，没有它们，G3 的
-「先 SFT 还是先 A2D」无法回答。
-
-### M4 · `ar-3.2m-{hf,native}-{mini,dllm}_a2d` + 各自 `-sft`　G3 新路线（P0 ×4）
-
-**A2D → SFT**（新路线）。与 M5 的原路线构成 G3 的核心对照。
-
-### M5 · `ar-3.2m-{hf,native}-sft-{mini,dllm}_a2d`　G3 原路线（P0 ×4）
-
-**SFT → A2D**（原路线）。SPEC 说原路线在前，因为 Qwen3-0.6B 和 dllm 的 A2D
-作用对象本来就是已经能 chat 的模型。
-
-### M6 · `dlm-3.2m-dllm`　G2（P1 ×1，**无前置**）
-
-代码已存在（`example/base/hf/direct_dlm_dllm.py` + `train_direct_dlm_dllm.py`），
-`smoke_all.sh` 已占 cell 8，**但从没跑过**——最后一次全量 smoke 时 cell 8 还是
-`native-direct-dlm`。本 milestone = 跑它 + 补 `smoke_final.log` 的证据。
-
-### M7 · `qwen3-0.6b-mini_a2d-sft`　G4（P1 ×1）
-
-行 3 分支。**先做 M1–M6 再做这格**：它最慢，且要用到 §4.3 的结论。
-
-### M8 · 收尾：RESULTS.md 与代码对齐
-
-- 最后两行 LoRA（旧 mask 方案）重跑刷新，删掉 §4.3 的注记
-- 格名对齐（cell 8 与 qwen3 两格在 `4bc81bc` / `21d85c7` 里改过名，
-  `RESULTS.md` 还是旧名）
-- 每一行都要能在 `logs/run/example/` 找到对应的 `summary.json`
-
-### M9 · DPO 列
-
-`sft_t2t_mini.jsonl` **不含偏好对**（每条对话只有 user/assistant，没有 chosen/rejected）。
-需用 `data/raw/minimind_dataset/dpo.jsonl`（17,166 行）。
-**先确认那份的 schema，再决定做不做**——它比 SFT 多一层 pair 构造。
+正式训练 = 完整跑 29 格那一级别的运行。20 步冒烟也算训练，同样需要我点头。
 
 ---
 
-## 6. 已知阻断与开放问题
+## 7. 规模
 
-| # | 问题 | 影响 | 状态 |
-|---|---|---|---|
-| 1 | ~~截止时间未给~~（§3） | 决定 M9 做不做 | ✅ 已解：**无截止，全做**；闸门改为 2026-10-03 10:00 CST |
-| 2 | ~~`reasoning_content` 怎么处理~~（§4.3） | 曾阻断 M1 | ✅ 已解：**方案 A**（loss 覆盖 think） |
-| 3 | ~~超长对话截断策略~~（§8） | 曾阻断 M1 | ✅ 已解：**按整轮丢弃，不半句截断** |
-| 3 | `RESULTS.md` 最后两行是旧 mask 方案 | 引用它的人 | M8 |
-| 4 | OPEN-4 packing 无 attention 隔离 | DLM 会从上一篇尾巴取信息 | **本轮不处理**，但 RESULTS.md 要写明未验 |
-| 5 | OPEN-5 Tier 0 吞吐不能外推 | 不能用 Tier 0 数字推正式规模 | 记档 |
-| 6 | OPEN-6 rep-4 在 32 token/2 prompt 上分散度极大 | 不能用 rep-4 排名 | SFT 格照报，但注明不可用于排名 |
-| 7 | `dlm-3.2m-dllm` 的 `native` 版是否删除 | SPEC 说「取代原 native 版」 | M6 时确认 |
+实践版和实验版**同规格起步**：Tier 0（3.21M 参数 · ctx 128 · 200 步）。
+等 A2 跑通、对拍 C1/C7 都过了，再讨论上不放大的问题
+（`configs/practical/tier1.yaml` 仍是空的）。
 
 ---
 
-## 7. 工作约定
+## 8. 记录
 
-- 每个 milestone 自动 commit（Q7 授权），最终报告列出全部 sha
-- **不 push**
-- 不改目标。超范围的问题问用户；超参数、命名、重构我自己决定
-- **检查因为错误的原因通过时，我会说明是哪个原因**
-- 每个 milestone 的决策写进文件，不留在对话里
-- GPU 共享：跑之前 `rocm-smi --showuse` 确认卡空；不测吞吐就不受这条约束
-
-### 2026-10-02 21:55 追加的三条
-
-| # | 问题 | 答复 |
-|---|---|---|
-| 1 | 我做不完时，minimind 那个还做不做？ | **不管它的期限，就让它干**——闸门只管「先不先起它」，不管它几点完 |
-| 2 | subagent 怎么用？ | **别管，就放着**——persistent 起步，不去设计它的生命周期 |
-| 3 | review 轮要不要注入 bug 验测试？ | **不要** |
-
-### 目标时刻
-
-用户：「**最早明天 10 点前结束**」——即**目标 2026-10-03 10:00 CST 前完成 M1–M9**。
-这是目标而非硬期限；晚于它也要做完，但完成后才起 minimind 的 subagent。
-
----
-
-## 8. 规模（实验版定义即 Tier 0，不另行选择）
-
-`configs/example/tier0.yaml`：hidden 256 · 2 层 · ctx **128** · vocab 6400 ·
-batch 8 · 200 步 · 3,213,056 参数 · `tinystories-6400`。
-
-⚠️ **ctx 128 短**——SFT 的对话展平后往往超过 128 token。
-**用户已定：超长对话按完整轮次丢弃，不做半句截断**，
-避免 assistant span 被切断、让「只算 assistant 段算 loss」这个约定失效。
-
-实现细则（AI 自定，不问）：展平时按**消息**累积 token 数，一轮对话
-（1 条 user + 1 条 assistant）整体入块；装不下当前轮就封块开新块。
-最后只剩一个没有 assistant 尾巴的块丢掉——它的 loss 会是 0。
+- 每一步的结论写进 `logs/dev/01-local-state.md` 的「项目当前进度」
+- 你修的 bug 记进 `example/ISSUES.md`（实验版）或本文件（我的代码）
+- **不在对话里留结论，留在文件里**
