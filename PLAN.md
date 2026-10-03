@@ -4,33 +4,68 @@
 
 ## 当前进度
 
-**实验版（`example/`）已全部完成并合入 main**（`cf9d708` + `010dbad`）。
-SPEC 2.3 的 10 格全部跑通，Tier 0 规模，200 步，实测数字见 `example/RESULTS.md`。
+**实验版（`example/`）SPEC 2.3 矩阵已跑通 26 格**，全部在 Tier 0（3.21M 参数 · ctx 128 · 200 步）。
+实测数字见 `example/RESULTS.md`，格状态见 `SPEC.md` §2.3。
 
 | 项目 | 状态 |
 |---|---|
 | 合并 SPEC 与目录设计 | DONE |
 | 根目录 scaffold | DONE |
 | uv/ROCm 环境 | DONE（transformers 4.57.0 + dllm patch 已打，训练与恢复均已验证） |
-| T1a HF AR | **DONE** — `example/base/hf/train_ar.py` · loss 8.44→4.70 · eval 4.6356 |
-| T1b Native AR | **DONE** — `example/base/native/train_ar.py` · **C1 = 6.91e-06**（阈值 1e-5） |
+| T1a HF AR | **DONE** — eval 4.6356 |
+| T1b Native AR | **DONE** — **C1 = 6.91e-06**（阈值 1e-5） |
 | T2a MiniMind-DLM A2D | **DONE** — hf + native 两格 · **C2/C3 = 7.6e-08 / 1.5e-07**（阈值 1%） |
 | T2b dllm A2D | **DONE** — hf + native 两格 · **C5 = 0 丢失 / 0 漂移** |
-| T2c Qwen3-0.6B A2D | **DONE** — LoRA r=8（0.38% 可训）两格 · eval 4.80 / 4.82 |
-| T3 Direct DLM | **DONE** — hf + native 两格 · eval 5.64（比 A2D 差 0.67 nat） |
+| T2c Qwen3-0.6B A2D | **DONE** — LoRA r=8（0.38% 可训）两格 · eval 4.8238 / 4.8397 |
+| T3 Direct DLM | **DONE** — `dlm-3.2m-hf` + `dlm-3.2m-dllm` · eval 5.6427 / 5.6460 |
+| **SFT 展平器** | **DONE** — `common/sft.py` · assistant spans · `data/prepared/sft-mini-6400/` 4096 块 · 填充率 0.72 |
+| **assistant-only 损失** | **DONE** — `common/losses.py::sft_ar_loss` · 全监督 batch 返回 0 不返回 nan |
+| **G3 对照（AR-SFT）** | **DONE** — hf + native · eval 6.3639 / 6.3462 |
+| **G3 新路线尾部 SFT** | **DONE** — `{mini,dllm}_a2d-sft` 四格 · eval 6.4880 – 6.5279 |
+| **G3 原路线尾部 SFT** | **DONE** — `sft-{mini,dllm}_a2d-sft` 四格 · eval 6.0485 – 6.1029 |
+| **G4 SFT（0.6B）** | **DONE** — `qwen3-0.6b-mini_a2d-sft` · eval 3.8151（**跨 track 不可比**） |
+| **G3 DPO（AR 行）** | **DONE** — `ar-3.2m-hf-sft-dpo` · 偏好准确率 **0.0 → 0.75** |
+| C1–C7 对拍 | **DONE** — C7（SFT 路径 parity）= **0.000e+00** |
 | C4 resume 等价性 | **DONE** — 40 步 vs 30+resume+10 逐步差 0.0 |
 | 实验版教学计划 | **DONE** — `example/teach/` step 0-13 全部细化 |
 | 实践版实现 | **PENDING** — 七个目录只有 docstring，按 `example/teach/` 逐步写 |
-| Tier 1 定档 | **PENDING** — 见 `example/teach/13-tier1.md`，先测吞吐再定参数量 |
+| Tier 1 定档 | **READY** — 吞吐阶梯已测完（`configs/practical/tier1.yaml` 已填），缺 SFT 列的 6 格 |
 
-**三个方法在两个 base 上的相对关系一致**：A2D eval ≈ 4.97，Direct-DLM ≈ 5.64。
-即 AR 权重在 Tier 0 / 20 万 token 上值 **0.67 nat**，与 `notes/03` §11 的判断方向一致。
+### G3 的结论：顺序
 
-**rep-4 不可用于排名**：同一方法换一个 base，A2D 在 0.40 ~ 0.81 之间跳
+两条路线都终止于「assistant 段上的 A2D loss」，同一份 SFT 语料、同一个目标，因此可直接比：
+
+| 路线 | hf/mini | hf/dllm | native/mini | native/dllm |
+|---|---:|---:|---:|---:|
+| 新路线 A2D → SFT | 6.4958 | 6.4880 | 6.5279 | 6.5088 |
+| 原路线 SFT → A2D → SFT | **6.1029** | **6.0851** | **6.0851** | **6.0485** |
+
+**原路线稳定优约 0.40 nat，四个实现对全部同向。** 与 SPEC 把原路线排在前面
+（业界已有的 A2D 全部落在已经能 chat 的模型上）一致。
+
+⚠️ AR-SFT 对照（6.3639 / 6.3462）是 AR 的 next-token CE，**与上表不同量**，
+不能比大小。跨模型族要看「能 chat」四条门槛或 DPO 偏好准确率。
+
+**rep-4 不可用于排名**：同一方法换一个 base，A2D 在 0.40 ~ 0.97 之间跳
 （32 token 样本的噪声），详见 `example/ISSUES.md` OPEN-6。
 
-**实验版只做了预训练**：10 格都是裸文本，没有 chat template、没有 SFT、没有 RL。
-`notes/01` 的三阶段目前只用到第一阶段。
+**三个方法在两个 base 上的相对关系一致**：A2D eval ≈ 4.97，Direct-DLM ≈ 5.64，
+即 AR 权重在 Tier 0 / 20 万 token 上值 **0.67 nat**，与 `notes/03` §11 一致。
+
+### 尚未完成的 6 格与四个开放问题
+
+| 格 | 为什么没做 |
+|---|---|
+| `ar-3.2m-native-sft-dpo` | 代码路径与 hf 版相同，`train_dpo.py` 加 `--cell` 即可，约 5 min |
+| `dlm-3.2m-{hf,dllm}-sft` | P2 |
+| `…-sft-dpo`（dlm 行） | **DPO 需要自回归序列 logprob，DLM 不定义这个量**，需 ELBO 形式化（OPEN-10） |
+
+| 开放问题 | 性质 |
+|---|---|
+| OPEN-7 | 方案 A（监督 think）与 ctx 128 冲突：**92.5% 的 think 轮次装不下被丢**，需拍板 A1/A2/A3 |
+| OPEN-8 | ✅ 已结清，G3 有了结论 |
+| OPEN-10 | DLM 的 DPO 缺 ELBO 形式化；native DPO 格未跑 |
+| OPEN-4 / OPEN-6 | packing 无 attention 隔离；rep-4 不可排名（均已记录，本轮不处理） |
 
 ## Implementation phases
 
