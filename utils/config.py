@@ -81,3 +81,87 @@
 
     然后把那行临时加的删掉。configs/ 里不该留一个没人读的旋钮。
 """
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, fields
+from pathlib import Path
+
+from .version import cell_path, load_config
+
+ROOT = Path(__file__).resolve().parents[1]
+VERSION = "practical"
+TIER = "smoketest"
+_RAW = load_config(VERSION, TIER)
+TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
+DATA_DIR = ROOT / _RAW["data"]["prepared_dir"]
+CKPT_ROOT = ROOT / "checkpoints"
+RUN_ROOT = ROOT / "logs" / "run"
+
+_tok = _RAW["tokens"]
+PAD, BOS, EOS, MASK = _tok["pad"], _tok["bos"], _tok["eos"], _tok["mask"]
+PROMPTS = ("Once upon a time", "The future of AI is")
+# PROMPTS = ("The capital of France is", "The future of AI is")
+
+def _from(raw: dict, cls):
+    known = {f.name for f in fields(cls)}
+    unknown = set(raw) - known
+    if unknown:
+        raise ValueError(f"wdnmd wrong config keys for {cls.__name__}: {sorted(unknown)} you idot!")
+    return cls(**raw)
+
+@dataclass(frozen=True)
+class ModelCfg:
+    hidden_size: int
+    num_layers: int
+    num_heads: int
+    num_kv_heads: int
+    intermediate_size: int
+    context_length: int
+    vocab_size: int
+    rope_theta: float
+    rms_norm_eps: float
+    tie_word_embeddings: bool
+    @property
+    def head_dim(self) -> int:
+        return self.hidden_size // self.num_heads
+
+@dataclass(frozen=True)
+class TrainCfg:
+    steps: int
+    batch_size: int
+    lr: float
+    dlm_lr: float
+    min_lr_ratio: float
+    warmup_steps: int
+    weight_decay: float
+    grad_clip: float
+    beta1: float
+    beta2: float
+    seed: int
+    log_every: int
+    loss_window: int
+    @property
+    def betas(self) -> tuple[float, float]:
+        return (self.beta1, self.beta2)
+    @property
+    def dlm(self) -> TrainCfg:
+        """Same schedule, the fine-tuning learning rate (SPEC 3.3 A2D)."""
+        return TrainCfg(**{**asdict(self), "lr": self.dlm_lr})
+
+MODEL = _from(_RAW["model"], ModelCfg)
+AR_TRAIN = _from(_RAW["train"], TrainCfg)
+DLM_TRAIN = AR_TRAIN.dlm
+BLOCK_SIZE = MODEL.context_length
+VOCAB = MODEL.vocab_size
+MAX_BLOCKS = _RAW["data"]["max_blocks"]
+DTYPE = _RAW["runtime"]["dtype"]
+EVAL_BATCHES = 4
+
+def as_dict(obj) -> dict:
+    # json snapshots in ckpt
+    return asdict(obj)
+def cell_dir(name: str) -> Path:
+    """checkpoints/<name> (SPEC 1.1.1)."""
+    return cell_path(name, VERSION, "ckpt")
+def run_dir(name: str) -> Path:
+    return cell_path(name, VERSION, "run")
