@@ -413,7 +413,7 @@ packing 把多篇文档首尾相接时没有 document mask, 模型能看见上�
 | | 实验版 | 实践版 |
 |---|---|---|
 | 代码 | `example/` | 根目录七个目录（B 版） |
-| 配置 | `configs/example/tier0.yaml` | `configs/practical/` **只有 README** |
+| 配置 | `configs/example/tier0.yaml` | `configs/practical/smoketest.yaml`（代码通路冒烟）、`configs/practical/tier1.yaml`（正式规模，已填） |
 | 结果 | `example/RESULTS.md` | `RESULTS.md` 还不存在 |
 | checkpoint | `checkpoints/<name>-example/` | `checkpoints/<name>/` |
 
@@ -421,7 +421,7 @@ packing 把多篇文档首尾相接时没有 document mask, 模型能看见上�
 
 ### 实践版的规模数据已经测出来了
 
-`configs/practical/tier1.yaml` 空着是等吞吐阶梯，阶梯已测完（本文件上方）：
+吞吐阶梯已测完并填进 `configs/practical/tier1.yaml`（本文件上方）：
 
 | hidden/layers | params | train tok/s | ms/step | GB | h@332M |
 |---|---:|---:|---:|---:|---:|
@@ -430,14 +430,56 @@ packing 把多篇文档首尾相接时没有 document mask, 模型能看见上�
 seq 256 → 8,999 tok/s（快 9%，但上下文减半）；seq 1024 → 6,731（慢 18%，
 `AGENTS.md` 的 `seq ≤ 512` 约束成立）。**直接填即可，不用重测。**
 
-### 剩下的 14 格全卡在 SFT 展平上
+### SFT 六格：已完成（2026-10-03）
 
-SPEC 里 14 个 ⬜ 全部属于 SFT 列（G3）+ `dlm-3.2m-dllm`。共同前置是
-`conversations` 格式展平成训练序列 + `assistant_spans.npy`（标出 assistant 段，
-只在 assistant 段算 loss）。
+实测行见 `example/RESULTS.md` 的 `*-sft` 行（如 `ar-3.2m-hf-sft` eval 6.2659 /
+rep-4 0.0000）。`conversations` 展平成训练序列 + `assistant_spans.npy`（只在 assistant
+段算 loss）落在 `example/common/sft.py`，造数据用 `example/base/hf/make_sft_data.py`。
 
-数据已下载（`sft_t2t.jsonl` 14 GB / 5,109,432 行），但 `prepare_data.py` 只读
-`row["text"]`，喂 `conversations` 会**静默产出 0 token**。
+仍然成立的机制提醒（写代码时会再撞）：`scripts/prepare_data.py` 只读 `row["text"]`，
+喂 `conversations` 格式会**静默产出 0 token**。
+
+## 实践版 step A0 进度（2026-10-04）
+
+`utils/version.py` + `utils/config.py` 写完并过验收：
+
+| 检查 | 结果 |
+|---|---|
+| 两条 yaml 读入（自写解析器 vs 实验版） | `configs/` 下 4 个文件 deep-equal，标量类型也一致 |
+| `MODEL` / `AR_TRAIN` 与实验版 dataclass 同字段集 | 字段名集合相同；`asdict()` 值相同 |
+| 未知键一次列全 | `['spint', 'temperary']` 在一条 ValueError 里 |
+| 冒烟配置 | `configs/practical/smoketest.yaml`：512/2层/ctx128，1024 步，覆盖 GQA + warmup→cosine + epoch rollover |
+
+约定（本轮定下的，写进各文件 docstring）：
+
+- 配置解析器实践版**自己写一份**，加 `test/06` 断言两版逐键相等；不 import `example/`。
+- 不用 pyyaml 的实测理由：YAML 1.1 的浮点正则要小数点，`3e-4` / `1e-6` 会解析成**字符串**。
+  `False` / `TRUE` / `Null` 反而没问题（`_scalar` 先 `.lower()`）—— 猜测被实测推翻。
+- 常量叫 `MODEL`，不叫 `TIER0`：实践版没有 tier0，名字里带 tier 等于每次换 tier 改名。
+- `BLOCK_SIZE` = 打包块 = `MODEL.context_length`；DLM 的去噪块（实验版 `sample_dlm` 默认 8）
+  是采样器参数，不进 config。`configs/base.yaml` 的 `inference.block_size` 是后者。
+- 实践版后缀为空，所以名字撞不到实验版格子（它们全带 `-example`）；会撞的是 **main
+  worktree 跑出的实践版格子**（共用 `/mnt/extra/ckpt`）。
+
+A0 未完：`seed.py` / `device.py` / `data.py` / `metrics.py` / `loop.py` / `checkpoint.py`
+/ `tokenizer.py` / `cli.py` / `logger.py`。`test/06` 的 docstring 已写好，实现待写。
+
+遗留（不阻塞冒烟，tier1 前要处理）：
+
+1. `utils/config.py` 的 `PROMPTS` 还是英文 tinystories，冒烟配置语料却是 `minimind3-6400`；
+   到 A2 采样时 rep-4 会描述一个模型没训过的前缀。
+2. `CKPT_ROOT` / `RUN_ROOT` 无读者（实验版同样无读者，是从它抄来的）。
+3. `DTYPE` 目前无读者，等 `device.py`。
+4. `BASE_OF`（实验版有、3 个调用点）实践版还没有 —— B2 之前不需要。
+
+### 实验版静态检查累计待记 ISSUES（尚未写入 `example/ISSUES.md`）
+
+| 位置 | 问题 |
+|---|---|
+| `common/config.py:29-30` | `CKPT_ROOT` / `RUN_ROOT` 定义后全仓无读者 |
+| `common/config.py:38` vs `:104` | `VOCAB` 与 `TIER0.vocab_size` 同一数字两个来源 |
+| `common/config.py:31` | `EXPERIMENT_SUFFIX` 在 `config.py` 和 `version.py` 各定义一份，只有 `version.py` 那份被读 |
+| `common/config.py:107` | `QWEN3_LORA` 定义后无调用点 |
 
 ### 长任务留下的方法论资产
 

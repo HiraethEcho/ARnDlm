@@ -1,10 +1,25 @@
-# base.yaml — 全局默认配置
+# base.yaml — 全局默认配置（旋钮清单）
+#
+# ⚠ 状态 (2026-10-04)：**当前没有任何代码读这份文件。**
+#   utils/version.py::load_config 解析的路径是 configs/<version>/<tier>.yaml，
+#   里面没有 base.yaml 这一级。所以下面那句「加载顺序 base → 实验.yaml，后者覆盖前者」
+#   描述的机制**并不存在** —— 它是一句比代码看起来还对的注释。
+#   留着它的唯一理由：它列出了「一个 run 需要哪些旋钮」，那是重想一遍要花的知识。
+#   要真想用：给 load_config 加 base→tier 的 dict merge，**并且**在
+#   test/06-config-loader-parity.py 里把同源断言扩到合并语义（否则实践版和实验版
+#   的配置解析就不再是同一条路径）。在那之前，别照着这份文件写代码。
+#
+# ⚠ 名字冲突：这里的 `inference.block_size` 和 utils/config.py 的 `BLOCK_SIZE`
+#   **不是同一个量**。
+#     BLOCK_SIZE           = 打包块 = 一次前向的序列长，绑 model.context_length
+#     inference.block_size = DLM 分块去噪的块长（实验版 common/a2d.py::sample_dlm
+#                            默认 8），是采样器参数 / CLI flag，不进 config 常量
 #
 # 规则: **这里不写模型结构维度** (hidden_size / n_layers / n_heads ...)。
-# 那些属于各实验配置, 放 t1_*.yaml / t2_*.yaml / t3_*.yaml。
+# 那些属于各实验配置, 放 configs/practical/<tier>.yaml。
 # base 只放「所有实验都一样的」东西: 优化器、调度、日志频率、路径。
 #
-# 加载顺序:  base.yaml  →  <实验>.yaml  (后者覆盖前者)
+# 加载顺序:  base.yaml  →  <实验>.yaml  (后者覆盖前者)   ← 未实现，见上方状态
 
 # ---------------------------------------------------------------------------
 # 运行模式
