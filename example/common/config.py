@@ -24,18 +24,15 @@ _RAW = load_config(VERSION, TIER)
 
 TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
 DATA_DIR = ROOT / _RAW["data"]["prepared_dir"]
-# Kept as names because dozens of call sites use them; the values come from
-# version.cell_path, which owns the -example suffix (SPEC 1.1.1).
-CKPT_ROOT = ROOT / "checkpoints"
-RUN_ROOT = ROOT / "logs" / "run"
-EXPERIMENT_SUFFIX = "-example"
+# No CKPT_ROOT / RUN_ROOT here. Output paths go through version.cell_path, which
+# owns the -example suffix; a second spelling of the same root is a second thing
+# to keep in sync, and there are zero call sites for these (ISSUES DONE-15).
 
 _tok = _RAW["tokens"]
 # MASK reuses a reserved buffer token instead of growing the vocab (SPEC 3.2):
 # a new row would change the embedding shape and silently break every weight
 # copied from the AR checkpoint during A2D.
 PAD, BOS, EOS, MASK = _tok["pad"], _tok["bos"], _tok["eos"], _tok["mask"]
-VOCAB = _RAW["model"]["vocab_size"]
 
 # Fixed generation prompts (SPEC "Evaluation plan").
 PROMPTS = ("Once upon a time", "The future of AI is")
@@ -104,8 +101,16 @@ class TrainCfg:
 TIER0 = _from(_RAW["model"], ModelCfg)
 AR_TRAIN = _from(_RAW["train"], TrainCfg)
 DLM_TRAIN = AR_TRAIN.dlm
-QWEN3_LORA = TrainCfg(**{**asdict(AR_TRAIN), "steps": 20, "batch_size": 2,
-                         "lr": AR_TRAIN.dlm_lr, "warmup_steps": 2, "log_every": 5})
+
+# Derived from TIER0 rather than read out of _RAW a second time: two sources for
+# one number can only drift, and the drift shows up as an embedding-shape error
+# far from its cause. No module from-imports VOCAB -- every call site is C.VOCAB,
+# which is why defining it below TIER0 is safe.
+VOCAB = TIER0.vocab_size
+
+# No QWEN3_LORA here either: it was defined with steps=20 / batch_size=2 and had
+# zero call sites. The LoRA cells run on DLM_TRAIN (RESULTS: 200 steps), so the
+# 20-step geometry here was an intention that never got wired up (ISSUES DONE-15).
 
 BLOCK_SIZE = TIER0.context_length                  # packing block == context
 

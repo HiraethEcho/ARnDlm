@@ -10,7 +10,6 @@ to a real 600M model without touching its weights. LoRA r=8 on q/k/v/o only:
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import sys
 from pathlib import Path
 
@@ -49,8 +48,12 @@ def main() -> int:
 
     blocks = build_blocks(tokenizer, n_docs=args.n_docs, block_size=128)
     data = packed(blocks)
-    train_cfg = dataclasses.replace(C.DLM_TRAIN, steps=C.DLM_TRAIN.steps,
-                                    batch_size=C.DLM_TRAIN.batch_size)
+    # DLM_TRAIN as-is. This used to be
+    #   dataclasses.replace(C.DLM_TRAIN, steps=C.DLM_TRAIN.steps,
+    #                       batch_size=C.DLM_TRAIN.batch_size)
+    # -- both arguments already hold those values, so the "configuration" changed
+    # nothing while looking like it did (ISSUES DONE-15).
+    train_cfg = C.DLM_TRAIN
     eval_batches = [torch.arange(train_cfg.batch_size)]
 
     loop = Loop(model, train_cfg, make_minimind_loss(model, ids["mask"]),

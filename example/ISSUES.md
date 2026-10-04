@@ -378,6 +378,60 @@ bug——因为我凭脑内推演 `losses[:k]` 和 `losses[-k:]` 在 n=2k 时重
 **实测**（严格递增序列）显示它们各占一半，不重叠，注释是对的。
 静态分析最容易犯的错：不跑数就下「正确/错误」的结论。
 
+## DONE-15 · 静态检查（实践版 A0 期间）：四个没人读的配置名 + 两处“像在配置”的空操作
+
+**这轮只做静态分析，没有跑任何训练或测试**（GOAL §6）。改动全部运行时不可见：删掉的
+名字零调用点，两处 `dataclasses.replace` 的参数与现值相同。`example/RESULTS.md` 的数字
+一个都不受影响。
+
+### 15a · `common/config.py` 四个没人读的名字
+
+| 名字 | 定义处 | 全仓调用点 | 处理 |
+|---|---|---|---|
+| `CKPT_ROOT` | `:29` | 0 | 删；输出路径统一走 `version.cell_path` |
+| `RUN_ROOT` | `:30` | 0 | 删，同上 |
+| `EXPERIMENT_SUFFIX` | `:31` | 0（被读的是 `version.py:25` 那份） | 删 |
+| `QWEN3_LORA` | `:107` | 0 | 删；LoRA 两格实际跑在 `DLM_TRAIN` 上（RESULTS 两行都是 200 步），那份 steps=20/batch=2 的形状从来没接上过 |
+
+最坏的不是死代码，是给它辩护的那句注释 —— 原文：
+「Kept as names because dozens of call sites use them」。dozens = 0。一条看起来具体、
+实际虚构的数字，比没有注释更容易让人信。
+
+### 15b · `VOCAB` 一个数字两个来源
+
+`:38` 从 `_RAW["model"]["vocab_size"]` 读，`:104` 的 `TIER0` 里带着同一个值。改一处漏
+一处时，症状是 embedding 形状对不上，离原因很远。现在 `VOCAB = TIER0.vocab_size`，
+单来源；定义劓到 `TIER0` 之后。安全理由：全仓没有 `from ... import VOCAB` 这种
+模块级绑定，调用点都是 `C.VOCAB` 属性访问，发生在模块执行完之后。
+
+### 15c · 两处恒等的 `dataclasses.replace`
+
+| 文件 | 原文 | 为什么什么都没做 |
+|---|---|---|
+| `train_lora_minimind.py` | `replace(C.DLM_TRAIN, steps=C.DLM_TRAIN.steps, batch_size=C.DLM_TRAIN.batch_size)` | 两个 kwarg 就是它已有的值 |
+| `train_lora_dllm.py` | `replace(C.DLM_TRAIN)` | 一个 kwarg 都没有，等于拷贝 |
+
+两处读起来都“像在配置训练”，只能靠逐个 kwarg 与现值对比才发现是恒等的。已改成
+`train_cfg = C.DLM_TRAIN` 并留注释；`import dataclasses` 随之变未用，删。
+（改 minimind 那份时误把 `import dataclasses` 换成了 `import argparse`，产生重复行，
+已删；核对过最终 import 块只剩一个。）
+
+### 验证（全静态，没跑训练/测试）
+
+| 检查 | 结果 |
+|---|---|
+| `py_compile` 三个改动文件 | 通过 |
+| 四个名字的引用计数（`*.py` / `*.md` / `*.sh`） | 删除前仅定义处；删除后 0 |
+| `from ... import VOCAB` 形式的模块级绑定 | 0 处 → 移定义位置安全 |
+| LoRA 两格 steps 来源 | `DLM_TRAIN.steps = 200`，与 RESULTS 两行的 200 一致 |
+
+### 一条方法论
+
+`DONE-14` 说过“不跑数就下结论”是这一类错的根源；15c 是它的镜像：**注释和代码看起来
+在做事**。两者都不能靠读 —— 要么落成脚本，要么落成断言。这就是 `test/06` 同源断言的价值。
+
+---
+
 ## OPEN-9 · loss 工厂的裸名 lambda（本次会话犯两次）
 
 `lambda: minimind_loss` 求值得到**函数对象**，于是 Loop 把工厂当 loss 调

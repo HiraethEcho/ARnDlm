@@ -12,7 +12,6 @@ project's 27.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import sys
 from pathlib import Path
 
@@ -51,7 +50,10 @@ def main() -> int:
 
     blocks = build_blocks(tokenizer, n_docs=args.n_docs, block_size=128)
     data = packed(blocks)
-    train_cfg = dataclasses.replace(C.DLM_TRAIN)
+    # A copy used to be taken here with `dataclasses.replace(C.DLM_TRAIN)` -- no
+    # keyword arguments, so it returned an equal object and hid the fact that
+    # nothing here configures the schedule (ISSUES DONE-15).
+    train_cfg = C.DLM_TRAIN
     eval_batches = [torch.arange(train_cfg.batch_size)]
 
     harness = DLLMLoss(special_ids={"mask_token_id": ids["mask"],
