@@ -3,7 +3,11 @@
 用途
     这台机器是 AMD Radeon 880M + ROCm 10.0，torch 报的是 **cuda API**。
     本文件把「跑在哪、用什么精度」这两件事收在一处，别处不许自己挑。
-    它是 utils/config.py 里那个 `DTYPE` 字符串的唯一读者。
+    本文件**不 import 配置** —— 它只认传进来的 dtype 名字。`utils/config.py` 里那个
+    `DTYPE` 字符串的读者是 `utils/loop.py`：训练时把 `config.DTYPE` 传进来，验证时硬传
+    `"float32"`。同一个函数、两类调用方 —— 这个形状不是洁癖，是「跨实现比 loss 必须
+    fp32」这条硬要求推出来的：如果 `autocast()` 自己去读配置，`eval_loss` 就没有办法
+    关掉混合精度（实验版正是在 `common/loop.py:231` 硬传 `"float32"` 的）。
 
     对应 example/common/seeds.py 的**下半部分**（实验版 seed 和 device 同文件；
     实践版拆成 seed.py + device.py，理由写在 utils/seed.py 的「用途」里）。
@@ -46,8 +50,8 @@
 
 依赖
     torch、contextlib。被 utils/loop.py 消费（训练用配置里的 DTYPE，
-    eval 强制 "float32"）。utils/config.py 反过来**不** import 本文件 ——
-    config 层要在没有 GPU 的机器上也能 import。
+    eval 强制 "float32"）。反过来**不** import utils/config.py —— 理由见上面「用途」，
+    另外 config 层要在没有 GPU 的机器上也能 import，不能因为一个字符串转换就拉进硬件判断。
 
 验收
     .venv/bin/python -c "from utils.device import pick_device, resolve_dtype, autocast; \\

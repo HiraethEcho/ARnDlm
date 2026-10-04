@@ -33,7 +33,8 @@
         BLOCK_SIZE = TIER0.context_length
         DATA_DIR   = ROOT / data.prepared_dir      # yaml 里写的是相对路径
         MAX_BLOCKS <- data.max_blocks
-        DTYPE      <- runtime.dtype                # 由 utils/device.py 消费
+        DTYPE      <- runtime.dtype                # 读者是 utils/loop.py（它把字符串交给
+                                                     # device.resolve_dtype，见注意 8）
         EVAL_BATCHES = 4                           # 评测几何，留在代码里
         PROMPTS = ("Once upon a time", "The future of AI is")
         TIER0, AR_TRAIN, DLM_TRAIN
@@ -63,8 +64,9 @@
        给自己的名字加前缀（`ar-512-smoke`），别让一次 smoke 落在一次 tier1 上。
        撞上了不会报错，只会静默覆盖权重。
     8. 在这里声明了 DTYPE，就必须有代码读它。没人检查的常量是一份静默分歧的邀请函
-       （GOAL.md 清单第 7 条）。读它的是 utils/device.py；在它存在之前，用注释说明
-       这一点，别让它看起来已经生效。
+       （GOAL.md 清单第 7 条）。读者是 **utils/loop.py**：它训练时把 `DTYPE` 传给
+       `device.autocast`，验证时硬传 `"float32"`。device.py 自己**不** import 本文件 ——
+       否则 eval 关不掉混合精度，而 fp32 对拍是硬要求。
 
 依赖
     utils/version.py（load_config、cell_path、ROOT；as_dict 来自
@@ -94,8 +96,9 @@ TIER = "smoketest"
 _RAW = load_config(VERSION, TIER)
 TOKENIZER = ROOT / "tokenizer" / "tokenizer.json"
 DATA_DIR = ROOT / _RAW["data"]["prepared_dir"]
-CKPT_ROOT = ROOT / "checkpoints"
-RUN_ROOT = ROOT / "logs" / "run"
+# NOTE no readers currently
+# RUN_ROOT = ROOT / "logs" / "run"
+# CKPT_ROOT = ROOT / "checkpoints"
 
 _tok = _RAW["tokens"]
 PAD, BOS, EOS, MASK = _tok["pad"], _tok["bos"], _tok["eos"], _tok["mask"]

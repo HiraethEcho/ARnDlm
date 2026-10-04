@@ -469,7 +469,8 @@ A0 未完：`seed.py` / `device.py` / `data.py` / `metrics.py` / `loop.py` / `ch
 1. `utils/config.py` 的 `PROMPTS` 还是英文 tinystories，冒烟配置语料却是 `minimind3-6400`；
    到 A2 采样时 rep-4 会描述一个模型没训过的前缀。
 2. `CKPT_ROOT` / `RUN_ROOT` 无读者（实验版同样无读者，是从它抄来的）。
-3. `DTYPE` 目前无读者，等 `device.py`。
+3. `DTYPE` 的读者定为 `utils/loop.py`（训练传 `config.DTYPE`，eval 硬传 `"float32"`），
+   `device.py` 不 import 配置 —— 否则 eval 关不掉混合精度（2026-10-04 定的 A 方案）。
 4. `BASE_OF`（实验版有、3 个调用点）实践版还没有 —— B2 之前不需要。
 
 ### 实验版静态检查累计待记 ISSUES（尚未写入 `example/ISSUES.md`）
