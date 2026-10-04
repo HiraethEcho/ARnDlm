@@ -70,3 +70,27 @@
     .venv/bin/python -c "from utils.device import pick_device; pick_device(True)"
         -> RuntimeError，且消息里写清了是哪一个条件没过
 """
+from contextlib import nullcontext
+import torch
+
+_DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
+def resolve_dtype(name: str) -> torch.dtype:
+    return _DTYPES[name]
+
+def pick_device(require_cuda: bool = True) -> torch.device:
+    if require_cuda:
+        if not torch.cuda.is_available():
+            raise RuntimeError("有 CUDA 吗你就用")
+        else:
+            print("本训练有超级CUDA力")
+            device = torch.device("cuda")
+    else: 
+        print("龟速 CPU")
+        device = torch.device("cpu")
+    print(f"[device] {device} ({torch.cuda.get_device_name(0) if device.type == 'cuda' else 'cpu only'})")
+    return device
+
+def autocast(device: torch.device, name: str = "bfloat16"):
+    if device.type == "cpu" or name == "float32":
+        return nullcontext()
+    return torch.autocast(device_type=device.type, dtype=resolve_dtype(name))

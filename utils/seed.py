@@ -15,8 +15,10 @@
     三个函数，全部模块级：
 
         seed_all(seed: int) -> None
-            random.seed / np.random.seed / torch.manual_seed 三个都要，
-            torch.cuda.is_available() 时才 torch.cuda.manual_seed_all(seed)。
+            random.seed / np.random.seed / torch.manual_seed 三个都要。
+            torch.cuda.manual_seed_all(seed) 可以直接调：**实测**（torch 2.12+rocm，
+            `CUDA_VISIBLE_DEVICES=""`）无 GPU 时它不抛也不警告（`UserWarning` 提级到
+            error 也没事），因为它是 lazy call。加 is_available() 判断也无害。
 
         rng_state() -> dict
             返回 {"python": ..., "numpy": ..., "torch": ...}，cuda 可用时再加
@@ -28,7 +30,12 @@
 注意
     1. numpy 必须单独设。torch.Generator / torch.manual_seed 只管 torch 自己，
        而数据侧（未来的 sft 打包、A2D 的 corruption）可能从 numpy 抽数。少这一处
-       的症状不是报错，是"第二次跑就不一样"。
+       的症状不是报错，是“第二次跑就不一样”。
+    2. numpy 的函数名**带下划线**：`np.random.get_state()` / `np.random.set_state()`。
+       `getstate` / `setstate`（numpy 1.x 的老名字）不存在，写错是 `AttributeError`，
+       报错消息会提示 `Did you mean: 'set_state'` —— 看到就照它改。torch 的
+       `get_rng_state` / `set_rng_state` 则是**有**下划线的，numpy 和 torch 两个命名
+       习惯正好相反。
     2. seed_all 必须发生在 build_model **之前**。Loop.__init__ 里再 seed 已经晚了 ——
        参数在那之前就已初始化完。实验版第一版正是漏了这一步，"同 seed 同权重" 的
        检查当场失败（example/teach/01-hf-qwen.md §1.4）。这个文件只提供工具，
@@ -63,3 +70,28 @@
     （torch 不依赖 numpy 的种子）—— 所以这条测的是"它必须**不是**白测"：
     补一条用 np.random.rand 的断言，确认它会红。
 """
+from __future__ import annotations
+import random
+import numpy as np
+import torch
+
+def seed_all(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)          # 同时管 CPU 和所有 CUDA device
+    torch.cuda.manual_seed_all(seed) # 冗余但无害
+
+def rng_state() -> dict:
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+    }
+
+def load_rng_state(state: dict) -> None:
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"])
+    if state["cuda"] is not None:
+        torch.cuda.set_rng_state_all(state["cuda"])
