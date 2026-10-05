@@ -1,12 +1,15 @@
 # 本机状态
 
-## refactor 工作区现状（2026-10-05）
+## refactor 工作区现状（2026-10-05 night-run 后）
 
-- 分支 `refactor`。旧开发笔记整体归档到 `logs/dev-legacy/`（git 已跟踪移动）：
-  三份旧 log 描述的是实验版（`example/`）与旧 `utils/` 布局，未完成的段落已过时，
+- 分支 `night/example-codes`（基于 refactor）。旧开发笔记归档在 `logs/dev-legacy/`，
   仅作背景查阅，**过时结论不要从这里引用**。
-- 根目录是与 SPEC §7 一致的骨架树：`common/` + `src/` 全部是 4–6 行 docstring，
-  0 行实现代码；无 `x-example.py` 参考实现（对拍基准），无测试。
+- **项目当前进度**：P0 完成。P1–P5 的 **example 侧**全部交付（10 个 example +
+  10 个测试文件全过），x.py 骨架未动（待人填）。交付清单、盘上数据格式实测、
+  踩坑与开放点见 `logs/dev/04-example-notes.md`。
+  smoke 实测锚点：AR 20 步 loss 8.81→8.71→eval 8.70（trans 8.68）；SFT 200 步
+  assistant eval loss 6.39、rep-4 0.33–0.43；**C1 2.15e-06 / C4 0.0**。
+- 未开始：P6 A2D/DLM（C2/C3/C5）、dpo、tier1 正式训练。
 - `logs/run/` 与 `checkpoints/*-example` 都是实验版遗留（gitignore，不算本分支工作）。
   新格子命名按 SPEC §1.2；smoke checkpoint 带 `-smoke` 后缀。
 
