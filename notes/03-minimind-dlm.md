@@ -1,8 +1,6 @@
 # minimind-dlm — DLM 原理与 A2D
 
-**这套方法在本项目里称为 `minimind-dlm`。** 它有两条路：
-`training/a2d_minimind/` 手动实现（这条路），`training/a2d_dllm/` 用 dllm 包做（另一条路）。
-两者必须在同一 checkpoint 上跑出同一个 loss。
+**这套方法在本项目里称为 `minimind-dlm`。** 
 
 来源:
 - `https://jingyaogong.github.io/space/dllm_intro` — 原理 + 交互式可视化

@@ -6,5 +6,6 @@
 
 | 文件 | 内容 |
 |---|---|
-| 01-local-state.md | 本机环境、mdnt/extra 布局、参考路径、项目当前进度 |
+| 01-local-state.md | 本机环境、/mnt/extra 布局、参考路径、项目当前进度 |
 | 02-hardware-perf.md | 本机实测性能（tier 阶梯、瓶颈定位） |
+| 03-call-flow-spec.md | 按 SPEC 文件设计的代码调用流程（启动时依次调谁、干什么） |

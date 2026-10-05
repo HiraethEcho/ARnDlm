@@ -63,7 +63,7 @@ ar-3.2m-trans-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 | **问题** | `transformers` 写法和纯 torch 原生写法是不是同一个模型？                  |
 | **变量** | 模型实现（用包 / 不用包）                                                 |
 | **格子** | `ar-trans` pretrain · `ar-native` pretrain                                |
-| **验收** | 同权重同 batch 下 logits `max\|Δ\| ≤ 1e-5`（**C1**，此前旧实现实测 6.91e-06） |
+| **验收** | 同权重同 batch 下 logits `max\|Δ\| ≤ 1e-5`（**C1**，实测锚点 6.91e-06） |
 | **产出** | 两个 AR pretrain 权重 —— 后续所有 SFT / A2D 的起点                        |
 
 ### G2 · Direct-DLM vs A2D
@@ -74,7 +74,7 @@ ar-3.2m-trans-sft-dllm_a2d        transformers 建模 + dllm 包 A2D
 | **变量** | 起点权重（随机初始化 vs 从 AR 转换）                                                                        |
 | **备注** | `dlm-*` 只有两种写法：`trans`（transformers + 本项目手写的 masked CE）和 `dllm`（调包）。**没有 native 版** |
 | **格子** | `dlm` pretrain + SFT · `a2d` pretrain + SFT（**都是 3.2M 极小模型，不含 0.6B**）                            |
-| **验收** | 两格都要能 chat；assistant 段 eval loss 之差 = AR 权重的价值（旧实现 pretrain 阶段实测 0.67 nat）           |
+| **验收** | 两格都要能 chat；assistant 段 eval loss 之差 = AR 权重的价值（pretrain 阶段实测锚点 0.67 nat）           |
 
 ### G3 · 顺序：原路线 vs 新路线
 
@@ -147,6 +147,11 @@ AR 用因果 mask，DLM 去掉因果 mask（**权重一个都不动**）。
 
 ### 3.3 语料
 
+两条 track 共用一套数据管道：源语料（minimind 数据集，中文对话）由 `common/prepare.py`
+下载并 tokenize，每篇文档 `[BOS] … [EOS]` 包裹拼接，按 context_length 切定长块，
+落盘 `data/prepared/minimind3-6400/`（tokens.bin / doc_lengths.npy / meta.json）。
+自洽约束：三件文件互相对账；MASK id 不允许出现在正文；vocab 与 tokenizer 断言一致。
+
 ## 4. 配置
 
 ### 4.1 smoke
@@ -196,7 +201,7 @@ transformers 4.57 里「关掉因果 mask」的正确做法是**传一个 4D 全
 
 ### 6.1 跨实现对拍（G5 的硬指标）
 
-| #      | 比什么                                                | 阈值                                  | 旧实现实测（learn 分支） |
+| #      | 比什么                                                | 阈值                                  | 实测锚点                  |
 | ------ | ----------------------------------------------------- | ------------------------------------- | ---------- |
 | **C1** | 原生 torch vs `transformers` logits（同权重同 batch） | `≤ 1e-5`                              | 6.91e-06   |
 | **C2** | minimind-dlm 手写 vs `dllm` loss，**同 corruption**   | 相对差 `< 1%`                         | 7.56e-08   |
@@ -252,12 +257,12 @@ notes/     logs/dev/             # 知识与手写记录（logs/run/ 不进 git�
 common/                    # 底座：每条实现 x 每个阶段都用
   config.py  seed.py  device.py  tokenizer.py(+tokenizer.json)
   data.py    prepare.py  metrics.py
-configs/                   # smoketest.yaml / tier1.yaml（单轨一份）
+configs/                   # smoketest.yaml / tier1.yaml
 scripts/                   # 环境（setup_env / install_dllm / setup_symlinks + patches）
 src/                       # 格子专属代码
   models/  trans.py + native/（包，接口对齐 trans）   # G1 的两条实现
   training/ main.py ar_trans.py ar_native.py state.py
-            sft.py dlm.py a2d_dllm.py a2d_mini.py
+            sft.py dlm.py a2d_dllm.py a2d_mini.py dpo.py
   eval/    chat.py（能 chat 四门槛 + rep-4）
 data -> /mnt/extra  checkpoints -> /mnt/extra   # 大文件软链（gitignore）
 .venv -> 主仓 .venv              # uv 环境

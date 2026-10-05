@@ -28,13 +28,13 @@
 
 - tier1 权重名用实测参数量：`ar-26.9m-trans` / `ar-26.9m-native`（26,879,488）
 - smoke checkpoint 带 `-smoke` 后缀：`checkpoints/ar-3.2m-trans-smoke/`
-- `impl` 段已全部改名：`-hf` → `-trans`；`-` 分段，`_` 只在「实现×阶段」内部（`mini_a2d`）
+- `impl` 段：`trans` / `native`；`-` 分段，`_` 只在「实现×阶段」内部（`mini_a2d`）
 
 ## 阶段
 
 | Phase | 内容 | 验收（SPEC 条款） |
 |---|---|---|
-| **P0 文档与骨架** | SPEC 修订 + PLAN + 目录 + 骨架注释 + tokenizer.json/scripts 恢复 | 结构 vs §7 一致 |
+| **P0 文档与骨架** | SPEC + PLAN + 目录树 + 骨架注释 | 结构 vs §7 一致 |
 | **P1 common/** | config（pyyaml）/ seed / device / tokenizer / data / prepare / metrics | yaml 浮点为 float；同 seed 三路一致；`_stream` 手工例 |
 | **P2 models** | `trans.py` + `native/` 包 | **C1**：logits max\|Δ\| ≤ 1e-5（锚 6.91e-06） |
 | **P3 smoke 训练** | `main.py` + `ar_trans.py` + `ar_native.py` + `state.py` | 20 步跑通；双口径 tok/s；checkpoint 名合 §1.2 |
