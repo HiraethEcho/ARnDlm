@@ -22,6 +22,10 @@ class TpsMeter:
         self.train_seconds = 0.0
         self.train_tokens = 0
 
+    def now(self) -> float:
+        """当前时钟（训练循环夹计时用, 别摸 _clock）。"""
+        return self._clock()
+
     def add_train(self, tokens: int, seconds: float) -> None:
         """每个训练步调一次。验证 / 采样 / 存盘不走这里。"""
         self.train_tokens += tokens
