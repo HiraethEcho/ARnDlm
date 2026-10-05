@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch.utils.data import IterableDataset
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -135,13 +136,10 @@ def run_sft(cfg, steps: int, ctx, impl: str, base_ckpt: str | Path | None = None
     else:
         trans = _load("src/training/ar_trans-example.py", "ar_trans_example_sft")
 
-        class _SFTBlocksDataset:
+        class _SFTBlocksDataset(IterableDataset):
             # 有序 IterableDataset: 逐 item yield {input_ids, labels}
             def __init__(self, batcher, n_items: int):
-                self.sb, self.n = batcher, n_items
-
-            def __len__(self):
-                return self.n
+                self.sb, self.n = batcher, n_items  # 不定义 __len__: 防 Trainer 走 RandomSampler
 
             def __iter__(self):
                 for b in range(self.n // self.sb.B):

@@ -43,10 +43,7 @@ class _Blocks(IterableDataset):
 
     def __init__(self, batches: Batches, n_items: int):
         self.batches = batches
-        self.n = n_items
-
-    def __len__(self) -> int:
-        return self.n
+        self.n = n_items  # 不定义 __len__: 一旦有 len, Trainer 就走 RandomSampler
 
     def __iter__(self):
         for b in range(self.n // self.batches.B):
