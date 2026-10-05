@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -34,9 +35,10 @@ build_native = _mm.build_native
 
 
 def ce_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    """因果 LM loss = HF labels 语义: 第 i 个 logits 预测第 i+1 个 token。"""
+    """因果 LM loss = HF labels 语义: 第 i 个 logits 预测第 i+1 个 token。
+    ignore_index=-100: SFT 的 assistant 区间外标签（AR 路径不含 -100, 不受影响）。"""
     return F.cross_entropy(logits[:, :-1].reshape(-1, logits.shape[-1]).float(),
-                           targets[:, 1:].reshape(-1))
+                           targets[:, 1:].reshape(-1), ignore_index=-100)
 
 
 @torch.no_grad()
@@ -62,22 +64,34 @@ def sample(model, prompt_ids: list[int], max_new_tokens: int = 32,
     return generated
 
 
-def run(cfg, steps: int, ctx, resume_path: str | Path | None = None) -> dict:
+def run(cfg, steps: int, ctx, resume_path: str | Path | None = None,
+        batcher=None, labels_fn=None, init_weights_path: str | Path | None = None) -> dict:
     """训练循环。ctx 由 main-example 提供（IO: eval/summary/ckpt 路径）。
 
     resume_path 给出时: 从该目录的 checkpoint 权重 + train_state.pt 续跑,
     目标 steps 是**全局步数**（如 resume 自 step20, 传 steps=30 就再训 10 步）。
+    batcher/labels_fn: SFT 层的注入点（sft-example.py）—— 缺省为 Corpus+Batches 纯函数。
     """
     m = cfg.MODEL
     t = cfg.TRAIN
     device = pick_device()
     dtype = to_dtype(cfg.DTYPE)
 
-    corpus = Corpus(ctx.data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
-                    max_blocks=cfg.DATA.max_blocks)
-    batches = Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+    if batcher is None:
+        corpus = Corpus(ctx.data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
+                        max_blocks=cfg.DATA.max_blocks)
+        batches = Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+    else:
+        batches = batcher  # SFT 等注入的批次器（接口: .batch(step) / .position(step)）
 
     model = build_native(m, seed=t.seed).to(device)
+    if init_weights_path is not None:
+        # SFT/A2D 的起点: 从 AR 权重出发。只拿权重, 不拿 optimizer/RNG（那是 resume 的事）
+        from safetensors.torch import load_file
+        sd = load_file(str(Path(init_weights_path) / "model.safetensors"))
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        assert not unexpected, unexpected
+        assert set(missing) <= {"lm_head.weight"}, missing  # tied 自动带上
     optimizer = torch.optim.AdamW(model.parameters(), lr=t.lr,
                                   betas=(t.beta1, t.beta2), weight_decay=t.weight_decay)
 
@@ -108,12 +122,14 @@ def run(cfg, steps: int, ctx, resume_path: str | Path | None = None) -> dict:
             g["lr"] = lr_now
 
         batch = torch.from_numpy(batches.batch(step)).long().to(device, non_blocking=True)
+        targets = batch if labels_fn is None else torch.from_numpy(
+            np.asarray(labels_fn(step, batch))).long().to(device)
         torch.cuda.synchronize()
         t0 = meter.now()
 
         with autocast(cfg.DTYPE):
             logits = model(batch).logits
-            loss = ce_loss(logits, batch)
+            loss = ce_loss(logits, targets)
 
         loss.backward()
         grad_clip = torch.nn.utils.clip_grad_norm_(model.parameters(), t.grad_clip)

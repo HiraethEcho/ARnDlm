@@ -99,14 +99,25 @@ def sample(model, prompt_ids: list[int], max_new_tokens: int = 32,
     return generated
 
 
-def run(cfg, steps: int, ctx) -> dict:
+def run(cfg, steps: int, ctx, dataset=None, positioner=None,
+        init_weights_path: str | Path | None = None) -> dict:
+    """dataset/positioner: SFT 层的注入点 —— 缺省为 Corpus+Batches 纯函数顺序。"""
     t = cfg.TRAIN
-    corpus = Corpus(ctx.data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
-                    max_blocks=cfg.DATA.max_blocks)
-    batches = Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+    if dataset is None:
+        corpus = Corpus(ctx.data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
+                        max_blocks=cfg.DATA.max_blocks)
+        batches = Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+        dataset = _Blocks(batches, n_items=steps * t.batch_size)
+        positioner = batches
     tokens_per_step = t.batch_size * cfg.BLOCK_SIZE
 
     model = build(cfg.MODEL, seed=t.seed)
+    if init_weights_path is not None:
+        from safetensors.torch import load_file
+        sd = load_file(str(Path(init_weights_path) / "model.safetensors"))
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        assert not unexpected, unexpected
+        assert set(missing) <= {"lm_head.weight"}, missing  # tied 自动带上
 
     args = TrainingArguments(
         output_dir=str(ctx.tmp_dir),
@@ -133,7 +144,7 @@ def run(cfg, steps: int, ctx) -> dict:
     )
     meter = TpsMeter()
     trainer = Trainer(model=model, args=args,
-                      train_dataset=_Blocks(batches, n_items=steps * t.batch_size),
+                      train_dataset=dataset,
                       callbacks=[_MeterCallback(ctx, meter, tokens_per_step, "trans")])
     from transformers.trainer_callback import PrinterCallback
     trainer.remove_callback(PrinterCallback)   # disable_tqdm 下它仍逐条 print log dict
@@ -148,4 +159,4 @@ def run(cfg, steps: int, ctx) -> dict:
     ctx.save_ckpt(trainer.model, "trans")
     return {"model": trainer.model, "optimizer": trainer.optimizer, "meter": meter,
             "history": history, "step": steps - 1,
-            "data_position": batches.position(steps - 1), "sample_fn": sample}
+            "data_position": positioner.position(steps - 1), "sample_fn": sample}
