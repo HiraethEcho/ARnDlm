@@ -1,0 +1,52 @@
+# 单轨配置 · smoke —— pipeline 验证用，不是对照档（SPEC 4.1）。
+# checkpoint 名带 -smoke 后缀（SPEC 1.2 规则 4），其余部分与正式名一致。
+# 数值字符串一律 3.0e-4 形式：YAML 1.1 浮点必须带小数点，pyyaml 才识别成 float。
+
+tier: smoketest
+purpose: 只验证代码跑得通和配置能加载。不用于性能对照。
+
+model:
+  hidden_size: 256
+  num_layers: 2
+  # num_heads != num_kv_heads 保持 GQA repeat 路径被走到；2/2 会让错误方向变成 no-op
+  num_heads: 2
+  num_kv_heads: 1
+  head_dim: 128
+  intermediate_size: 768
+  context_length: 128
+  vocab_size: 6400
+  rope_theta: 10000.0
+  rms_norm_eps: 1.0e-6
+  tie_word_embeddings: true
+
+tokens:
+  pad: 0
+  bos: 1
+  eos: 2
+  mask: 27        # <|buffer1|> 预留MASK，不扩词表（SPEC 3.2）
+
+train:
+  # 与 tier1 同源的数值（照抄），smoke 不评判它们
+  steps: 1024
+  batch_size: 8
+  lr: 3.0e-4
+  dlm_lr: 1.0e-4
+  min_lr_ratio: 0.1
+  # warmup < steps：线性 warmup 之后必须真的走进 cosine 段
+  warmup_steps: 256
+  weight_decay: 0.1
+  grad_clip: 1.0
+  beta1: 0.9
+  beta2: 0.95
+  seed: 42
+  log_every: 128
+  loss_window: 100
+
+data:
+  prepared_dir: data/prepared/minimind3-6400
+  # 4096 块 x 128 token = 524,288 token；4096/8 = 512 epoch 内批次，
+  # steps 1024 会跨进 epoch 1 —— 正好走到批次顺序的 epoch 重排路径
+  max_blocks: 4096    # 0 = 不限量
+
+runtime:
+  dtype: bfloat16

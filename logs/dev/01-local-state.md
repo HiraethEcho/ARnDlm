@@ -1,5 +1,25 @@
 # 本机状态
 
+## refactor 分支开工（2026-10-04）
+
+新分支 `refactor` + 新 workspace `~/Projects/ARnDlm-refactor`，彻底重构。
+旧代码仅参考：全部在 `learn` 分支（commit `c014da7`，取旧文件用 `git show c014da7:<path>`）。
+本次只保留 AGENTS / SPEC / notes / logs/dev / .venv。SPEC 同步修订：
+`-hf` 后缀改名 `-trans`；史上第一次单轨（无 example/ 双份实现）。
+代码成对：`x.py` 骨架（本人填）+ `x-example.py` 参考实现（AI 写）。
+tier1 命名用诚实参数量 `ar-26.9m-trans`（26,879,488）。
+配置层改用 pyyaml（yaml 数值写 3.0e-4 形式），不再手写解析器。
+详见 `PLAN.md`。tokenizer.json / 环境脚本 / dllm patch 从 `c014da7` 恢复。
+
+## 参考路径与来源（原 memo.md，该文件已废）
+
+- external 参考仓：`~/Projects/dlm`、`~/Projects/minimind`、`~/Public/dlm/`（dlm 包本体）、
+  `~/Public/minimind/`、`~/Public/ChatLM-mini-Chinese/`
+- minimind-dlm 原理页：https://jingyaogong.github.io/space/dllm_intro
+- memo 里的「当前任务」三条均已在本分支落地： SPEC 定稿（-trans 改名后单轨）/
+  更新 scaffold（common/ + src/ 单轨布局、双文件 pair 规矩）/ uv 环境沿用主仓 .venv 软链
+- memo 里「src 不用文件夹」的要求已被后续指令取代：代码集中 src/，common/ 例外
+
 ## 环境 (2026-10-01 实测)
 
 ```

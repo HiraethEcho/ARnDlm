@@ -1,1 +1,0 @@
-"""Qwen-mini via transformers: build + autoregressive sampling."""
