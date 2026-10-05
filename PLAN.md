@@ -30,6 +30,13 @@
 - smoke checkpoint 带 `-smoke` 后缀：`checkpoints/ar-3.2m-trans-smoke/`
 - `impl` 段：`trans` / `native`；`-` 分段，`_` 只在「实现×阶段」内部（`mini_a2d`）
 
+## smoke 约定
+
+smoke 档永远取尽量轻和快的组合：最小模型（SPEC §4.1，3.2M）× 最小数据
+（最小就位语料，如 tinystories-6400 / sft-mini-6400，不用 minimind3 全量）×
+最少步数（能暴露失败即可）。只检验代码正确性，不评性能，不引用 smoke 跑出的
+吞吐数字；判读时丢掉预热段（前 50 步是编译相，见 logs/dev/02）。
+
 ## 阶段
 
 | Phase | 内容 | 验收（SPEC 条款） |

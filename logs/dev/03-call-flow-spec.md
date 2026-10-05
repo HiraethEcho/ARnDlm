@@ -1,7 +1,12 @@
 # 代码调用流程 —— 按 SPEC 现版文件设计（P0 视角的设计记录）
 
-骨架尚未填实现（P1-P3 未开工），本文描述**设计意图**：python 启动一个训练格子时，
-按 SPEC §7 的文件依次调用什么、干什么。实现落成后如与本文不符，改实现之间的这份。
+骨架尚未填实现（P1–P3 未开工），本文描述**设计意图**：python 启动一个训练格子时，
+按 SPEC §7 的文件依次调用什么、干什么。实现落成后如与本文不符，改实现，改前先改这
+份（它比实现先动）。
+
+> smoke 级模型配置：3.2M（h256 L2 ctx 128 B8，即 `configs/smoketest.yaml`）。
+> smoke 只验证代码正确（对拍 + loss 能降），不复用 legacy 的吞吐数字 —— 那是
+> 实验版在旧机器口径下的实测，与性能无关，smoke 本来也不看性能。
 
 ## 启动：`python -m src.training.main --tier smoketest --impl trans --steps 20`
 
@@ -42,23 +47,23 @@
 - `torch.cuda.synchronize()` 两端夹住计时 → `common.metrics.TpsMeter`（train-only 精确口径）
 - 逐步 loss 记进 metrics.csv；scheduler 用 common 层的 warmup+cosine（同一公式）
 
-两条路线**同一 main、同一 config、同一 metrics、同一存盘布局**，逐位可比就是 trans/nat
-各自不掺私货换来的。
+两条路线**同一 main、同一 config、同一 metrics、同一存盘布局**，逐位可比就是
+trans/native 各自不掺私货换来的。
 
-## 每步流水（native 视角）
+## 每步流水（native 视角，smoke 尺寸 ~19 ms/step 稳态）
 
 ```
 ① stream.next()              CPU  取一批块索引（epoch 与 permutation 由 seed+step 推回）
 ② data.batch(idx).to(cuda)   H2D  8×128×8B ≈ 8KB 非阻塞
 ③ autocast(bf16): forward    GPU  matmul 走 bf16，master 权重保持 fp32
-④ loss.backward()            GPU  瓶颈在 attention backward kernel（logs/dev/02）
+④ loss.backward()            GPU  瓶颈在 attention backward kernel（legacy/02）
 ⑤ clip_grad_norm_ + step()   GPU  AdamW state 首步时才分配（2×4B/参）
 ⑥ zero_grad(set_to_none)     GPU
 ⑦ synchronize + meter.add    GPU  这段秒数只进 train-only 分母
 ```
 
-spending 显存账（tier1）：权重 24MB + 梯度 24MB + AdamW 48MB + 激活 <100MB，
-与实测峰值 1.41GB（logs/dev/02）同量级（含碎片与临时 buffer）。
+显存账（tier1 实测 1.41 GB 峰值；smoke 尺寸远小于此）：权重 + 梯度 + AdamW
+state ≈ 4× 参数字节数，加激活与碎片。
 
 ## 收尾
 

@@ -6,6 +6,7 @@
 
 | 文件 | 内容 |
 |---|---|
-| 01-local-state.md | 本机环境、/mnt/extra 布局、参考路径、项目当前进度 |
-| 02-hardware-perf.md | 本机实测性能（tier 阶梯、瓶颈定位） |
-| 03-call-flow-spec.md | 按 SPEC 文件设计的代码调用流程（启动时依次调谁、干什么） |
+| 01-local-state.md | refactor 工作区现状、数据/磁盘布局、本机环境、参考路径 |
+| 02-hardware-perf.md | 本机性能实测摘要（详版在 dev-legacy/02） |
+| 03-call-flow-spec.md | 按 SPEC 设计的代码调用流程（P0 设计记录，实现后随实现改） |
+| dev-legacy/ | refactor 前的旧 log（实验版完成史、旧 utils/ 布局的进度），只读归档 |
