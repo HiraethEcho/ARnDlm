@@ -128,11 +128,93 @@ class Ctx:
         return total / count
 
 
+def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str, data_dir: Path) -> dict:
+    """A2D smoke 训练循环：AR 权重 + 双向 + 加权 masked CE。mini 与 dllm 只差 loss 来源。"""
+    import torch
+    t = cfg.TRAIN
+    a2d_core = _load("common/a2d-example.py", "a2d_core_main")
+    te = _load("src/models/trans-example.py", "trans_example_main")
+    dev = torch.device("cuda")
+    model = te.build(cfg.MODEL, seed=t.seed).to(dev)
+    from safetensors.torch import load_file
+    sd = load_file(str(Path(base_ckpt) / "model.safetensors"))
+    missing, unexpected = model.load_state_dict(sd, strict=False)
+    assert not unexpected, unexpected
+    assert set(missing) <= {"lm_head.weight"}, missing  # tied 自动带上
+
+    if impl == "mini":
+        a2d_mini = _load("src/training/a2d_mini-example.py", "a2d_mini_main")
+        loss_fn = a2d_mini.make_loss_fn(model, "trans")
+        logits_fn = a2d_mini.dlm_forward_trans(model)
+    else:
+        a2d_dllm = _load("src/training/a2d_dllm-example.py", "a2d_dllm_main")
+        loss_fn = a2d_dllm.make_loss_fn(a2d_dllm.DLLMLoss())
+        # dllm 侧也用手写 sample_dlm: 采样口径两侧统一, C2 只对 loss
+        a2d_mini = _load("src/training/a2d_mini-example.py", "a2d_mini_main_dllm")
+        logits_fn = a2d_mini.dlm_forward_trans(model)
+
+    corpus = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
+                             max_blocks=cfg.DATA.max_blocks)
+    batches = data_mod.Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=t.lr,
+                                  betas=(t.beta1, t.beta2), weight_decay=t.weight_decay)
+    mx = _load("common/metrics-example.py", "metrics_main_a2d")
+    meter, history = mx.TpsMeter(), mx.LossHistory()
+    tokens_per_step = t.batch_size * cfg.BLOCK_SIZE
+
+    model.train()
+    for step in range(steps):
+        lr_now = ctx.lr_at(step)
+        for g in optimizer.param_groups:
+            g["lr"] = lr_now
+        batch = torch.from_numpy(batches.batch(step)).long().to(dev)
+        torch.cuda.synchronize()
+        t0 = meter.now()
+        loss, _aux = loss_fn(model, batch)
+        loss.backward()
+        grad_clip = torch.nn.utils.clip_grad_norm_(model.parameters(), t.grad_clip)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+        torch.cuda.synchronize()
+        meter.add_train(tokens_per_step, meter.now() - t0)
+        history.add(step, loss.item())
+        if step % t.log_every == 0 or step == steps - 1:
+            ctx.log_step(impl, step, loss.item(), lr_now, float(grad_clip), meter.report())
+
+    ctx.save_ckpt(model, impl)
+    return {"model": model, "optimizer": optimizer, "meter": meter,
+            "history": history, "step": steps - 1,
+            "data_position": batches.position(steps - 1), "loss_fn": loss_fn,
+            "sample_fn": _make_dlm_sampler(model, logits_fn, cfg)}
+
+
+def _make_dlm_sampler(model, logits_fn, cfg):
+    """A2D 采样: sample_dlm 块状揭示; 返回 (prompt_ids)->ids 的闭包（含 EOS 截断）。"""
+    a2d_core = _load("common/a2d-example.py", "a2d_core_sampler")
+
+    def sample(prompt_ids: list[int], max_new_tokens: int = 32,
+               block_size: int = 8, steps: int = 8,
+               temperature: float = 0.3, top_k: int = 50) -> list[int]:
+        dev = next(model.parameters()).device
+        prefix = torch.tensor([prompt_ids], device=dev)
+        out = a2d_core.sample_dlm(logits_fn, prefix, max_new_tokens,
+                                  mask_id=27, block_size=block_size,
+                                  steps=steps, temperature=temperature, top_k=top_k,
+                                  max_context=cfg.BLOCK_SIZE)
+        gen = out[0, len(prompt_ids):].tolist()
+        if 2 in gen:  # EOS 截断
+            gen = gen[:gen.index(2) + 1]
+        return gen
+    return sample
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tier", required=True, choices=["smoketest", "tier1"])
-    ap.add_argument("--impl", required=True, choices=["trans", "native"])
-    ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft"])
+    ap.add_argument("--impl", required=True,
+                    choices=["trans", "native", "mini", "dllm"],
+                    help="pretrain/sft: trans|native; a2d: mini|dllm（SPEC §8）")
+    ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft", "a2d"])
     ap.add_argument("--base", default=None,
                     help="sft 阶段的起点权重目录（如 checkpoints/ar-3.2m-native-smoke）")
     ap.add_argument("--data", default=None,
@@ -167,8 +249,16 @@ def main():
     params = analytic_params(cfg.MODEL)
     size = f"{params / 1e6:.1f}m"
     tag = "-smoke" if args.tier == "smoketest" else ""
-    stage_seg = "" if args.stage == "pretrain" else "-sft"
-    name = f"ar-{size}-{args.impl}{stage_seg}{tag}"
+    if args.stage == "a2d":
+        if args.impl not in ("mini", "dllm"):
+            raise SystemExit("a2d 阶段的 --impl 是 mini|dllm（模型对象由 --base 决定）")
+        if args.base is None:
+            raise SystemExit("a2d 需要 --base（AR 权重目录; A2D 从 AR 权重出发, 不从头训）")
+        name = f"ar-{size}-{'mini_a2d' if args.impl == 'mini' else 'dllm_a2d'}{tag}"
+    elif args.stage == "sft":
+        name = f"ar-{size}-{args.impl}-sft{tag}"
+    else:
+        name = f"ar-{size}-{args.impl}{tag}"
 
     run_dir = ROOT / "logs/run" / name
     ckpt_dir = ROOT / "checkpoints" / name
@@ -178,7 +268,9 @@ def main():
     print(f"== {name}: tier={args.tier} impl={args.impl} stage={args.stage} steps={steps} "
           f"params={params:,} data={data_dir} base={args.base}")
     t_start = time.monotonic()
-    if args.stage == "sft":
+    if args.stage == "a2d":
+        res = run_a2d(cfg, steps, ctx, args.impl, args.base, data_dir)
+    elif args.stage == "sft":
         sft_mod = _load("src/training/sft-example.py", "sft_example_main")
         res = sft_mod.run_sft(cfg, steps, ctx, impl=args.impl, base_ckpt=args.base)
     else:
@@ -189,16 +281,35 @@ def main():
     if args.stage == "sft":
         chat_mod = _load("src/eval/chat-example.py", "chat_example_main")
         eval_loss = chat_mod.assistant_eval_loss(res["model"], data_dir)
+    elif args.stage == "a2d":
+        # A2D 的 eval = 固定种子 corruption 下的 masked CE（held-out 块）, 不是 AR CE
+        corpus_e = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
+                                   max_blocks=cfg.DATA.max_blocks)
+        n_eval = min(32, corpus_e.n_blocks)
+        dev = next(res["model"].parameters()).device
+        vals = []
+        with torch.no_grad():
+            for i in range(corpus_e.n_blocks - n_eval, corpus_e.n_blocks):
+                b = torch.from_numpy(corpus_e.block(i)).long()[None].to(dev)  # [1, L]
+                l, _ = res["loss_fn"](res["model"], b)
+                vals.append(l.item())
+        eval_loss = sum(vals) / len(vals)
     else:
         eval_loss = ctx.eval_loss(res["model"])
     tok = tok_mod.Tok()
     if args.stage == "sft":
         prompts = ["什么是深度学习？", "今天天气怎么样？"]
         prompt_ids = [sft_mod.encode_prompt(p) for p in prompts]
+    elif args.stage == "a2d":
+        prompts = ["什么是深度学习？", "今天天气怎么样？"]
+        prompt_ids = [tok.encode(p, bos=True) for p in prompts]
     else:
         prompts = ["Once upon a time", "小明放学回家"]
         prompt_ids = [tok.encode(p, bos=True) for p in prompts]
-    sample_ids = [res["sample_fn"](res["model"], p) for p in prompt_ids]
+    if args.stage == "a2d":
+        sample_ids = [res["sample_fn"](p) for p in prompt_ids]
+    else:
+        sample_ids = [res["sample_fn"](res["model"], p) for p in prompt_ids]
     texts = [tok.decode(ids) for ids in sample_ids]
     rep4s = [mx_mod.rep4(ids) for ids in sample_ids]
 
