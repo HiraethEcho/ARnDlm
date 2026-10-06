@@ -81,3 +81,41 @@ x.py 骨架一律未动（留给本人填）。每个 milestone 一个 commit。
 **rep-4 0.72/0.83（高复读）**：200 步 smoke 从 20 步 AR 底座训练，样本是点号串。
 SPEC 6.4 的 DLM 失败模式（loss 降但复读）如实呈现，不是 bug；追步数/数据是
 正式格子的工作。A2D ckpt：`checkpoints/ar-3.2m-{mini,dllm}_a2d-smoke`。
+
+## 全链 night-run（2026-10-07 02:30–07:00，批准窗口）
+
+范围：smoke 3.2M 全部格子 + direct-dlm/dpo 代码 + 四门槛全报。
+截止规则：07:00 前干完则多模型 review+debug+re-smoke；未完成则完成当前格再停。
+
+### 新增交付
+
+| 项 | 内容 |
+|---|---|
+| `main --stage dlm` | Direct-DLM（随机初始化，复用 a2d 循环 base=None）；双 impl 轨迹逐位相同 |
+| `main --stage a2d --sft-data` | DLM-SFT：a2d 循环吃 [B,2,L] SFT 批，span 限制加噪（T4f 语义复用） |
+| `main --stage dpo` | DPO：冻结 ref 副本 + -logsigmoid(β·margin)，lr×0.1；summary 带 held-out margin acc |
+| `dpo-example.py` | pair 编码（右 pad 定长，response 区间 logprob），PairBatcher 纯函数序 |
+| REPL `--sampler dlm` | A2D/DLM ckpt 的双向块状揭示采样 |
+| `scripts/collect_results.py` | 全格子四门槛报告 -> RESULTS-smoke.md（含 chat_report.json 逐格落盘） |
+| `--name` 覆盖 | 复合格名按 SPEC 1.2 追加；强制 -smoke 后缀 |
+
+### 格子矩阵（RESULTS-smoke.md 汇总，200→800 阶梯）
+
+- G1 pretrain × 2 · SFT × 2（800）· G3 双顺序 × A2D 两 impl · G2 Direct-DLM × 2 · DPO × 2
+- t2（rep-4<0.5）：AR 两格 ✅；原路线 a2d-sft 与 direct-dlm-sft 800 步后 ✅
+  （4/6 DLM 行）；剩两格各有一 prompt >0.5，如实记录未修圆
+- DPO：loss 0.693→0.140，held-out margin acc 0.825（500 对 × 200 步 smoke）
+
+### 真实事故与修复
+
+1. **debug run 覆盖正式产物**：验证 --name 前忘了加 --name，200 步 debug 覆盖了
+   昨晚正式的 `ar-3.2m-mini_a2d-smoke`。正是 night-run 反模式表的那条。修复：
+   --name + 强制 -smoke 后缀，正式格子矩阵阶段重跑恢复。
+2. 多条 edit 因锚点漂移静默丢失 —— 发现后逐条重做，每条独立验证后才提交。
+   教训：同一文件多次 edit 之间必须 grep 锚点，不能凭记忆。
+
+### 评审轴
+
+三个不同 model family 的 review subagent（kimi-k3 bug-hunt / grok-4.7 test-
+integrity / glm-5.2 spec-conformance）正跑后台审查；结果与 debug 回路
+见最终报告（07:00 前收口）。
