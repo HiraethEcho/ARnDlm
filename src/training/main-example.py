@@ -128,19 +128,21 @@ class Ctx:
         return total / count
 
 
-def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str, data_dir: Path) -> dict:
-    """A2D smoke 训练循环：AR 权重 + 双向 + 加权 masked CE。mini 与 dllm 只差 loss 来源。"""
+def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Path) -> dict:
+    """A2D / Direct-DLM smoke 训练循环：双向 + 加权 masked CE。
+    mini 与 dllm 只差 loss 来源；base_ckpt=None -> 随机初始化（Direct-DLM）。"""
     import torch
     t = cfg.TRAIN
     a2d_core = _load("common/a2d-example.py", "a2d_core_main")
     te = _load("src/models/trans-example.py", "trans_example_main")
     dev = torch.device("cuda")
     model = te.build(cfg.MODEL, seed=t.seed).to(dev)
-    from safetensors.torch import load_file
-    sd = load_file(str(Path(base_ckpt) / "model.safetensors"))
-    missing, unexpected = model.load_state_dict(sd, strict=False)
-    assert not unexpected, unexpected
-    assert set(missing) <= {"lm_head.weight"}, missing  # tied 自动带上
+    if base_ckpt is not None:
+        from safetensors.torch import load_file
+        sd = load_file(str(Path(base_ckpt) / "model.safetensors"))
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        assert not unexpected, unexpected
+        assert set(missing) <= {"lm_head.weight"}, missing  # tied 自动带上
 
     if impl == "mini":
         a2d_mini = _load("src/training/a2d_mini-example.py", "a2d_mini_main")
@@ -214,7 +216,7 @@ def main():
     ap.add_argument("--impl", required=True,
                     choices=["trans", "native", "mini", "dllm"],
                     help="pretrain/sft: trans|native; a2d: mini|dllm（SPEC §8）")
-    ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft", "a2d"])
+    ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft", "a2d", "dlm"])
     ap.add_argument("--base", default=None,
                     help="sft 阶段的起点权重目录（如 checkpoints/ar-3.2m-native-smoke）")
     ap.add_argument("--data", default=None,
@@ -255,6 +257,12 @@ def main():
         if args.base is None:
             raise SystemExit("a2d 需要 --base（AR 权重目录; A2D 从 AR 权重出发, 不从头训）")
         name = f"ar-{size}-{'mini_a2d' if args.impl == 'mini' else 'dllm_a2d'}{tag}"
+    elif args.stage == "dlm":
+        if args.impl not in ("trans", "dllm"):
+            raise SystemExit("dlm 阶段的 --impl 是 trans|dllm（SPEC §1.2: dlm 没有 native）")
+        if args.base is not None:
+            raise SystemExit("Direct-DLM 从随机初始化训练, 不吃 --base（那是 a2d）")
+        name = f"dlm-{size}-{args.impl}{tag}"
     elif args.stage == "sft":
         name = f"ar-{size}-{args.impl}-sft{tag}"
     else:
@@ -268,7 +276,7 @@ def main():
     print(f"== {name}: tier={args.tier} impl={args.impl} stage={args.stage} steps={steps} "
           f"params={params:,} data={data_dir} base={args.base}")
     t_start = time.monotonic()
-    if args.stage == "a2d":
+    if args.stage in ("a2d", "dlm"):
         res = run_a2d(cfg, steps, ctx, args.impl, args.base, data_dir)
     elif args.stage == "sft":
         sft_mod = _load("src/training/sft-example.py", "sft_example_main")
@@ -281,7 +289,7 @@ def main():
     if args.stage == "sft":
         chat_mod = _load("src/eval/chat-example.py", "chat_example_main")
         eval_loss = chat_mod.assistant_eval_loss(res["model"], data_dir)
-    elif args.stage == "a2d":
+    elif args.stage in ("a2d", "dlm"):
         # A2D 的 eval = 固定种子 corruption 下的 masked CE（held-out 块）, 不是 AR CE
         corpus_e = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
                                    max_blocks=cfg.DATA.max_blocks)
@@ -300,13 +308,15 @@ def main():
     if args.stage == "sft":
         prompts = ["什么是深度学习？", "今天天气怎么样？"]
         prompt_ids = [sft_mod.encode_prompt(p) for p in prompts]
-    elif args.stage == "a2d":
+    elif args.stage in ("a2d", "dlm"):
         prompts = ["什么是深度学习？", "今天天气怎么样？"]
         prompt_ids = [tok.encode(p, bos=True) for p in prompts]
     else:
         prompts = ["Once upon a time", "小明放学回家"]
         prompt_ids = [tok.encode(p, bos=True) for p in prompts]
     if args.stage == "a2d":
+        sample_ids = [res["sample_fn"](p) for p in prompt_ids]
+    elif args.stage == "dlm":
         sample_ids = [res["sample_fn"](p) for p in prompt_ids]
     else:
         sample_ids = [res["sample_fn"](res["model"], p) for p in prompt_ids]
