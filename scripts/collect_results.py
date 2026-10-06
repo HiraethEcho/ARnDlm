@@ -117,8 +117,12 @@ def main():
         tok = tok_mod.Tok()
         if family == "ar" and not is_dlm and ref_loss is None:
             ref_loss = chat.assistant_eval_loss(model, ROOT / "data/prepared/sft-mini-6400")
+        if is_dlm:
+            sft_dir = ROOT / "data/prepared/sft-mini-6400"
+            assert chat.assistant_eval_loss(model, sft_dir, bidirectional=True) < 10  # 冒烟通路
         rep = chat.report(model, ROOT / "data/prepared/sft-mini-6400", PROMPTS,
-                          sample, tok.decode, ref_ar_sft_loss=ref_loss)
+                          sample, tok.decode, ref_ar_sft_loss=ref_loss,
+                          bidirectional=is_dlm)
         reports[name] = rep
         (ROOT / "logs/run" / name / "chat_report.json").write_text(
             json.dumps(rep, ensure_ascii=False, indent=2))

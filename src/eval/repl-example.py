@@ -80,9 +80,12 @@ def generate(model, kind: str, ids: list[int], max_new_tokens: int,
     generated: list[int] = []
     for _ in range(max_new_tokens):
         logits = model(window).logits[0, -1].float()
-        values, indices = torch.topk(logits, min(top_k, logits.shape[-1]))
-        probs = torch.softmax(values / temperature, dim=-1)
-        nxt = int(indices[torch.multinomial(probs, 1)])
+        if temperature <= 0:  # 贪心; bf16 rand 可把 u 舍入到 1.0 -> 除 0 = inf
+            nxt = int(logits.argmax())
+        else:
+            values, indices = torch.topk(logits, min(top_k, logits.shape[-1]))
+            probs = torch.softmax(values / temperature, dim=-1)
+            nxt = int(indices[torch.multinomial(probs, 1)])
         generated.append(nxt)
         if nxt == EOS:
             break

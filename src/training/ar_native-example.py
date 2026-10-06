@@ -56,9 +56,12 @@ def sample(model, prompt_ids: list[int], max_new_tokens: int = 32,
     for _ in range(max_new_tokens):
         window = prefix[:, -max_context:]
         logits = model(window, is_causal=True).logits[0, -1].float()
-        values, indices = torch.topk(logits, min(top_k, logits.shape[-1]))
-        probs = torch.softmax(values / temperature, dim=-1)
-        nxt = int(indices[torch.multinomial(probs, 1)])
+        if temperature <= 0:
+            nxt = int(logits.argmax())
+        else:
+            values, indices = torch.topk(logits, min(top_k, logits.shape[-1]))
+            probs = torch.softmax(values / temperature, dim=-1)
+            nxt = int(indices[torch.multinomial(probs, 1)])
         generated.append(nxt)
         if nxt == eos_id:
             break

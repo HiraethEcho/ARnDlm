@@ -108,9 +108,13 @@ def check_thresholds(prompts: list[str], texts: list[str], rep4s: list[float],
 
 
 def report(model, sft_dir, prompts: list[str], sample_fn, decode_fn,
-           ref_ar_sft_loss: float | None = None, max_new_tokens: int = 64) -> dict:
-    """一步到位: assistant eval loss + 采样 + 四门槛。sample_fn/decode_fn 由调用方注入。"""
-    loss = assistant_eval_loss(model, sft_dir)
+           ref_ar_sft_loss: float | None = None, max_new_tokens: int = 64,
+           bidirectional: bool = False) -> dict:
+    """一步到位: assistant eval loss + 采样 + 四门槛。sample_fn/decode_fn 由调用方注入。
+
+    bidirectional=True（DLM 系）: 双向 forward 的 assistant 段 eval loss —— 与该模型
+    **训练时的 forward 语义一致**。因果模型评 DLM 权重会静默少一半上下文。"""
+    loss = assistant_eval_loss(model, sft_dir, bidirectional=bidirectional)
     texts, rep4s = [], []
     mx = _load("common/metrics-example.py", "metrics_example_chat")
     for q in prompts:

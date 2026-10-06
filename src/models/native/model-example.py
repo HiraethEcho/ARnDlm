@@ -163,8 +163,11 @@ class NativeQwen3ForCausalLM(nn.Module):
         self.cfg = m
         self.model = Qwen3Model(m)
         self.lm_head = nn.Linear(m.hidden_size, m.vocab_size, bias=False)
-        self.lm_head.weight = self.model.embed_tokens.weight   # tied (SPEC 3.1)
         self.apply(self._init_weights)
+        self.lm_head.weight = self.model.embed_tokens.weight   # tied (SPEC 3.1)
+        # 注意顺序: tie 必须在 init 之后 —— 反过来 _init_weights 会把 embed
+        # 重画一次（lm_head 与 embed 同存储）, 同 seed 下权重对不上 transformers
+        # （transformers: 先 init 两份, tie 时 embed 的那份存活）。
         self._last_is_causal = True
 
     @staticmethod

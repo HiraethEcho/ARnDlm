@@ -13,7 +13,7 @@ model:
   num_layers: 8
   num_heads: 8
   num_kv_heads: 4
-  head_dim: 128
+  head_dim: 64   # 26,879,488 锚点要求 512/8=64；128 是从 smoketest 误拷的（分析式会算出 33.2M）
   intermediate_size: 1408
   context_length: 512
   vocab_size: 6400

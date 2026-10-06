@@ -33,6 +33,7 @@ def _load(rel: str, name: str):
 
 cfg_mod = _load("common/config-example.py", "config_example")
 tok_mod = _load("common/tokenizer-example.py", "tokenizer_example")
+_dev = _load("common/device-example.py", "device_example_main")
 mx_mod = _load("common/metrics-example.py", "metrics_example")
 data_mod = _load("common/data-example.py", "data_example_main")
 
@@ -185,7 +186,8 @@ def run_dpo(cfg, steps: int, ctx, args) -> dict:
         seq_c, seq_r, mask_c, mask_r = dx.pair_batch(data, idx, dev)
         torch.cuda.synchronize()
         t0 = meter.now()
-        loss, aux = dx.dpo_loss(policy, ref, seq_c, seq_r, mask_c, mask_r)
+        with _dev.autocast(cfg.DTYPE):
+            loss, aux = dx.dpo_loss(policy, ref, seq_c, seq_r, mask_c, mask_r)
         loss.backward()
         clip = torch.nn.utils.clip_grad_norm_(policy.parameters(), t.grad_clip)
         optimizer.step()
@@ -268,7 +270,9 @@ def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Pa
         batch = batch.long().to(dev)
         torch.cuda.synchronize()
         t0 = meter.now()
-        loss, _aux = loss_fn(model, batch)
+        # 精度口径与 AR 路线一致（config.DTYPE, SPEC 6.4 对照前提）; fp32 = nullcontext
+        with _dev.autocast(cfg.DTYPE):
+            loss, _aux = loss_fn(model, batch)
         loss.backward()
         grad_clip = torch.nn.utils.clip_grad_norm_(model.parameters(), t.grad_clip)
         optimizer.step()
@@ -362,7 +366,16 @@ def main():
             raise SystemExit("a2d 阶段的 --impl 是 mini|dllm（模型对象由 --base 决定）")
         if args.base is None:
             raise SystemExit("a2d 需要 --base（AR 权重目录; A2D 从 AR 权重出发, 不从头训）")
-        name = args.name or f"ar-{size}-{'mini_a2d' if args.impl == 'mini' else 'dllm_a2d'}{tag}"
+        # 名字就是 pipeline（SPEC 1.2）: base 的 impl 段必须位（否则 G5 两种 base 撞名）
+        stem = Path(args.base).name
+        if stem.endswith("-smoke"):
+            stem = stem[:-len("-smoke")]
+        # base 名合 impl 段（SFT 底座 = ...-<impl>-sft; pretrain 底座 = ...-<impl>）
+        impl_seg = "mini_a2d" if args.impl == "mini" else "dllm_a2d"
+        if args.sft_data:
+            name = args.name or f"{stem}-{impl_seg}{tag}"      # ...-sft-mini_a2d
+        else:
+            name = args.name or f"{stem}-{impl_seg}{tag}"
     elif args.stage == "dlm":
         if args.impl not in ("trans", "dllm"):
             raise SystemExit("dlm 阶段的 --impl 是 trans|dllm（SPEC §1.2: dlm 没有 native）")

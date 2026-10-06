@@ -53,7 +53,7 @@ data -> /mnt/extra  checkpoints -> /mnt/extra   # 大文件软链
 | | smoketest | tier1 |
 |---|---|---|
 | 用途 | 验 pipeline 能跑、loss 能降 | 正式对照（AR vs DLM 同 token 流） |
-| 形状 | 256 / 2 层 / 2 头 / 1 KV / hd 128 / inter 768 / ctx 128 | 512 / 8 层 / 8 头 / 4 KV / hd 128 / inter 1408 / ctx 512 |
+| 形状 | 256 / 2 层 / 2 头 / 1 KV / hd 128 / inter 768 / ctx 128 | 512 / 8 层 / 8 头 / 4 KV / hd 64 / inter 1408 / ctx 512 |
 | 参数量 | 3,213,056 | 26,879,488 |
 | 数据 | minimind3-6400 前段（max_blocks 4096） | 全量一遍（81,174 步 @ B8） |
 
