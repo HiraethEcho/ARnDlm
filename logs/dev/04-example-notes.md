@@ -114,8 +114,35 @@ SPEC 6.4 的 DLM 失败模式（loss 降但复读）如实呈现，不是 bug；
 2. 多条 edit 因锚点漂移静默丢失 —— 发现后逐条重做，每条独立验证后才提交。
    教训：同一文件多次 edit 之间必须 grep 锚点，不能凭记忆。
 
-### 评审轴
+### 评审轴（03:21 发射, 03:28/03:31 回收, 全部落实为 commit）
 
-三个不同 model family 的 review subagent（kimi-k3 bug-hunt / grok-4.7 test-
-integrity / glm-5.2 spec-conformance）正跑后台审查；结果与 debug 回路
-见最终报告（07:00 前收口）。
+| agent | 模型 | 发现 | 处置 |
+|---|---|---|---|
+| review-check-cannot-fail | grok-4.7 | 7 个恒真检查 + 12 个弱断言 + RESULTS 数字无测试背书 | `d6b1bae` 全部修复；15 测试过 |
+| rev-spec-conformance | glm-5.2 | 11 处契约偏差（高: a2d 命名丢 impl 段 / G3 混入第二变量; 中: T4a 弱化 / T4g 无执行点 / SFT 数据无生产者 / C4 只测 native） | `e2fc947` `b5650c8` `2d8ceed` 命名/参照系/T4a/T4f/T4g/sft-prepare 全修; 见下未修清单 |
+| rev-bug-hunt | kimi-k3 | 429 用量超限, 未产出 | 换 deepseek-v4-pro 重发 |
+| rev-bug-hunt2 | deepseek-v4-pro | 6 缺陷（高: native 双初始化 / lr warmup 错位; 中: tier1 head_dim=128 与 26.9M 锚点矛盾 / a2d+dpo 静默 fp32; 低: repl 硬编码 smoketest / 温度 0 NaN） | `e2fc947` 修 5; warmup 错位见下 |
+
+### 评审后仍未修（诚实清单）
+
+1. **lr warmup 错位（bug-hunt #2）**：native `lr_at` step0 = lr/warmup、峰在 warmup-1;
+   HF 4.57 cosine_with_warmup step0 = 0、峰在 warmup。两路线 warmup 段每步 lr 不同。
+   修法 = 把 `lr_at` 改成 HF 的 step/warmup 语义（test/01 [7] 期望值跟着改），
+   影响全部已跑格子的 warmup 256 步——**留给正式 tier1 之前**，smoke 不改
+   （改了会让所有已存 smoke 产物口径与新代码不一致）。
+2. **native 与 HF 的逐位 init 不等**（deepseek 证实; HF 4.57 fast-init 走
+   tensor.normal_(), 不可经 nn.init hook 复刻）。C1 是权重拷贝制不受影响;
+   G1 逐步对齐开放点同前。
+3. **C4 trans 侧 resume** 仍未做（HF Trainer checkpoint 关系）。
+4. **两格 t2 在 800 步仍失败**：trans-sft-{mini,dllm}_a2d-sft（原路线复合）
+   各有一个 prompt rep-4 ≈0.9。SPEC §6.3 阶梯止于 800——按「能 chat 即可」
+   的口径这两格算到顶了, 结论如实写进 RESULTS（t1 全过, t3/t4 全过）。
+5. **四门槛是报告制**：smoke 档不设门禁（§4.1 只验管线）; tier1 沿用时需给
+   collect_results 加 --gate 之类的硬验收（不在今晚范围）。
+
+### 纪律记录
+
+- 审查发现 test/05 的期望值 9.505/0.525 本身是错的（真值 7.525/2.525）——
+  「期望值恰好匹配 bug」型陷阱, 与恒真检查同罪。
+- logs/run 与 checkpoints 的 pre-refactor 产物（*-example / -hf / 重复 family 段）
+  全部归档到 `/mnt/extra/ckpt/_pre-refactor-noncompliant/`, 契约命名面干净。
