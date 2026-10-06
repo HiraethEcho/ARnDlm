@@ -94,13 +94,26 @@ PRETRAIN_NEW = 48
 CHAT_NEW = 64
 
 
-def repl(ckpt, mode: str, temperature: float = 0.3, top_k: int = 50) -> None:
+def repl(ckpt, mode: str, temperature: float = 0.3, top_k: int = 50,
+         sampler: str = "ar") -> None:
     model, kind = load_model(ckpt)
     tok = _load("common/tokenizer-example.py", "tokenizer_example_repl").Tok()
     max_context = model.cfg.context_length if kind == "native" else model.config.max_position_embeddings
 
     history: list[int] = [BOS]  # chat 模式的逐轮累积
-    print(f"repl: {Path(ckpt).name} [{kind}] mode={mode} ctx={max_context} "
+    logits_fn = None
+    if sampler == "dlm":
+        # DLM 采样: 双向 + 块状揭示。A2D/DLM 权重必须配这个; --sampler ar 会对
+        # DLM 模型因果采样（不炸, 但语义是错的）。
+        a2d_core = _load("common/a2d-example.py", "a2d_core_repl")
+        if kind == "native":
+            logits_fn = lambda x: model(x, is_causal=False).logits
+        else:
+            def logits_fn(x):  # noqa: E731
+                m4 = torch.zeros(x.shape[0], 1, x.shape[1], x.shape[1],
+                                 device=next(model.parameters()).device, dtype=model.dtype)
+                return model(x, attention_mask=m4).logits
+    print(f"repl: {Path(ckpt).name} [{kind}] mode={mode} sampler={sampler} ctx={max_context} "
           f"temp={temperature} top_k={top_k}")
     print("命令: :q 退出  :m chat|pretrain  :c 清历史  :t <float>  :k <int>")
     while True:
@@ -140,7 +153,18 @@ def repl(ckpt, mode: str, temperature: float = 0.3, top_k: int = 50) -> None:
 
         if mode == "chat":
             history += tok.encode(f"user\n{line}") + [EOS] + tok.encode("assistant\n")
-            new = generate(model, kind, history[-max_context:], CHAT_NEW, temperature, top_k, max_context)
+            if sampler == "dlm":
+                window = history[-max_context:]
+                gen_len = min(CHAT_NEW, max(1, max_context - len(window)))
+                import torch as _t
+                out = a2d_core.sample_dlm(logits_fn, _t.tensor([window], device=next(model.parameters()).device),
+                                          gen_len, max_context=max_context,
+                                          temperature=temperature, top_k=top_k)
+                new = out[0, len(window):].tolist()
+                if EOS in new:
+                    new = new[:new.index(EOS) + 1]
+            else:
+                new = generate(model, kind, history[-max_context:], CHAT_NEW, temperature, top_k, max_context)
             history += new
             print("model>", tok.decode(new), flush=True)
         else:  # pretrain: 每轮独立续写
@@ -155,5 +179,7 @@ if __name__ == "__main__":
     ap.add_argument("--mode", default="chat", choices=["chat", "pretrain"])
     ap.add_argument("--temperature", type=float, default=0.3)
     ap.add_argument("--top-k", type=int, default=50)
+    ap.add_argument("--sampler", default="ar", choices=["ar", "dlm"],
+                    help="A2D/DLM 权重用 --sampler dlm（块状揭示, 双向）")
     args = ap.parse_args()
-    repl(args.ckpt, args.mode, args.temperature, args.top_k)
+    repl(args.ckpt, args.mode, args.temperature, args.top_k, args.sampler)
