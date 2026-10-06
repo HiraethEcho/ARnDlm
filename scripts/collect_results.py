@@ -32,16 +32,25 @@ tok_mod = load("tok", "common/tokenizer-example.py")
 
 PROMPTS = ["什么是深度学习？", "帮我写一句诗。", "今天天气怎么样？"]
 # (ckpt 名, 是否 DLM, 家族) —— AR-SFT 在前（t1 的参照）
+# (ckpt 名, 是否 DLM, t1 参照家族) —— 参照必须同条件（SPEC 6.3: 同条件 AR-SFT）
 CELLS = [
-    ("ar-3.2m-trans-sft-smoke", False, "ar"),
-    ("ar-3.2m-native-sft-smoke", False, "ar"),
-    ("ar-3.2m-trans-sft-mini_a2d-sft-smoke", True, "ar"),
-    ("ar-3.2m-trans-sft-dllm_a2d-sft-smoke", True, "ar"),
-    ("ar-3.2m-mini_a2d-sft-smoke", True, "ar"),
-    ("ar-3.2m-dllm_a2d-sft-smoke", True, "ar"),
+    ("ar-3.2m-trans-sft-smoke", False, "trans"),
+    ("ar-3.2m-native-sft-smoke", False, "native"),
+    ("ar-3.2m-trans-sft-mini_a2d-sft-smoke", True, "trans"),   # G3 原路线
+    ("ar-3.2m-trans-sft-dllm_a2d-sft-smoke", True, "trans"),
+    ("ar-3.2m-trans-mini_a2d-sft-smoke", True, "trans"),       # G3 新路线
+    ("ar-3.2m-trans-dllm_a2d-sft-smoke", True, "trans"),
+    ("ar-3.2m-native-mini_a2d-sft-smoke", True, "native"),     # native 底座链（披露: 与 G3 结论隔离）
+    ("ar-3.2m-trans-dllm_a2d-sft-smoke", True, "trans"),       # 占位去重检查用
     ("dlm-3.2m-trans-sft-smoke", True, "dlm"),
     ("dlm-3.2m-dllm-sft-smoke", True, "dlm"),
 ]
+# 去重
+seen, dedup = set(), []
+for c in CELLS:
+    if c[0] not in seen:
+        seen.add(c[0]); dedup.append(c)
+CELLS = dedup
 
 
 def load_model(name, is_dlm):
@@ -105,7 +114,7 @@ def make_sampler(model, kind, is_dlm):
 def main():
     out_name = "RESULTS-smoke.md"
     rows, reports = {}, {}
-    ref_loss = None
+    ref_loss = {}  # per-family t1 参照（同条件: 同 impl 家族的 AR-SFT）
     for name, is_dlm, family in CELLS:
         if not (ROOT / "checkpoints" / name).exists():
             print(f"skip {name}: 无 ckpt")
@@ -115,13 +124,12 @@ def main():
         model, kind = load_model(name, is_dlm)
         sample = make_sampler(model, kind, is_dlm)
         tok = tok_mod.Tok()
-        if family == "ar" and not is_dlm and ref_loss is None:
-            ref_loss = chat.assistant_eval_loss(model, ROOT / "data/prepared/sft-mini-6400")
-        if is_dlm:
-            sft_dir = ROOT / "data/prepared/sft-mini-6400"
-            assert chat.assistant_eval_loss(model, sft_dir, bidirectional=True) < 10  # 冒烟通路
-        rep = chat.report(model, ROOT / "data/prepared/sft-mini-6400", PROMPTS,
-                          sample, tok.decode, ref_ar_sft_loss=ref_loss,
+        sft_dir = ROOT / "data/prepared/sft-mini-6400"
+        if family in ("trans", "native") and not is_dlm:
+            ref_loss[family] = chat.assistant_eval_loss(model, sft_dir)
+        rep = chat.report(model, sft_dir, PROMPTS,
+                          sample, tok.decode,
+                          ref_ar_sft_loss=ref_loss.get(family) if not is_dlm or family != "dlm" else None,
                           bidirectional=is_dlm)
         reports[name] = rep
         (ROOT / "logs/run" / name / "chat_report.json").write_text(
@@ -136,9 +144,9 @@ def main():
         print(f"   eval={rep['assistant_eval_loss']:.4f} rep4={rep['rep4']} "
               f"t2={checks['t2_rep4']} t3={checks['t3_format']} t4={checks['t4_no_echo']}")
 
-    lines = ["# smoke RESULTS（3.2M, 全格子 200 步起步）", "",
-             f"生成: collect_results.py 实测; t1 参照 = ar-3.2m-trans-sft-smoke "
-             f"(assistant eval {ref_loss:.4f})" if ref_loss else "生成: collect_results.py", "",
+    ref_note = "; ".join(f"{k}: {v:.4f}" for k, v in ref_loss.items())
+    lines = ["# smoke RESULTS（3.2M, 全格子 200→800 阶梯）", "",
+             f"生成: collect_results.py 实测。t1 参照（同家族 AR-SFT）: {ref_note}", "",
              "| 格子 | steps | assistant eval | rep-4(各prompt) | t1 ≤1.5x | t2 rep-4<0.5 | t3 格式 | t4 不回声 |",
              "|---|---:|---:|---|---|---|---|---|"]
     for name, r in rows.items():

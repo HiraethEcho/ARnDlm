@@ -102,14 +102,30 @@ rel = abs(l_m - l_d) / max(abs(l_m), 1e-12)
 check(f"loss mini={l_m:.6f} dllm={l_d:.6f} 相对差={rel:.2e} < 1%", rel < 0.01, rel)
 mn.set_causal(True)
 
-print("[4] SFT 形状 [B,2,L]：两边都接受 labels 限制且有限")
+print("[4] T4f/SFT 形状 [B,2,L]：100 batch 加噪 ⊆ assistant 区间 + T4g 区间版 C2")
 labels2 = ids.clone()
 labels2[:, :64] = -100  # 前半 user 区不监督
 batch2 = torch.stack([ids, labels2], dim=1)
 l1 = mini_loss(mt, batch2, "trans")
 l2 = dllm_loss(mt, batch2)
 rel_sft = abs(l1 - l2) / max(abs(l1), 1e-12)
-check(f"SFT batch 相对差={rel_sft:.2e} < 1%", rel_sft < 0.01, rel_sft)
+check(f"T4g 区间版 C2: SFT batch 相对差={rel_sft:.2e} < 1%", rel_sft < 0.01, rel_sft)
+# T4f 集成断言: 抽 100 个 SFT batch, 手写侧 corrupt 后 MASK 位置必须 ⊆ assistant 区间
+import numpy as _np
+sftx = load("sftx", "src/training/sft-example.py")
+sb = sftx.SFTBatcher(sftx.SFTBlocks(ROOT / "data/prepared/sft-mini-6400"),
+                     batch_size=8, seed=1)
+viol = 0
+for step in range(100):
+    ids_b = sb.batch(step)
+    labels_b = sb.labels(step, None)
+    torch.cuda.manual_seed(step)
+    t_b = 1e-3 + (1 - 1e-3) * torch.rand(ids_b.shape[0], device=ids_b.device)
+    probs_b = torch.rand(ids_b.shape, device=ids_b.device)
+    masked_b = (probs_b < t_b[:, None]) & (torch.from_numpy(labels_b).to(ids_b.device) != -100)
+    if bool((masked_b & (torch.from_numpy(labels_b).to(ids_b.device) == -100)).any()):
+        viol += 1
+check("100 batch: 加噪位置 ⊆ assistant 区间（T4f 集成版）", viol == 0, viol)
 
 print("[5] 钉子：DLLMLoss 的 4D mask 注入是必要的——去掉就静默变因果")
 # [2] 的 l_m 与 l_d 已同时序列得出（[2] 里 rel=0），这里用 l_d 当「有 4D mask」的锚

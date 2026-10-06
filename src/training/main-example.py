@@ -294,7 +294,7 @@ def _make_dlm_sampler(model, logits_fn, cfg):
     """A2D 采样: sample_dlm 块状揭示; 返回 (prompt_ids)->ids 的闭包（含 EOS 截断）。"""
     a2d_core = _load("common/a2d-example.py", "a2d_core_sampler")
 
-    def sample(prompt_ids: list[int], max_new_tokens: int = 32,
+    def sample(prompt_ids: list[int], max_new_tokens: int = 64,
                block_size: int = 8, steps: int = 8,
                temperature: float = 0.3, top_k: int = 50) -> list[int]:
         dev = next(model.parameters()).device
@@ -447,13 +447,13 @@ def main():
         eval_loss = ctx.eval_loss(res["model"])
     tok = tok_mod.Tok()
     if args.stage == "sft":
-        prompts = ["什么是深度学习？", "今天天气怎么样？"]
+        prompts = ["什么是深度学习？", "帮我写一句诗。", "今天天气怎么样？"]
         prompt_ids = [sft_mod.encode_prompt(p) for p in prompts]
     elif args.stage in ("a2d", "dlm"):
-        prompts = ["什么是深度学习？", "今天天气怎么样？"]
+        prompts = ["什么是深度学习？", "帮我写一句诗。", "今天天气怎么样？"]
         prompt_ids = [tok.encode(p, bos=True) for p in prompts]
     else:
-        prompts = ["Once upon a time", "小明放学回家"]
+        prompts = ["Once upon a time", "今天天气怎么样？", "小明放学回家"]
         prompt_ids = [tok.encode(p, bos=True) for p in prompts]
     if args.stage == "dpo":
         texts, rep4s = [], []  # 采样不适用（DPO 改变偏好, 不改说话方式; 门槛在 SFT/A2D 格子报）
