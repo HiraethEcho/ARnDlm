@@ -78,7 +78,8 @@ print("[5] top_k_filter: suppress MASK 后永不出 MASK")
 lg = torch.randn(2, 7, 30)
 filtered = a2d.top_k_filter(lg, top_k=5, suppress=a2d.MASK)
 check("MASK id 被禁", filtered[..., a2d.MASK].isinf().all() and (filtered[..., a2d.MASK] < 0).all())
-check("top_k 之外 -inf", (filtered < -1e30).sum() > 0 or True)  # 形状上必有 -inf
+check("top_k 之外 -inf", int((filtered == float("-inf")).sum()) ==
+      filtered.shape[0] * filtered.shape[1] * (filtered.shape[-1] - 5))
 tok_f, _ = a2d.gumbel_argmax(filtered, temperature=1.0, generator=torch.Generator().manual_seed(4))
 check("采样永不出 27", not (tok_f == a2d.MASK).any())
 

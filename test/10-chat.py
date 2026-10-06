@@ -71,8 +71,9 @@ try:
     check("四个门槛都在报告里", names == ["t1_loss_ratio", "t2_rep4", "t3_format", "t4_no_echo"], names)
     t1 = rep["checks"][0]
     check("门槛 1 是 pending 不是假 pass", t1["pass"] is None, t1)
-    check("assistant eval loss 有限", rep["assistant_eval_loss"] != 0 and
-          all(c is not None for c in [rep["assistant_eval_loss"]]))
+    import math
+    check("assistant eval loss 有限且为正",
+          math.isfinite(rep["assistant_eval_loss"]) and rep["assistant_eval_loss"] > 0)
     print(f"  eval_loss={rep['assistant_eval_loss']:.4f} rep4={rep['rep4']}")
     print(f"  t2_pass={rep['checks'][1]['pass']} t3_pass={rep['checks'][2]['pass']} "
           f"t4_pass={rep['checks'][3]['pass']}")
@@ -80,11 +81,22 @@ try:
         print(f"  sample: {t[:60]!r}")
 
     print("[3] 有参照时门槛 1 会真的算比值")
-    rep2 = chat.check_thresholds(prompts, rep["texts"], rep["rep4"],
-                                 rep["assistant_eval_loss"],
-                                 ref_ar_sft_loss=rep["assistant_eval_loss"] / 1.2)
+    base_loss = rep["assistant_eval_loss"]
+    rep2 = chat.check_thresholds(prompts, ["正确回答" * 3] * len(prompts),
+                                 [0.1] * len(prompts), base_loss, ref_ar_sft_loss=base_loss / 1.2)
     t1b = rep2["checks"][0]
-    check("比值算出且判 pass", t1b["ratio"] == 1.2 and t1b["pass"] is True, t1b)
+    check("1.2x 参照 -> t1 pass", t1b["ratio"] == 1.2 and t1b["pass"] is True, t1b)
+    rep3 = chat.check_thresholds(prompts, ["x"], [0.4], base_loss, ref_ar_sft_loss=base_loss / 1.5001)
+    check("1.5001x 参照 -> t1 fail", rep3["checks"][0]["pass"] is False, rep3["checks"][0])
+    rep4b = chat.check_thresholds(prompts, ["x"], [0.5], base_loss, ref_ar_sft_loss=base_loss)
+    check("rep4 恰 0.5 -> t2 fail", rep4b["checks"][1]["pass"] is False)
+    rep4c = chat.check_thresholds(prompts, ["ok"], [0.49], base_loss, ref_ar_sft_loss=base_loss)
+    check("rep4 0.49 -> t2 pass", rep4c["checks"][1]["pass"] is True)
+    # 回声 / 空回答
+    rr = chat.check_thresholds(prompts, list(prompts), [0.0] * 3, base_loss, ref_ar_sft_loss=None)
+    check("全回声 -> t4 fail", rr["checks"][3]["pass"] is False)
+    rr2 = chat.check_thresholds(prompts, ["", "", ""], [0.0] * 3, base_loss, ref_ar_sft_loss=None)
+    check("空回答 -> t3 fail", rr2["checks"][2]["pass"] is False)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

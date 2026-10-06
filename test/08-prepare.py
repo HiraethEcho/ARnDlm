@@ -9,6 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import hashlib
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -57,7 +58,8 @@ try:
     check("mask 行跳过 1", meta["skipped"]["mask_token"] == 1, meta["skipped"])
     check("total_tokens = sum(doc_lengths)",
           meta["total_tokens"] == int(np.load(out / "doc_lengths.npy").sum()))
-    check("sha256 在 meta", len(meta["source_sha256"]) == 64)
+    check("sha256 与源文件哈希一致",
+      meta["source_sha256"] == hashlib.sha256(src.read_bytes()).hexdigest())
 
     print("[2] 产物能被 data-example 直接加载并四道自检通过")
     c = data.Corpus(out, block_size=16, vocab=6400)

@@ -42,10 +42,10 @@ cfg = cfg_mod.load("smoketest")
 print("[1] SFTBlocks 装载 + 硬对账")
 sft = sft_mod.SFTBlocks(SFT_DIR)
 check("n_blocks = 4096", sft.n_blocks == 4096)
-check("supervised 对账 260,590",
-      int((sft._spans[:, 2] - sft._spans[:, 1]).sum()) == sft.meta["supervised_tokens"])
-check("每块都有 spans 覆盖检查（不是所有块）",
-      (sft._span_ends - sft._span_starts).min() >= 0)
+check("supervised 对账 = 260,590（硬数字）",
+      int((sft._spans[:, 2] - sft._spans[:, 1]).sum()) == 260590)
+covered = int((sft._span_ends > sft._span_starts).sum())
+check(f"有 span 的块数 = {covered} > 0 且 ≤ 4096", 0 < covered <= 4096, covered)
 
 print("[2] T4b: 区间正确 —— 区间外全 -100, 区间内 = 原 token")
 rng = np.random.default_rng(0)

@@ -35,7 +35,8 @@ for label, ckpt, mode in CASES:
         [str(PY), str(REPL), "--ckpt", str(ROOT / ckpt), "--mode", mode],
         input="你好\n:q\n", capture_output=True, text=True, timeout=300, cwd=ROOT)
     check(f"{label}: exit 0", p.returncode == 0, p.stderr[-300:])
-    check(f"{label}: 有 model> 输出", "model>" in p.stdout, p.stdout[-300:])
+    texts = [l.split("model>", 1)[-1].strip() for l in p.stdout.split("\n") if "model>" in l]
+    check(f"{label}: 有非空 model> 回答", any(texts), texts)
     if p.returncode != 0:
         print(p.stderr[-800:])
 

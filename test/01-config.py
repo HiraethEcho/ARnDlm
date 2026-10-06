@@ -129,14 +129,13 @@ finally:
 print("[7] lr 调度: warmup 线性 -> cosine, 两路同一公式")
 c = c1
 check("step0 = lr/warmup", abs(cfg_mod.lr_at(c, 0) - c.TRAIN.lr / c.TRAIN.warmup_steps) < 1e-12)
-check("warmup 末达到 lr", abs(cfg_mod.lr_at(c, c.TRAIN.warmup_steps - 1) - c.TRAIN.lr) < 1e-6 * c.TRAIN.lr or
-      cfg_mod.lr_at(c, c.TRAIN.warmup_steps) <= c.TRAIN.lr)
+check("warmup 末达到 lr", abs(cfg_mod.lr_at(c, c.TRAIN.warmup_steps - 1) - c.TRAIN.lr) < 1e-6 * c.TRAIN.lr)
 mid = cfg_mod.lr_at(c, (c.TRAIN.warmup_steps + c.TRAIN.steps) // 2)
 floor = c.TRAIN.lr * c.TRAIN.min_lr_ratio
 check("cosine 中段在 floor 与 lr 之间", floor < mid < c.TRAIN.lr, f"{mid}")
 end = cfg_mod.lr_at(c, c.TRAIN.steps)
 check("结尾贴 floor", abs(end - floor) < 1e-9, f"{end} vs {floor}")
-check("超出 steps 不回升", cfg_mod.lr_at(c, c.TRAIN.steps + 100) <= floor + 1e-12)
+check("超出 steps 贴 floor", abs(cfg_mod.lr_at(c, c.TRAIN.steps + 100) - floor) < 1e-12)
 
 print()
 if failures:

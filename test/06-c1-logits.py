@@ -82,7 +82,9 @@ with torch.no_grad():
 check("双向与因果确实不同（开关有效）", (lt_bi - lt_ca).abs().max().item() > 1e-3)
 
 print("[5] 数值环境是 fp32（对拍前提）")
-check("logits dtype fp32", lt.dtype == torch.float32)
+with torch.no_grad():
+    raw_dtype = mt(input_ids=ids).logits.dtype
+check("logits 原始 dtype fp32（cast 之前）", raw_dtype == torch.float32)
 
 print()
 if failures:

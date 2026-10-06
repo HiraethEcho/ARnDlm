@@ -94,10 +94,17 @@ with dev_mod.autocast("float32"):
     z = x @ x
 check("fp32 eval 不进 autocast", z.dtype == torch.float32, repr(z.dtype))
 
-print("[6] 没有 cuda 的机器要报错而不是退 CPU（用假环境测不了，只验证报错路径存在）")
+print("[6] 没有 cuda 的机器要报错而不是退 CPU（monkeypatch 验证真报错）")
 import inspect
-src = inspect.getsource(dev_mod.pick_device)
-check("pick_device 无静默回退", "RuntimeError" in src)
+_orig = torch.cuda.is_available
+torch.cuda.is_available = lambda: False
+try:
+    dev_mod.pick_device()
+    check("pick_device 无静默回退", False, "竟没报错")
+except RuntimeError:
+    check("pick_device 报 RuntimeError", True)
+finally:
+    torch.cuda.is_available = _orig
 
 print()
 if failures:

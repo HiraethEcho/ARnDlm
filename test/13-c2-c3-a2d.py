@@ -69,20 +69,24 @@ def mini_loss(model, batch, kind):
         return lf(model, batch)[0].item()
 
 
-print("[1] corruption 逐位重放比对（对拍前提, 不是可选检查）")
+print("[1] corruption 逐位比对: 手写 corrupt vs dllm 内部 masking（真实现对照）")
+# 手写侧: 同 seed 重放 make_loss_fn 的 RNG 消耗 (rand(b) -> rand(b,l))
 torch.cuda.manual_seed(SEED)
-t = 1e-3 + (1 - 1e-3) * torch.rand(B, device=dev)
-probs = torch.rand((B, L), device=dev)
-xt_mini = torch.where(probs < t[:, None], torch.full_like(ids, 27), ids)
-# dllm 侧同序重放: 同 t 序列; masked = rand < p_mask, p_mask = 1 - alpha(t), alpha=1-t
+t_hand = 1e-3 + (1 - 1e-3) * torch.rand(B, device=dev)
+probs_hand = torch.rand((B, L), device=dev)
+masked_hand = probs_hand < t_hand[:, None]
+xt_hand = torch.where(masked_hand, torch.full_like(ids, 27), ids)
+# dllm 侧: 同一全局 RNG 序列（这是我们 loss_fn 实际依赖的机制）
 torch.cuda.manual_seed(SEED)
+from dllm.core.schedulers import LinearAlphaScheduler
+sched = LinearAlphaScheduler()
 t_d = 1e-3 + (1 - 1e-3) * torch.rand(B, device=dev)
-p_mask = 1.0 - (1.0 - t_d)
+p_mask = 1.0 - sched(t_d).unsqueeze(1).expand(B, L)
 probs_d = torch.rand((B, L), device=dev)
-xt_dllm = torch.where(probs_d < p_mask[:, None], torch.full_like(ids, 27), ids)
-check("t 序列逐位一致", torch.equal(t, t_d))
-check("x_t 逐位一致", torch.equal(xt_mini, xt_dllm),
-      f"diff {(xt_mini != xt_dllm).sum().item()} 位")
+masked_dllm = probs_d < p_mask
+check("t 序列逐位一致", torch.equal(t_hand, t_d))
+check("掩码集合逐位一致（手写 corrupt vs dllm 公式）", torch.equal(masked_hand, masked_dllm),
+      f"diff {(masked_hand != masked_dllm).sum().item()} 位")
 
 print("[2] C2: transformers base")
 l_m = mini_loss(mt, ids, "trans")
@@ -104,15 +108,22 @@ labels2[:, :64] = -100  # 前半 user 区不监督
 batch2 = torch.stack([ids, labels2], dim=1)
 l1 = mini_loss(mt, batch2, "trans")
 l2 = dllm_loss(mt, batch2)
-check(f"mini={l1:.4f} dllm={l2:.4f} 都有限", all(x == x and abs(x) < 1e4 for x in (l1, l2)))
+rel_sft = abs(l1 - l2) / max(abs(l1), 1e-12)
+check(f"SFT batch 相对差={rel_sft:.2e} < 1%", rel_sft < 0.01, rel_sft)
 
 print("[5] 钉子：DLLMLoss 的 4D mask 注入是必要的——去掉就静默变因果")
+# [2] 的 l_m 与 l_d 已同时序列得出（[2] 里 rel=0），这里用 l_d 当「有 4D mask」的锚
+l_m_anchor = mini_loss(mt, ids, "trans")
+l_d_anchor = dllm_loss(mt, ids)
+check("依赖关系先成立: 有 mask 注入时 0.0", abs(l_m_anchor - l_d_anchor) / abs(l_m_anchor) < 1e-9)
 torch.cuda.manual_seed(SEED)
 l_causal = loss_dllm.trainer.compute_loss(
     mt, {"input_ids": ids, "labels": ids}).item()  # 无 attention_mask -> 因果
-rel_c = abs(l_causal - l_m) / max(abs(l_m), 1e-12)
-check(f"因果 dllm={l_causal:.6f} vs 双向 mini={l_m:.6f} 相对差={rel_c:.2e} > 0 "
-      f"（注入口漏掉时这个测试就是能失败的那个）", rel_c > 0)
+rel_c = abs(l_causal - l_d_anchor) / max(abs(l_d_anchor), 1e-12)
+# 因果与双向的差异量级 ~1e-3（每 token 只暴露因果方向的单侧上下文）。
+# 钉子要求的是"差异存在且可归因"：相对差 > 0（去掉注入必然改变 loss）。
+check(f"因果 dllm={l_causal:.6f} vs 双向 dllm={l_d_anchor:.6f} 相对差={rel_c:.2e} > 1e-6",
+      rel_c > 1e-6, rel_c)
 
 print()
 if failures:

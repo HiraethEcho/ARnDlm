@@ -63,8 +63,8 @@ h = mod.LossHistory()
 for i in range(200):
     h.add(i, 10.0 - i / 20)  # 10.0 -> 0.05
 s = h.summary(100)
-check("first_window_mean = 9.505", abs(s["first_window_mean"] - (sum(10.0 - i / 20 for i in range(100)) / 100)) < 1e-9)
-check("last_window_mean = 0.525", abs(s["last_window_mean"] - (sum(10.0 - i / 20 for i in range(100, 200)) / 100)) < 1e-9)
+check("first_window_mean = 7.525", abs(s["first_window_mean"] - 7.525) < 1e-9)
+check("last_window_mean = 2.525", abs(s["last_window_mean"] - 2.525) < 1e-9)
 check("min = 0.05", abs(s["min"] - 0.05) < 1e-9)
 check("空 history", mod.LossHistory().summary(100) == {"n": 0})
 
