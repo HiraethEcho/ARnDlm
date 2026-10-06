@@ -18,6 +18,7 @@ import importlib.util
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -128,9 +129,26 @@ class Ctx:
         return total / count
 
 
-def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Path) -> dict:
+class _SFTPairBatcher:
+    """把 SFTBatcher 的 (blocks, labels) 包成 loss_fn 直接吃的 [B,2,L] torch 批次。"""
+
+    def __init__(self, sb):
+        self.sb = sb
+
+    def position(self, step: int):
+        return self.sb.position(step)
+
+    def batch(self, step: int) -> torch.Tensor:
+        blocks = torch.from_numpy(self.sb.batch(step)).long()
+        labels = torch.from_numpy(self.sb.labels(step, None)).long()
+        return torch.stack([blocks, labels], dim=1)  # [B, 2, L]
+
+
+def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Path,
+            batcher=None) -> dict:
     """A2D / Direct-DLM smoke 训练循环：双向 + 加权 masked CE。
-    mini 与 dllm 只差 loss 来源；base_ckpt=None -> 随机初始化（Direct-DLM）。"""
+    mini 与 dllm 只差 loss 来源；base_ckpt=None -> 随机初始化（Direct-DLM）。
+    batcher: 注入（DLM-SFT / A2D-on-SFT 的 [B,2,L] torch 批次）；缺省 = 预训练批次。"""
     import torch
     t = cfg.TRAIN
     a2d_core = _load("common/a2d-example.py", "a2d_core_main")
@@ -155,9 +173,12 @@ def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Pa
         a2d_mini = _load("src/training/a2d_mini-example.py", "a2d_mini_main_dllm")
         logits_fn = a2d_mini.dlm_forward_trans(model)
 
-    corpus = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
-                             max_blocks=cfg.DATA.max_blocks)
-    batches = data_mod.Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+    if batcher is None:
+        corpus = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
+                                 max_blocks=cfg.DATA.max_blocks)
+        batches = data_mod.Batches(corpus, batch_size=t.batch_size, seed=t.seed)
+    else:
+        batches = batcher
     optimizer = torch.optim.AdamW(model.parameters(), lr=t.lr,
                                   betas=(t.beta1, t.beta2), weight_decay=t.weight_decay)
     mx = _load("common/metrics-example.py", "metrics_main_a2d")
@@ -169,7 +190,10 @@ def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Pa
         lr_now = ctx.lr_at(step)
         for g in optimizer.param_groups:
             g["lr"] = lr_now
-        batch = torch.from_numpy(batches.batch(step)).long().to(dev)
+        batch = batches.batch(step)
+        if isinstance(batch, np.ndarray):
+            batch = torch.from_numpy(batch)
+        batch = batch.long().to(dev)
         torch.cuda.synchronize()
         t0 = meter.now()
         loss, _aux = loss_fn(model, batch)
@@ -221,6 +245,11 @@ def main():
                     help="sft 阶段的起点权重目录（如 checkpoints/ar-3.2m-native-smoke）")
     ap.add_argument("--data", default=None,
                     help="prepared 目录覆盖（相对仓库根或绝对路径; 优先于 tier/stage 默认）")
+    ap.add_argument("--sft-data", action="store_true",
+                    help="a2d 阶段改吃 SFT 批次 [B,2,L]（assistant span 限制加噪）——"
+                         "即 DLM-SFT / A2D-on-SFT；数据固定 sft-mini-6400")
+    ap.add_argument("--name", default=None,
+                    help="格子名覆盖（复合阶段按 SPEC 1.2 顺序追加段, 如 ar-3.2m-trans-sft-mini_a2d）")
     ap.add_argument("--steps", type=int, default=0, help="0 = config 的 train.steps")
     args = ap.parse_args()
 
@@ -233,8 +262,8 @@ def main():
             data_dir = ROOT / data_dir
         if not (data_dir / "meta.json").exists():
             raise FileNotFoundError(f"--data 不是 prepared 目录（缺 meta.json）: {data_dir}")
-    elif args.stage == "sft":
-        # SFT 用 prepared SFT 目录（预切块 + assistant spans）; 不读 Corpus
+    elif args.stage == "sft" or args.sft_data:
+        # SFT / DLM-SFT / A2D-on-SFT 都用 prepared SFT 目录（预切块 + spans）
         data_dir = ROOT / "data/prepared/sft-mini-6400"
     elif args.tier == "smoketest":
         # smoke 用最小语料 (SPEC 4.1): tinystories-6400 是最小就位语料
@@ -251,12 +280,14 @@ def main():
     params = analytic_params(cfg.MODEL)
     size = f"{params / 1e6:.1f}m"
     tag = "-smoke" if args.tier == "smoketest" else ""
+    if args.name and tag and not args.name.endswith(tag):
+        args.name += tag  # smoke 产物必须带 -smoke 后缀（SPEC 1.2）
     if args.stage == "a2d":
         if args.impl not in ("mini", "dllm"):
             raise SystemExit("a2d 阶段的 --impl 是 mini|dllm（模型对象由 --base 决定）")
         if args.base is None:
             raise SystemExit("a2d 需要 --base（AR 权重目录; A2D 从 AR 权重出发, 不从头训）")
-        name = f"ar-{size}-{'mini_a2d' if args.impl == 'mini' else 'dllm_a2d'}{tag}"
+        name = args.name or f"ar-{size}-{'mini_a2d' if args.impl == 'mini' else 'dllm_a2d'}{tag}"
     elif args.stage == "dlm":
         if args.impl not in ("trans", "dllm"):
             raise SystemExit("dlm 阶段的 --impl 是 trans|dllm（SPEC §1.2: dlm 没有 native）")
@@ -277,7 +308,13 @@ def main():
           f"params={params:,} data={data_dir} base={args.base}")
     t_start = time.monotonic()
     if args.stage in ("a2d", "dlm"):
-        res = run_a2d(cfg, steps, ctx, args.impl, args.base, data_dir)
+        batcher = None
+        if args.sft_data:
+            sftx = _load("src/training/sft-example.py", "sft_example_a2d")
+            sb = sftx.SFTBatcher(sftx.SFTBlocks(data_dir),
+                                 batch_size=cfg.TRAIN.batch_size, seed=cfg.TRAIN.seed)
+            batcher = _SFTPairBatcher(sb)
+        res = run_a2d(cfg, steps, ctx, args.impl, args.base, data_dir, batcher=batcher)
     elif args.stage == "sft":
         sft_mod = _load("src/training/sft-example.py", "sft_example_main")
         res = sft_mod.run_sft(cfg, steps, ctx, impl=args.impl, base_ckpt=args.base)
@@ -290,18 +327,24 @@ def main():
         chat_mod = _load("src/eval/chat-example.py", "chat_example_main")
         eval_loss = chat_mod.assistant_eval_loss(res["model"], data_dir)
     elif args.stage in ("a2d", "dlm"):
-        # A2D 的 eval = 固定种子 corruption 下的 masked CE（held-out 块）, 不是 AR CE
-        corpus_e = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
-                                   max_blocks=cfg.DATA.max_blocks)
-        n_eval = min(32, corpus_e.n_blocks)
-        dev = next(res["model"].parameters()).device
-        vals = []
-        with torch.no_grad():
-            for i in range(corpus_e.n_blocks - n_eval, corpus_e.n_blocks):
-                b = torch.from_numpy(corpus_e.block(i)).long()[None].to(dev)  # [1, L]
-                l, _ = res["loss_fn"](res["model"], b)
-                vals.append(l.item())
-        eval_loss = sum(vals) / len(vals)
+        if args.sft_data:
+            # DLM-SFT / A2D-on-SFT: assistant 区间 eval, 双向 forward
+            chat_mod = _load("src/eval/chat-example.py", "chat_example_main_a2d")
+            eval_loss = chat_mod.assistant_eval_loss(res["model"], data_dir,
+                                                     bidirectional=True)
+        else:
+            # A2D / Direct-DLM 的 eval = 固定种子 corruption 下的 masked CE, 不是 AR CE
+            corpus_e = data_mod.Corpus(data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
+                                       max_blocks=cfg.DATA.max_blocks)
+            n_eval = min(32, corpus_e.n_blocks)
+            dev = next(res["model"].parameters()).device
+            vals = []
+            with torch.no_grad():
+                for i in range(corpus_e.n_blocks - n_eval, corpus_e.n_blocks):
+                    b = torch.from_numpy(corpus_e.block(i)).long()[None].to(dev)  # [1, L]
+                    l, _ = res["loss_fn"](res["model"], b)
+                    vals.append(l.item())
+            eval_loss = sum(vals) / len(vals)
     else:
         eval_loss = ctx.eval_loss(res["model"])
     tok = tok_mod.Tok()

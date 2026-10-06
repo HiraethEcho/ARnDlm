@@ -26,19 +26,32 @@ def _load(rel: str, name: str):
 
 
 @torch.no_grad()
-def assistant_eval_loss(model, sft_dir: str | Path, n_blocks: int = 32) -> float:
-    """只在 assistant 区间上算的 eval loss（fp32; 与训练同一 span 语义）。"""
+def assistant_eval_loss(model, sft_dir: str | Path, n_blocks: int = 32,
+                        bidirectional: bool = False) -> float:
+    """只在 assistant 区间上算的 eval loss（fp32; 与训练同一 span 语义）。
+
+    bidirectional=True（DLM 系）: trans 走 4D 全零 mask; native 走 set_causal 开关（用完恢复）。"""
     sft = _load("src/training/sft-example.py", "sft_example_chat").SFTBlocks(sft_dir)
     dev = next(model.parameters()).device
     was_training = model.training
     model.eval()
+    if bidirectional and hasattr(model, "set_causal"):
+        model.set_causal(False)
+
+    def forward(x):
+        if bidirectional and not hasattr(model, "set_causal"):
+            m4 = torch.zeros(x.shape[0], 1, x.shape[1], x.shape[1],
+                             device=dev, dtype=model.dtype)
+            return model(x, attention_mask=m4).logits
+        return model(x).logits
+
     total, count = 0.0, 0
     nb = min(n_blocks, sft.n_blocks)
     for b in range(sft.n_blocks - nb, sft.n_blocks):
         ids = torch.from_numpy(np.asarray(sft.blocks[b * sft.bs:(b + 1) * sft.bs],
                                           dtype=np.int64))[None].long().to(dev)
         labels = torch.from_numpy(sft.labels(b))[None].long().to(dev)
-        logits = model(ids).logits.float()
+        logits = forward(ids).float()
         # shift 后: logits[:, :-1] 预测 labels[:, 1:]; -100 位置不计
         lo = logits[:, :-1].reshape(-1, logits.shape[-1])
         tg = labels[:, 1:].reshape(-1)
@@ -47,10 +60,12 @@ def assistant_eval_loss(model, sft_dir: str | Path, n_blocks: int = 32) -> float
             total += torch.nn.functional.cross_entropy(lo[keep], tg[keep],
                                                        reduction="sum").item()
             count += int(keep.sum())
-    if was_training:
-        model.train()
     if count == 0:
         raise ValueError("eval 块里没有任何监督 token, assistant loss 无从算起")
+    if bidirectional and hasattr(model, "set_causal"):
+        model.set_causal(True)
+    if was_training:
+        model.train()
     return total / count
 
 
