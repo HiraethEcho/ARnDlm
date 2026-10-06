@@ -24,6 +24,7 @@
 | data/prepared/ | token 数 | 用途 |
 |---|---:|---|
 | `minimind3-6400` | 332,495,324 | 主实验语料（tier1 对照） |
+| `wikitext-6400` | 194,509,960 | 英文维基百科书面语（2026-10-05 加，见 notes/06） |
 | `sft-mini-6400` | 4,096 块 @ ctx 128 · 260,590 supervised | SFT 数据（assistant-only） |
 | `tinystories-6400` | 3,110,358 | 小语料备份 |
 

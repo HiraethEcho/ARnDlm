@@ -47,6 +47,7 @@ assistant 消息还带 `reasoning_content` 字段 (思维链), 展平时要不�
 | `tinystories-6400` | 3,110,358 | 8,674,761 | 2.79 |
 | `openwebtext-6400` | 17,174,450 | 48,594,444 | 2.83 |
 | `wikipedia-zh-6400` | 38,571,096 | 36,123,690 | 0.94 |
+| `wikitext-6400` (2026-10-05 加) | 194,509,960 | 535,934,762 | 2.75 |
 
 minimind 官方 tokenizer 在中文上是 1.5~1.7 chars/token, 本项目 6400 BPE 实测 1.46
 —— 同量级。**6400 词表对中文是超标的**: 中文 `wikipedia-zh` 达到 1.07 token/char,
