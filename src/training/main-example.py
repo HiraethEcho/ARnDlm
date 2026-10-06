@@ -135,13 +135,21 @@ def main():
     ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft"])
     ap.add_argument("--base", default=None,
                     help="sft 阶段的起点权重目录（如 checkpoints/ar-3.2m-native-smoke）")
+    ap.add_argument("--data", default=None,
+                    help="prepared 目录覆盖（相对仓库根或绝对路径; 优先于 tier/stage 默认）")
     ap.add_argument("--steps", type=int, default=0, help="0 = config 的 train.steps")
     args = ap.parse_args()
 
     cfg = cfg_mod.load(args.tier)
     steps = args.steps or cfg.TRAIN.steps
 
-    if args.stage == "sft":
+    if args.data:
+        data_dir = Path(args.data)
+        if not data_dir.is_absolute():
+            data_dir = ROOT / data_dir
+        if not (data_dir / "meta.json").exists():
+            raise FileNotFoundError(f"--data 不是 prepared 目录（缺 meta.json）: {data_dir}")
+    elif args.stage == "sft":
         # SFT 用 prepared SFT 目录（预切块 + assistant spans）; 不读 Corpus
         data_dir = ROOT / "data/prepared/sft-mini-6400"
     elif args.tier == "smoketest":
