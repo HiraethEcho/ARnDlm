@@ -144,6 +144,78 @@ class _SFTPairBatcher:
         return torch.stack([blocks, labels], dim=1)  # [B, 2, L]
 
 
+def run_dpo(cfg, steps: int, ctx, args) -> dict:
+    """DPO smoke 循环: policy = base 权重 + 冻结 ref 副本; loss 见 dpo_example.dpo_loss。"""
+    import copy
+    import torch
+    from safetensors.torch import load_file as _load_st
+    t = cfg.TRAIN
+    dx = _load("src/training/dpo-example.py", "dpo_example_main")
+    dev = torch.device("cuda")
+    if args.impl == "native":
+        ne = _load("src/models/native/model-example.py", "native_model_main_dpo")
+        policy = ne.build_native(cfg.MODEL, seed=t.seed).to(dev)
+    else:
+        te = _load("src/models/trans-example.py", "trans_example_main_dpo")
+        policy = te.build(cfg.MODEL, seed=t.seed).to(dev)
+    sd = _load_st(str(Path(args.base) / "model.safetensors"))
+    missing, unexpected = policy.load_state_dict(sd, strict=False)
+    assert not unexpected, unexpected
+    assert set(missing) <= {"lm_head.weight"}, missing
+    ref = copy.deepcopy(policy).eval()
+    for p in ref.parameters():
+        p.requires_grad_(False)
+    policy.train()
+
+    raw = Path(args.dpo_data or "/mnt/extra/data/raw/minimind_dataset/dpo.jsonl")
+    data = dx.load_dpo_pairs(raw, max_pairs=args.dpo_pairs or 4000)
+    print(f"dpo pairs: {data['n_pairs']} (dropped {data['dropped']})")
+    batches = dx.PairBatcher(data["n_pairs"], batch_size=t.batch_size, seed=t.seed)
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=t.lr * 0.1,   # DPO 用小 lr
+                                  betas=(t.beta1, t.beta2), weight_decay=t.weight_decay)
+    mx = _load("common/metrics-example.py", "metrics_main_dpo")
+    meter, history = mx.TpsMeter(), mx.LossHistory()
+    tokens_per_step = t.batch_size * 2 * 120
+    margins, accs = [], []
+    for step in range(steps):
+        lr_now = ctx.lr_at(step) * 0.1
+        for g in optimizer.param_groups:
+            g["lr"] = lr_now
+        idx = batches.batch(step)
+        seq_c, seq_r, mask_c, mask_r = dx.pair_batch(data, idx, dev)
+        torch.cuda.synchronize()
+        t0 = meter.now()
+        loss, aux = dx.dpo_loss(policy, ref, seq_c, seq_r, mask_c, mask_r)
+        loss.backward()
+        clip = torch.nn.utils.clip_grad_norm_(policy.parameters(), t.grad_clip)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+        torch.cuda.synchronize()
+        meter.add_train(tokens_per_step, meter.now() - t0)
+        history.add(step, aux["loss"])
+        margins.append(aux["margin"])
+        accs.append(aux["acc"])
+        if step % t.log_every == 0 or step == steps - 1:
+            ctx.log_step("dpo", step, aux["loss"], lr_now, float(clip), meter.report())
+    ctx.save_ckpt(policy, "dpo")
+    n_eval = min(200, data["n_pairs"])
+    ev_idx = np.arange(data["n_pairs"] - n_eval, data["n_pairs"])
+    held = []
+    with torch.no_grad():
+        for lo in range(0, n_eval, t.batch_size):
+            chunk = ev_idx[lo:lo + t.batch_size]
+            sc, sr, mc, mr = dx.pair_batch(data, chunk, dev)
+            _l, a = dx.dpo_loss(policy, ref, sc, sr, mc, mr)
+            held.append(a)
+    held_acc = float(np.mean([h["acc"] for h in held]))
+    return {"model": policy, "optimizer": optimizer, "meter": meter,
+            "history": history, "step": steps - 1,
+            "data_position": batches.position(steps - 1),
+            "dpo": {"pairs": data["n_pairs"], "heldout_acc": held_acc,
+                    "last_margin": float(margins[-1]) if margins else None},
+            "sample_fn": None}
+
+
 def run_a2d(cfg, steps: int, ctx, impl: str, base_ckpt: str | None, data_dir: Path,
             batcher=None) -> dict:
     """A2D / Direct-DLM smoke 训练循环：双向 + 加权 masked CE。
@@ -240,7 +312,8 @@ def main():
     ap.add_argument("--impl", required=True,
                     choices=["trans", "native", "mini", "dllm"],
                     help="pretrain/sft: trans|native; a2d: mini|dllm（SPEC §8）")
-    ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft", "a2d", "dlm"])
+    ap.add_argument("--stage", default="pretrain",
+                    choices=["pretrain", "sft", "a2d", "dlm", "dpo"])
     ap.add_argument("--base", default=None,
                     help="sft 阶段的起点权重目录（如 checkpoints/ar-3.2m-native-smoke）")
     ap.add_argument("--data", default=None,
@@ -250,6 +323,8 @@ def main():
                          "即 DLM-SFT / A2D-on-SFT；数据固定 sft-mini-6400")
     ap.add_argument("--name", default=None,
                     help="格子名覆盖（复合阶段按 SPEC 1.2 顺序追加段, 如 ar-3.2m-trans-sft-mini_a2d）")
+    ap.add_argument("--dpo-data", default="/mnt/extra/data/raw/minimind_dataset/dpo.jsonl")
+    ap.add_argument("--dpo-pairs", type=int, default=4000, help="smoke 上限 pair 数")
     ap.add_argument("--steps", type=int, default=0, help="0 = config 的 train.steps")
     args = ap.parse_args()
 
@@ -296,6 +371,12 @@ def main():
         name = f"dlm-{size}-{args.impl}{tag}"
     elif args.stage == "sft":
         name = f"ar-{size}-{args.impl}-sft{tag}"
+    elif args.stage == "dpo":
+        if args.base is None:
+            raise SystemExit("dpo 需要 --base（SFT 后的 AR 权重; DPO 在能说话的模型上做）")
+        stem = Path(args.base).name
+        base_stage = stem[:-len("-smoke")] if stem.endswith("-smoke") else stem
+        name = args.name or f"{base_stage}-dpo{tag}"
     else:
         name = f"ar-{size}-{args.impl}{tag}"
 
@@ -315,6 +396,8 @@ def main():
                                  batch_size=cfg.TRAIN.batch_size, seed=cfg.TRAIN.seed)
             batcher = _SFTPairBatcher(sb)
         res = run_a2d(cfg, steps, ctx, args.impl, args.base, data_dir, batcher=batcher)
+    elif args.stage == "dpo":
+        res = run_dpo(cfg, steps, ctx, args)
     elif args.stage == "sft":
         sft_mod = _load("src/training/sft-example.py", "sft_example_main")
         res = sft_mod.run_sft(cfg, steps, ctx, impl=args.impl, base_ckpt=args.base)
@@ -326,6 +409,8 @@ def main():
     if args.stage == "sft":
         chat_mod = _load("src/eval/chat-example.py", "chat_example_main")
         eval_loss = chat_mod.assistant_eval_loss(res["model"], data_dir)
+    elif args.stage == "dpo":
+        eval_loss = None  # DPO 不报 eval loss; 指标在 summary["dpo"]（held-out margin acc）
     elif args.stage in ("a2d", "dlm"):
         if args.sft_data:
             # DLM-SFT / A2D-on-SFT: assistant 区间 eval, 双向 forward
@@ -357,14 +442,16 @@ def main():
     else:
         prompts = ["Once upon a time", "小明放学回家"]
         prompt_ids = [tok.encode(p, bos=True) for p in prompts]
-    if args.stage == "a2d":
+    if args.stage == "dpo":
+        texts, rep4s = [], []  # 采样不适用（DPO 改变偏好, 不改说话方式; 门槛在 SFT/A2D 格子报）
+    elif args.stage in ("a2d", "dlm"):
         sample_ids = [res["sample_fn"](p) for p in prompt_ids]
-    elif args.stage == "dlm":
-        sample_ids = [res["sample_fn"](p) for p in prompt_ids]
+        texts = [tok.decode(ids) for ids in sample_ids]
+        rep4s = [mx_mod.rep4(ids) for ids in sample_ids]
     else:
         sample_ids = [res["sample_fn"](res["model"], p) for p in prompt_ids]
-    texts = [tok.decode(ids) for ids in sample_ids]
-    rep4s = [mx_mod.rep4(ids) for ids in sample_ids]
+        texts = [tok.decode(ids) for ids in sample_ids]
+        rep4s = [mx_mod.rep4(ids) for ids in sample_ids]
 
     state_mod = _load("src/training/state-example.py", "state_example")
     state_mod.save_state(run_dir / "train_state.pt", step=res["step"],
@@ -377,6 +464,7 @@ def main():
         "throughput": res["meter"].report(),
         "loss": res["history"].summary(cfg.TRAIN.loss_window),
         "eval_loss": eval_loss,
+        "dpo": res.get("dpo"),
         "sample": {"prompts": prompts, "texts": texts, "rep4": rep4s},
         "checkpoint": str(ckpt_dir),
         "loss_caveat": "trans 的 loss 是 Trainer 区间均值; native 是单步值" if args.impl == "trans" else "",
@@ -384,7 +472,7 @@ def main():
     (run_dir / "summary.json").write_text(
         __import__("json").dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(f"== done: eval_loss={eval_loss:.4f} rep4={rep4s} "
+    print(f"== done: eval_loss={eval_loss if eval_loss is None else f'{eval_loss:.4f}'} rep4={rep4s} "
           f"train={res['meter'].report()['train_tps']:.0f} tok/s "
           f"(wall {wall_train:.0f}s 总钟) -> {run_dir/'summary.json'}")
 
