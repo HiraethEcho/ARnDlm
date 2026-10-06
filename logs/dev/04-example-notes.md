@@ -52,9 +52,32 @@ x.py 骨架一律未动（留给本人填）。每个 milestone 一个 commit。
 
 1. trans 侧 resume（HF Trainer checkpoint 与 train_state.pt 的关系）——
    03-call-flow 的遗留问题，未解。
-2. prepare 的 hf 下载路径（22 GiB minimind）未跑。
-3. C2/C3/C5（A2D 对拍）与 dlm/a2d_dllm/a2d_mini/dpo 的 example —— P6+，未开始。
+2. prepare 的 hf 下载路径（22 GiB minimind）未跑；wikitext-103 已走 parquet 直链
+   入盘（2026-10-05，见 01/notes06）。
+3. ~~C2/C3/C5~~ 已完成（见下）；**未做**：dlm.py（Direct-DLM）、dpo.py、REPL 的
+   DLM 采样器（A2D ckpt 被 REPL 当 AR 加载会错采）。
 4. 门槛 1 需要 DLM-SFT 参照；chat 报告现处 pending。
 5. G1 的「同 seed 同 batch 逐步 loss 对齐」：trans 与 native 各自 init（构造序不同
    → 权重不同），现只能比曲线形状不比逐位。同权重起点 = SFT 侧已有
    `init_weights_path`，pretrain 侧未做。
+
+## A2D 追加记录（2026-10-05 第二段 night-run，用户限定不做 direct-dlm）
+
+| 交付 | 验收 |
+|---|---|
+| common/a2d-example.py（corrupt/loss/sample_dlm 共享层） | test/12：分母语义手算对照、per-sample t、valid 限制、Gumbel fp32 |
+| a2d_mini-example.py（trans+native 双 base 闭包） | test/13 [1]：双向 logits 1.43e-06 |
+| a2d_dllm-example.py（MDLMTrainer.__new__ + 假 tokenizer） | **C2/C3 相对差 = 0.0**（两个 base），好于 legacy 7.6e-08 |
+| C5（test/14） | config 逐字段 + state_dict 直拵：0/0/0/0，转换后双向 logits 差 0.0 |
+| main --stage a2d（mini\|dllm，200 步端到端） | loss 7.83→5.90 eval 6.02；mini 与 dllm 轨迹**逐位相同** |
+
+**两个真实的坑（都写进了代码注释）**：
+1. dllm 的 compute_loss 收不到 attention_mask 时，普通 Qwen3 **静默走因果 forward**
+   —— DLLMLoss 必须注入 4D 全零 mask，test/13 [5] 专门钉住（去掉注入口，
+   相对差变 9.75e-04，这个测试就是能失败的那个）。
+2. BOS 前置被 `right_shift_logits=False` 整体关死，从不发生（源码验证）——
+   我先入为主怀疑是它，被实验推翻后改掉了错误解释。
+
+**rep-4 0.72/0.83（高复读）**：200 步 smoke 从 20 步 AR 底座训练，样本是点号串。
+SPEC 6.4 的 DLM 失败模式（loss 降但复读）如实呈现，不是 bug；追步数/数据是
+正式格子的工作。A2D ckpt：`checkpoints/ar-3.2m-{mini,dllm}_a2d-smoke`。
