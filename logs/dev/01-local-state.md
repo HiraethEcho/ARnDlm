@@ -10,6 +10,10 @@
   smoke 实测锚点：AR 20 步 loss 8.81→8.71→eval 8.70（trans 8.68）；SFT 200 步
   assistant eval loss 6.39、rep-4 0.33–0.43；**C1 2.15e-06 / C4 0.0**。
 - 未开始：P6 A2D/DLM（C2/C3/C5）、dpo、tier1 正式训练。
+- REPL 已交付（2026-10-05）：`src/eval/repl-example.py`，pretrain 续写 / chat 对话两模式，
+  ckpt 目录自动识别 trans/native 存法。SFT 产物持久化在
+  `checkpoints/ar-3.2m-{native,trans}-sft-smoke`（800 步, eval 4.61 / 4.78, 输出已是通顺中文）。
+  保留的四个冒烟 ckpt：`ar-3.2m-{native,trans}-smoke`（AR 20 步）与上面两个。
 - `logs/run/` 与 `checkpoints/*-example` 都是实验版遗留（gitignore，不算本分支工作）。
   新格子命名按 SPEC §1.2；smoke checkpoint 带 `-smoke` 后缀。
 
