@@ -43,8 +43,10 @@ def ce_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
 
 @torch.no_grad()
 def sample(model, prompt_ids: list[int], max_new_tokens: int = 32,
-           temperature: float = 0.3, top_k: int = 50, max_context: int | None = None) -> list[int]:
-    """AR 采样, 无 KV cache: 每步重跑前缀（smoke 尺寸下便宜, 且不引 transformers 机制）。"""
+           temperature: float = 0.3, top_k: int = 50, max_context: int | None = None,
+           eos_id: int = 2) -> list[int]:
+    """AR 采样, 无 KV cache: 每步重跑前缀（smoke 尺寸下便宜, 且不引 transformers 机制）。
+    生成到 EOS 即停（EOS 本身也进返回值, 调用方决定是否展示）。"""
     was_training = model.training
     model.eval()
     dev = next(model.parameters()).device
@@ -58,6 +60,8 @@ def sample(model, prompt_ids: list[int], max_new_tokens: int = 32,
         probs = torch.softmax(values / temperature, dim=-1)
         nxt = int(indices[torch.multinomial(probs, 1)])
         generated.append(nxt)
+        if nxt == eos_id:
+            break
         prefix = torch.cat([prefix, torch.tensor([[nxt]], device=dev)], dim=1)
     if was_training:
         model.train()

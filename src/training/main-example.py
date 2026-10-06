@@ -132,13 +132,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tier", required=True, choices=["smoketest", "tier1"])
     ap.add_argument("--impl", required=True, choices=["trans", "native"])
+    ap.add_argument("--stage", default="pretrain", choices=["pretrain", "sft"])
+    ap.add_argument("--base", default=None,
+                    help="sft 阶段的起点权重目录（如 checkpoints/ar-3.2m-native-smoke）")
     ap.add_argument("--steps", type=int, default=0, help="0 = config 的 train.steps")
     args = ap.parse_args()
 
     cfg = cfg_mod.load(args.tier)
     steps = args.steps or cfg.TRAIN.steps
 
-    if args.tier == "smoketest":
+    if args.stage == "sft":
+        # SFT 用 prepared SFT 目录（预切块 + assistant spans）; 不读 Corpus
+        data_dir = ROOT / "data/prepared/sft-mini-6400"
+    elif args.tier == "smoketest":
         # smoke 用最小语料 (SPEC 4.1): tinystories-6400 是最小就位语料
         data_dir = ROOT / "data/prepared/tinystories-6400"
         # max_blocks 来自 config 但那是 minimind 的量; smoke 覆盖为 4096 块上限不变
@@ -153,24 +159,37 @@ def main():
     params = analytic_params(cfg.MODEL)
     size = f"{params / 1e6:.1f}m"
     tag = "-smoke" if args.tier == "smoketest" else ""
-    name = f"ar-{size}-{args.impl}{tag}"
+    stage_seg = "" if args.stage == "pretrain" else "-sft"
+    name = f"ar-{size}-{args.impl}{stage_seg}{tag}"
 
     run_dir = ROOT / "logs/run" / name
     ckpt_dir = ROOT / "checkpoints" / name
     run_dir.mkdir(parents=True, exist_ok=True)
     ctx = Ctx(cfg, name, data_dir, run_dir, ckpt_dir)
 
-    print(f"== {name}: tier={args.tier} impl={args.impl} steps={steps} "
-          f"params={params:,} data={data_dir}")
+    print(f"== {name}: tier={args.tier} impl={args.impl} stage={args.stage} steps={steps} "
+          f"params={params:,} data={data_dir} base={args.base}")
     t_start = time.monotonic()
-    res = impl.run(cfg, steps, ctx)
+    if args.stage == "sft":
+        sft_mod = _load("src/training/sft-example.py", "sft_example_main")
+        res = sft_mod.run_sft(cfg, steps, ctx, impl=args.impl, base_ckpt=args.base)
+    else:
+        res = impl.run(cfg, steps, ctx)
     wall_train = time.monotonic() - t_start
 
     # 收尾: eval (fp32) -> 采样 -> state -> summary (eval/采样不进 train-only 分母)
-    eval_loss = ctx.eval_loss(res["model"])
+    if args.stage == "sft":
+        chat_mod = _load("src/eval/chat-example.py", "chat_example_main")
+        eval_loss = chat_mod.assistant_eval_loss(res["model"], data_dir)
+    else:
+        eval_loss = ctx.eval_loss(res["model"])
     tok = tok_mod.Tok()
-    prompts = ["Once upon a time", "小明放学回家"]
-    prompt_ids = [tok.encode(p, bos=True) for p in prompts]
+    if args.stage == "sft":
+        prompts = ["什么是深度学习？", "今天天气怎么样？"]
+        prompt_ids = [sft_mod.encode_prompt(p) for p in prompts]
+    else:
+        prompts = ["Once upon a time", "小明放学回家"]
+        prompt_ids = [tok.encode(p, bos=True) for p in prompts]
     sample_ids = [res["sample_fn"](res["model"], p) for p in prompt_ids]
     texts = [tok.decode(ids) for ids in sample_ids]
     rep4s = [mx_mod.rep4(ids) for ids in sample_ids]
@@ -180,8 +199,8 @@ def main():
                          optimizer=res["optimizer"], data_position=res["data_position"])
 
     summary = {
-        "name": name, "tier": args.tier, "impl": args.impl,
-        "params": params, "steps": steps,
+        "name": name, "tier": args.tier, "impl": args.impl, "stage": args.stage,
+        "base": args.base, "params": params, "steps": steps,
         "data_dir": str(data_dir), "data_position": list(res["data_position"]),
         "throughput": res["meter"].report(),
         "loss": res["history"].summary(cfg.TRAIN.loss_window),
