@@ -126,10 +126,12 @@ try:
 finally:
     tmp3.unlink()
 
-print("[7] lr 调度: warmup 线性 -> cosine, 两路同一公式")
+print("[7] lr 调度: warmup 线性 -> cosine, 两路同一公式（HF 语义: 峰在 warmup 整点）")
 c = c1
-check("step0 = lr/warmup", abs(cfg_mod.lr_at(c, 0) - c.TRAIN.lr / c.TRAIN.warmup_steps) < 1e-12)
-check("warmup 末达到 lr", abs(cfg_mod.lr_at(c, c.TRAIN.warmup_steps - 1) - c.TRAIN.lr) < 1e-6 * c.TRAIN.lr)
+check("step0 = 0", cfg_mod.lr_at(c, 0) == 0.0)
+check("warmup-1 未达峰", abs(cfg_mod.lr_at(c, c.TRAIN.warmup_steps - 1)
+                           - c.TRAIN.lr * (c.TRAIN.warmup_steps - 1) / c.TRAIN.warmup_steps) < 1e-12)
+check("warmup 整点达峰", abs(cfg_mod.lr_at(c, c.TRAIN.warmup_steps) - c.TRAIN.lr) < 1e-12)
 mid = cfg_mod.lr_at(c, (c.TRAIN.warmup_steps + c.TRAIN.steps) // 2)
 floor = c.TRAIN.lr * c.TRAIN.min_lr_ratio
 check("cosine 中段在 floor 与 lr 之间", floor < mid < c.TRAIN.lr, f"{mid}")

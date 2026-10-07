@@ -166,11 +166,16 @@ def load(tier: str) -> Config:
 
 
 def lr_at(cfg: Config, step: int) -> float:
-    """warmup 线性 -> cosine 衰减到 min_lr_ratio。两条 impl 路线共用同一公式。"""
+    """warmup 线性 -> cosine 衰减到 min_lr_ratio。两条 impl 路线共用同一公式。
+
+    warmup 语义与 HF cosine_with_warmup 一致（2026-10-07 review 后定）：
+    step0 = 0，峰值在 step == warmup 整点。之前是 (step+1)/warmup（峰在
+    warmup-1），与 HF 相差一步 —— 两条路线 warmup 段每步 lr 都不同。
+    """
     t = cfg.TRAIN
     warmup = t.warmup_steps
     if step < warmup:
-        return t.lr * (step + 1) / warmup
+        return t.lr * step / warmup
     span = max(t.steps - warmup, 1)
     progress = min((step - warmup) / span, 1.0)
     floor = t.lr * t.min_lr_ratio
