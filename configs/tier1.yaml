@@ -1,0 +1,59 @@
+# 单轨配置 · tier1 —— 正式对照规模（SPEC 4.2）。
+# 数字来源：2026-10-01 本机实测（Radeon 880M / ROCm 10.0, bf16 + AdamW + sdpa，
+# packing 零 padding，不开 gradient checkpointing），完整阶梯见
+# logs/dev/02-hardware-perf.md。不是估算：
+#   参数量 26,879,488 · 吞吐 7,995 train-only tok/s · 512.3 ms/step
+#   峰值显存 1.41 GB · step 外开销 0.09% · 332M token 约 11.6 h
+
+tier: tier1
+purpose: 真正的对照 —— AR vs DLM 吃同一条 token 流。
+
+model:
+  hidden_size: 512
+  num_layers: 8
+  num_heads: 8
+  num_kv_heads: 4
+  head_dim: 64   # 26,879,488 锚点要求 512/8=64；128 是从 smoketest 误拷的（分析式会算出 33.2M）
+  intermediate_size: 1408
+  context_length: 512
+  vocab_size: 6400
+  rope_theta: 10000.0
+  rms_norm_eps: 1.0e-6
+  tie_word_embeddings: true
+
+tokens:
+  pad: 0
+  bos: 1
+  eos: 2
+  mask: 27
+
+train:
+  # 332,495,324 token / (512 token x 8 块) 每步 = 81,174 步 = 正好一遍语料
+  steps: 81174
+  batch_size: 8        # 实测 B8 与 B16 吞吐无法区分；B8 省一半显存
+  lr: 3.0e-4           # AR pretrain；A2D fine-tune 用 dlm_lr
+  dlm_lr: 1.0e-4
+  min_lr_ratio: 0.1
+  warmup_steps: 2000   # 约 2.5% of steps
+  weight_decay: 0.1
+  grad_clip: 1.0
+  beta1: 0.9
+  beta2: 0.95
+  seed: 42
+  log_every: 200       # 全程约 400 个点，metrics.csv 不膨胀
+  loss_window: 100
+
+data:
+  prepared_dir: data/prepared/minimind3-6400
+  # 语料 332,495,324 token / 512 = 649,405 块；81,174 步 x 8 = 649,392 块
+  max_blocks: 0        # 0 = 不限量
+
+runtime:
+  dtype: bfloat16
+
+# 没有这些旋钮，为什么：
+#   gradient_checkpointing —— 实测慢 18-23% 只省 3 GB，不开
+#   attention backend     —— 固定 sdpa；瓶颈在 attention backward kernel
+# 以下照抄实验版，别当定论（tier1 批/token 数翻了 20 倍，正式扫参前单独验）：
+#   lr 3.0e-4 / betas (0.9, 0.95) / weight_decay 0.1 / grad_clip 1.0
+# seq 512 而非实测更快的 256：DLM 分块去噪需要上下文，一次只动一个变量
