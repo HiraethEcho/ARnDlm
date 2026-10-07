@@ -112,6 +112,7 @@ def make_sampler(model, kind, is_dlm):
 
 
 def main():
+    gate = "--gate" in sys.argv  # tier1 门禁: 任一 ❌ / pending 无参照 -> 退出码 1
     out_name = "RESULTS-smoke.md"
     rows, reports = {}, {}
     ref_loss = {}  # per-family t1 参照（同条件: 同 impl 家族的 AR-SFT）
@@ -162,6 +163,15 @@ def main():
                  "（52 万 token），smoke 只验管线不评判质量，200 步起步不达标追 400/800。_")
     (ROOT / out_name).write_text("\n".join(lines), encoding="utf-8")
     print(f"-> {out_name}")
+    if gate:
+        bad = [(n, c) for n, r in rows.items()
+               for c, v in (("t1", r["t1"]), ("t2", r["t2"]),
+                            ("t3", r["t3"]), ("t4", r["t4"])) if v is not True]
+        if bad:
+            for n, c in bad:
+                print(f"GATE FAIL: {n} {c}")
+            sys.exit(1)
+        print("GATE PASS")
 
 
 if __name__ == "__main__":

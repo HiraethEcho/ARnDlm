@@ -81,6 +81,21 @@ with torch.no_grad():
     lt_ca = mt(input_ids=ids).logits.float()
 check("双向与因果确实不同（开关有效）", (lt_bi - lt_ca).abs().max().item() > 1e-3)
 
+print("[5b] tier1 形状的 C1（26.9M, 正式对照前的守门）")
+import importlib
+cfg1 = cfg_mod.load("tier1")
+m1 = cfg1.MODEL
+check("tier1 head_dim 与 26,879,488 锚点一致", trans.count_params(trans.build(m1, seed=0)) == 26_879_488)
+mt1 = trans.build(m1, seed=42).to(dev).eval()
+mn1 = native.build_native(m1, seed=42).to(dev).eval()
+mn1.load_state_dict(mt1.state_dict(), strict=False)
+ids1 = torch.randint(28, m1.vocab_size, (1, m1.context_length), device=dev)
+with torch.no_grad():
+    d1 = (mt1(input_ids=ids1).logits.float() - mn1(input_ids=ids1).logits.float()).abs().max().item()
+check(f"tier1 C1 max|Δ|={d1:.3e} <= 1e-5", d1 <= 1e-5, d1)
+del mt1, mn1, ids1
+torch.cuda.empty_cache()
+
 print("[5] 数值环境是 fp32（对拍前提）")
 with torch.no_grad():
     raw_dtype = mt(input_ids=ids).logits.dtype
