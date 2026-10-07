@@ -91,6 +91,42 @@ try:
     print("[5] data_position 自洽")
     check("position(29) 一致", A["data_position"] == B2["data_position"],
           (A["data_position"], B2["data_position"]))
+
+    print("[6] trans 侧 C4: 连续 30 vs 20(save@20) + HF resume + 10")
+    cfg2 = cfg_mod.load("smoketest")
+    data_dir = ROOT / "data/prepared/tinystories-6400"
+    ar_trans = load("ar_trans_example_c4", "src/training/ar_trans-example.py")
+
+    def fresh_ctx_t(tag: str):
+        run_dir = tmp / f"runT-{tag}"
+        run_dir.mkdir(parents=True)
+        return main_mod.Ctx(cfg2, f"ar-3.2m-trans-smoke-{tag}", data_dir, run_dir,
+                            run_dir / "ckpt")
+
+    # A: 连续 30（不落 HF checkpoint 因而不需要 save_steps）
+    ctxA = fresh_ctx_t("A")
+    A = ar_trans.run(cfg2, STEPS_A, ctxA)
+    wA = {k: v.detach().clone() for k, v in A["model"].state_dict().items()}
+
+    # B: 20 步（step20 落 HF checkpoint）+ resume 到 30
+    ctxB1 = fresh_ctx_t("B1")
+    ar_trans.run(cfg2, STEPS_B, ctxB1, save_steps=STEPS_B)
+    hf_ckpt = sorted((ctxB1.tmp_dir).glob("checkpoint-*"))[-1]
+
+    ctxB2 = fresh_ctx_t("B2")
+    B2t = ar_trans.run(cfg2, STEPS_A, ctxB2,
+                       resume_path=hf_ckpt)
+    wB = B2t["model"].state_dict()
+    wdiff_t = max((wA[k] - wB[k]).abs().max().item() for k in wA)
+    check(f"trans 终点权重 max|Δ| = {wdiff_t:.1e} == 0", wdiff_t == 0.0, wdiff_t)
+    # optimizer state 也得等价
+    oA = A["optimizer"].state_dict(); oB = B2t["optimizer"].state_dict()
+    odiff = 0
+    for k in oA["state"]:
+        for f in ("exp_avg", "exp_avg_sq"):
+            if not torch.equal(oA["state"][k][f], oB["state"][k][f]):
+                odiff += 1
+    check(f"optimizer state 逐位一致（{odiff} 处分歧）", odiff == 0)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

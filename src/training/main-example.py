@@ -329,6 +329,8 @@ def main():
                     help="格子名覆盖（复合阶段按 SPEC 1.2 顺序追加段, 如 ar-3.2m-trans-sft-mini_a2d）")
     ap.add_argument("--dpo-data", default="/mnt/extra/data/raw/minimind_dataset/dpo.jsonl")
     ap.add_argument("--dpo-pairs", type=int, default=4000, help="smoke 上限 pair 数")
+    ap.add_argument("--dump-init", default=None, metavar="DIR",
+                    help="pretrain 阶段: 只构建模型并保存初始化权重到 DIR（G1 同起点的第一半）")
     ap.add_argument("--steps", type=int, default=0, help="0 = config 的 train.steps")
     args = ap.parse_args()
 
@@ -361,6 +363,8 @@ def main():
     tag = "-smoke" if args.tier == "smoketest" else ""
     if args.name and tag and not args.name.endswith(tag):
         args.name += tag  # smoke 产物必须带 -smoke 后缀（SPEC 1.2）
+    if args.stage == "pretrain" and args.base is not None:
+        pass  # pretrain 允许 --base: G1 同起点的第二半（native 侧加载 trans 的 init）
     if args.stage == "a2d":
         if args.impl not in ("mini", "dllm"):
             raise SystemExit("a2d 阶段的 --impl 是 mini|dllm（模型对象由 --base 决定）")
@@ -401,6 +405,16 @@ def main():
     print(f"== {name}: tier={args.tier} impl={args.impl} stage={args.stage} steps={steps} "
           f"params={params:,} data={data_dir} base={args.base}")
     t_start = time.monotonic()
+    if args.dump_init:
+        if args.stage != "pretrain":
+            raise SystemExit("--dump-init 只配 pretrain（G1 同起点的第一半: 构建即存, 不训练）")
+        dump_dir = ROOT / args.dump_init
+        te = _load("src/models/trans-example.py", "trans_example_dump")
+        model = te.build(cfg.MODEL, seed=cfg.TRAIN.seed)
+        ctx2 = Ctx(cfg, args.dump_init, data_dir, run_dir, dump_dir)
+        ctx2.save_ckpt(model, "dump-init")
+        print(f"== init weights dumped -> {dump_dir} (seed={cfg.TRAIN.seed}, params={params:,})")
+        return
     if args.stage in ("a2d", "dlm"):
         batcher = None
         if args.sft_data:
@@ -415,7 +429,7 @@ def main():
         sft_mod = _load("src/training/sft-example.py", "sft_example_main")
         res = sft_mod.run_sft(cfg, steps, ctx, impl=args.impl, base_ckpt=args.base)
     else:
-        res = impl.run(cfg, steps, ctx)
+        res = impl.run(cfg, steps, ctx, init_weights_path=args.base)
     wall_train = time.monotonic() - t_start
 
     # 收尾: eval (fp32) -> 采样 -> state -> summary (eval/采样不进 train-only 分母)

@@ -97,8 +97,13 @@ def sample(model, prompt_ids: list[int], max_new_tokens: int = 32,
 
 
 def run(cfg, steps: int, ctx, dataset=None, positioner=None,
-        init_weights_path: str | Path | None = None) -> dict:
-    """dataset/positioner: SFT 层的注入点 —— 缺省为 Corpus+Batches 纯函数顺序。"""
+        init_weights_path: str | Path | None = None,
+        save_steps: int | None = None, resume_path: str | Path | None = None) -> dict:
+    """dataset/positioner: SFT 层的注入点 —— 缺省为 Corpus+Batches 纯函数顺序。
+
+    save_steps/resume_path: C4 trans 侧 —— save_steps 开启时 HF 自己存完整
+    checkpoint（optimizer/scheduler/RNG; 权重 + train_state 由 main 统一管的
+    分工不变）; resume_path 给出时从 HF checkpoint 续跑。"""
     t = cfg.TRAIN
     if dataset is None:
         corpus = Corpus(ctx.data_dir, block_size=cfg.BLOCK_SIZE, vocab=cfg.VOCAB,
@@ -133,7 +138,9 @@ def run(cfg, steps: int, ctx, dataset=None, positioner=None,
         dataloader_num_workers=0,
         # smoke 步数小于 log_every 时, 最后一四分之一至少出一个 loss 点, 否则 "loss 能降" 无从判定
         logging_steps=min(t.log_every, max(1, steps // 4)),
-        save_strategy="no",          # 权重存盘由 main 统一管（safetensors + train_state）
+        save_strategy="steps" if save_steps else "no",
+        save_steps=save_steps if save_steps else 500,  # 只在 C4 对拍路径开启
+        save_total_limit=1,
         report_to=[],
         disable_tqdm=True,
         remove_unused_columns=False,
@@ -145,7 +152,8 @@ def run(cfg, steps: int, ctx, dataset=None, positioner=None,
                       callbacks=[_MeterCallback(ctx, meter, tokens_per_step, "trans")])
     from transformers.trainer_callback import PrinterCallback
     trainer.remove_callback(PrinterCallback)   # disable_tqdm 下它仍逐条 print log dict
-    trainer.train()
+    trainer.train(
+        resume_from_checkpoint=str(resume_path) if resume_path is not None else None)
 
     # HF 的 log 是区间均值, LossHistory 记的就是这些点（口径差异记进 summary）
     history = _mx.LossHistory()
