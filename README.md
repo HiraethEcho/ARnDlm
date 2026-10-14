@@ -5,6 +5,8 @@
 
 - **契约**：[SPEC.md](SPEC.md) —— 五组对比、命名规则、C1–C5 验收、测量口径
 - **计划**：[PLAN.md](PLAN.md) —— 阶段表与验收归属
+- **现状**：[STATE.md](STATE.md) —— 现在能跑什么（数据/训练/评测能力与边界）
+- **施工顺序**：[ROADMAP.md](ROADMAP.md) —— x.py 按什么顺序填、每格怎么验收
 - **使用**：[USAGE.md](USAGE.md) —— 配环境、备数据、跑训练、评测
 - **知识**：[notes/](notes/README.md)（事实笔记）· [logs/dev/](logs/dev/README.md)（开发笔记）
 

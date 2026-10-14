@@ -91,7 +91,7 @@ SPEC 6.4 的 DLM 失败模式（loss 降但复读）如实呈现，不是 bug；
 
 | 项 | 内容 |
 |---|---|
-| `main --stage dlm` | Direct-DLM（随机初始化，复用 a2d 循环 base=None）；双 impl 轨迹逐位相同 |
+| `main --stage dlm` | Direct-DLM（随机初始化）。**2026-10-14 更正**：当时报的「双 impl 轨迹逐位相同」是假象——旧 `run_a2d` 的分支写作 `if impl == "mini" ... else dllm`，`--impl trans` 静默走了 dllm loss，两条从来不是两条。抽出 `dlm-example.py` 修复后：trans eval 5.0192 / dllm 5.0691（相对差 1.0%，同 C2 量级） |
 | `main --stage a2d --sft-data` | DLM-SFT：a2d 循环吃 [B,2,L] SFT 批，span 限制加噪（T4f 语义复用） |
 | `main --stage dpo` | DPO：冻结 ref 副本 + -logsigmoid(β·margin)，lr×0.1；summary 带 held-out margin acc |
 | `dpo-example.py` | pair 编码（右 pad 定长，response 区间 logprob），PairBatcher 纯函数序 |
@@ -151,6 +151,15 @@ warmup 整点），test/01 [7] 期望值同步。**全部矩阵产物已按新�
 trans-mini_a2d-sft 的第三个 prompt rep-4 ≈ 0.9-0.97; dlm-sft 800 步档
 0.66-0.75 也回落失败）。smoke 口径下的诚实结论：**双向去噪的复读率对
 底座/步数敏感**, tier1 上才值得下结论（SPEC 6.4: rep-4 不能给实现排名）。
+
+### 2026-10-14 补缺（两个缺口, 各带一个真 bug）
+
+1. `dlm-example.py` 补齐（Direct-DLM 独立成格）。修掉：旧 `run_a2d` 分支写作
+   `if impl == "mini" ... else dllm`，`--stage dlm --impl trans` 静默走 dllm loss。
+2. `test/16-dpo.py` 补齐（19 项）。修掉：`load_dpo_pairs` 的 `max_pairs` 数的是行
+   不是 pair —— 旧 `--dpo-pairs 1000` 实际只训 500 对。重跑 DPO：
+   margin acc trans 0.700 / native 0.645（各 1,000 对 × 200 步）。
+3. 测试总数 15 -> 16, 全 PASS。
 
 ### 纪律记录
 

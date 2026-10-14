@@ -42,9 +42,10 @@ def load_dpo_pairs(path: str | Path, max_pairs: int = 4000,
     tok = _load("common/tokenizer-example.py", "tokenizer_example_dpo").Tok()
     rows = []
     dropped = 0
+    n_pairs_done = 0
     with open(path, encoding="utf-8") as f:
         for line in f:
-            if len(rows) >= max_pairs:
+            if n_pairs_done >= max_pairs:   # 按 **pair** 计数（不是行; 一对两行）
                 break
             d = json.loads(line)
             q = d["chosen"][0]["content"]
@@ -63,17 +64,21 @@ def load_dpo_pairs(path: str | Path, max_pairs: int = 4000,
                     mask[i] = True  # response 区间（含 EOS）
                 return ids, mask
 
+            pair_rows = []
             for key in ("chosen", "rejected"):
                 ids, mask = enc_pair(d[key])
                 if len(ids) < total_len:
                     pad = total_len - len(ids)
                     ids = ids + [PAD] * pad
                     mask = mask + [False] * pad
-                rows.append((ids, mask))
+                pair_rows.append((ids, mask))
+            rows.extend(pair_rows)
+            n_pairs_done += 1
     seqs = np.asarray([r[0] for r in rows], dtype=np.int64)
     masks = np.asarray([r[1] for r in rows], dtype=bool)
     return {"seq": seqs, "resp_mask": masks,
-            "n_pairs": len(rows) // 2, "dropped": dropped}
+            "n_pairs": len(rows) // 2, "dropped": dropped,
+            "requested_pairs": max_pairs}
 
 
 class PairBatcher:

@@ -415,7 +415,10 @@ def main():
         ctx2.save_ckpt(model, "dump-init")
         print(f"== init weights dumped -> {dump_dir} (seed={cfg.TRAIN.seed}, params={params:,})")
         return
-    if args.stage in ("a2d", "dlm"):
+    if args.stage == "dlm":
+        dlm_mod = _load("src/training/dlm-example.py", "dlm_example_main")
+        res = dlm_mod.run(cfg, steps, ctx, args.impl)
+    elif args.stage == "a2d":
         batcher = None
         if args.sft_data:
             sftx = _load("src/training/sft-example.py", "sft_example_a2d")
