@@ -147,7 +147,7 @@ AR 用因果 mask，DLM 去掉因果 mask（**权重一个都不动**）。
 
 ### 3.3 语料
 
-两条 track 共用一套数据管道：源语料（minimind 数据集，中文对话）由 `common/prepare.py`
+两条 track 共用一套数据管道：源语料（minimind 数据集，中文对话）由 `prepare/prepare.py`
 下载并 tokenize，每篇文档 `[BOS] … [EOS]` 包裹拼接，按 context_length 切定长块，
 落盘 `data/prepared/minimind3-6400/`（tokens.bin / doc_lengths.npy / meta.json）。
 自洽约束：三件文件互相对账；MASK id 不允许出现在正文；vocab 与 tokenizer 断言一致。
@@ -178,7 +178,7 @@ smoke 档永远取**尽量轻和快**的组合：最小模型（本节形状）�
 ### 4.2 Tier 1（正式对照，已定档）
 
 ```yaml
-hidden_size: 512 # 已实测定档（数字见 logs/dev/02-hardware-perf.md）
+hidden_size: 512 # 已实测定档（数字见 logs/dev-old/02-hardware-perf.md）
 num_layers: 8
 num_attention_heads: 8
 num_key_value_heads: 4
@@ -189,7 +189,7 @@ context_length: 512
 **先测吞吐阶梯，再定参数量。** 参数量、序列长度、数据量是耦合的，先拍数字再测是本末倒置。
 
 实测已回收：参数量 26,879,488（→ 命名 `ar-26.9m-*`），B8 / ctx512 下
-train-only 7,995 tok/s、332M token ≈ 11.6 h。完整阶梯见 `logs/dev/02-hardware-perf.md`。
+train-only 7,995 tok/s、332M token ≈ 11.6 h。完整阶梯见 `logs/dev-old/02-hardware-perf.md`。
 
 ## 5. 环境
 
@@ -259,35 +259,40 @@ transformers 4.57 里「关掉因果 mask」的正确做法是**传一个 4D 全
 ```text
 AGENTS.md  SPEC.md  PLAN.md      # 契约与计划（不装代码）
 notes/     logs/dev/             # 知识与手写记录（logs/run/ 不进 git）
-common/                    # 底座：每条实现 x 每个阶段都用
-  config.py  seed.py  device.py  tokenizer.py(+tokenizer.json)
-  data.py    prepare.py  metrics.py
+logs/dev-old/  logs/dev-legacy/  # 归档（只读）
+models/                    # 模型层
+  config.py  tokenizer.py(+tokenizer.json)
+  model-trans.py（transformers 包）    model.py（纯 torch 手写）   # G1 的两条实现
+prepare/                   # 共用件：seed.py device.py data.py prepare.py metrics.py
+                           # sft-prepare.py（SFT prepared 生产者）
+trainer/                   # 主干与各训练入口
+  main.py state.py ar_trans.py ar_native.py sft.py dlm.py dpo.py
+a2d/                       # a2d.py（共享层）+ a2d_mini.py / a2d_dllm.py（两个入口）
+scripts/                   # 入口 chat.py（四门槛 + rep-4）repl.py collect_results.py
+                           # 环境（setup_env / install_dllm / setup_symlinks + patches）
 configs/                   # smoketest.yaml / tier1.yaml
-scripts/                   # 环境（setup_env / install_dllm / setup_symlinks + patches）
-src/                       # 格子专属代码
-  models/  trans.py + native/（包，接口对齐 trans）   # G1 的两条实现
-  training/ main.py ar_trans.py ar_native.py state.py
-            sft.py dlm.py a2d_dllm.py a2d_mini.py dpo.py
-  eval/    chat.py（能 chat 四门槛 + rep-4）
+test/                      # 01-16 验收测试
+common/  src/              # 只放 -example.py 参考实现
 data -> /mnt/extra  checkpoints -> /mnt/extra   # 大文件软链（gitignore）
 .venv -> 主仓 .venv              # uv 环境
 ```
 
 代码成对：`x.py` 骨架（只有注释，待填）+ `x-example.py` 参考实现（AI 写，验收获收时跑它出正确行为）。
+两者**不同目录**（骨架在 `models/` `prepare/` `trainer/` `a2d/` `scripts/`），对照表在 `ROADMAP.md`。
 
 
 ## 8. 任务网格
 
-行 = 模型对象，列 = 阶段。同一入口（`src/training/main.py`）用 `--impl` / `--base` 切；
+行 = 模型对象，列 = 阶段。同一入口（`trainer/main.py`）用 `--impl` / `--base` 切；
 a2d / sft 各 base 共用同一对层，A/B 的轴是**用不用包**，不是加载哪个 base。
-依赖单向：common 被 src 用；a2d 可以读 AR 权重，但不 import AR 训练循环。
+依赖单向：底座（`models/` + `prepare/`）被上层用；a2d 可以读 AR 权重，但不 import AR 训练循环。
 
 | base          | pretrain                                                  | a2d                                        | sft         | rl (dpo)                          |
 | ------------- | --------------------------------------------------------- | ------------------------------------------ | ----------- | --------------------------------- |
-| **ar-trans**  | `src/training/ar_trans.py`（Trainer 用包）                 | `a2d_dllm.py`（调包）/ `a2d_mini.py`（手写） | `src/training/sft.py` | `src/training/dpo.py`             |
-| **ar-native** | `src/training/ar_native.py`（native 包）                   | ↑ 同一对层，`--impl` 切                     | 同 sft 层   | 同 dpo 层                          |
+| **ar-trans**  | `trainer/ar_trans.py`（Trainer 用包）                      | `a2d/a2d_dllm.py`（调包）/ `a2d/a2d_mini.py`（手写）+ `a2d/a2d.py` 共享层 | `trainer/sft.py` | `trainer/dpo.py`            |
+| **ar-native** | `trainer/ar_native.py`（native 包）                        | ↑ 同一对层，`--impl` 切                     | 同 sft 层   | 同 dpo 层                          |
 | **qwen3-0.6b** | —（现成权重）                                             | ↑ 同层 + LoRA 分支（peft）                  | 同层，LoRA  | **放弃**（DPO）                    |
-| **dlm**       | `src/training/dlm.py`（trans=手写 masked CE / dllm=调包）   | —                                          | 同 sft 层   | —（DLM 无序列 logprob，需 ELBO）   |
+| **dlm**       | `trainer/dlm.py`（trans=手写 masked CE / dllm=调包）        | —                                          | 同 sft 层   | —（DLM 无序列 logprob，需 ELBO）   |
 
 ### 8.1 依赖顺序
 

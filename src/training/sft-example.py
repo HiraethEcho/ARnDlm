@@ -1,4 +1,4 @@
-"""src/training/sft-example.py -- src/training/sft.py 的参考实现。
+"""src/training/sft-example.py -- trainer/sft.py 的参考实现。
 
 chat 模板 + 只在 assistant 区间算 loss（SPEC 6.2 T4a/T4b）。
 ar-trans 与 ar-native 两个 base 共用这一层（SPEC §8: 同 sft 层）。

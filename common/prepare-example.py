@@ -1,4 +1,4 @@
-"""common/prepare-example.py -- common/prepare.py 的参考实现。
+"""common/prepare-example.py -- prepare/prepare.py 的参考实现。
 
 下载/整理语料为 tokens.bin + doc_lengths.npy + meta.json（与训练无关的提前准备）。
 输出格式与盘上已就位的 prepared 目录一致（test/04 实测过）:

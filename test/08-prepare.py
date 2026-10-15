@@ -1,25 +1,20 @@
-"""test/08-prepare.py -- prepare-example 的验收（落盘格式与 data-example 对接 + 大声跳过）。
+"""test/08-prepare.py -- prepare/prepare.py 的验收（落盘格式与 data-example 对接 + 大声跳过）。
 
 跑法: .venv/bin/python test/08-prepare.py
 """
-import importlib.util
 import json
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+
 import hashlib
 import numpy as np
 
+from _impl import load, MODE
+
 ROOT = Path(__file__).resolve().parent.parent
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 prep = load("prepare_example", "common/prepare-example.py")
@@ -80,4 +75,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/08-prepare")
+print(f"PASS test/08-prepare [IMPL={MODE}]")

@@ -1,4 +1,4 @@
-"""src/training/ar_native-example.py -- src/training/ar_native.py 的参考实现。
+"""src/training/ar_native-example.py -- trainer/ar_native.py 的参考实现。
 
 G1 格 2: native 包走同一条 main，产出 ar-<size>-native。
 自管逐步循环; 每一步的秒数只进 train-only 分母（TpsMeter.add_train）。

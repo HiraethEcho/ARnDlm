@@ -1,4 +1,4 @@
-"""src/training/dpo-example.py -- src/training/dpo.py 的参考实现。
+"""src/training/dpo-example.py -- trainer/dpo.py 的参考实现。
 
 DPO 偏好对训练（SPEC §8 rl 列, 只在 AR 行）。数据 = minimind dpo.jsonl
 {chosen: [user, assistant], rejected: [...]} —— 同 prompt 异回答（实测

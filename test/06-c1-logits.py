@@ -4,21 +4,15 @@
 顺带验: 参数量 3,213,056（smoketest 解析值）、tied、is_causal=False 双向路径。
 跑法: .venv/bin/python test/06-c1-logits.py
 """
-import importlib.util
 import sys
 from pathlib import Path
 
 import torch
 
+from _impl import load, MODE
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))  # example 模块内部 import transformers 等时从仓库根找包
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("config_example", "common/config-example.py")
@@ -82,7 +76,6 @@ with torch.no_grad():
 check("双向与因果确实不同（开关有效）", (lt_bi - lt_ca).abs().max().item() > 1e-3)
 
 print("[5b] tier1 形状的 C1（26.9M, 正式对照前的守门）")
-import importlib
 cfg1 = cfg_mod.load("tier1")
 m1 = cfg1.MODEL
 check("tier1 head_dim 与 26,879,488 锚点一致", trans.count_params(trans.build(m1, seed=0)) == 26_879_488)
@@ -105,4 +98,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print(f"PASS test/06-c1-logits  (C1 因果 {diff:.3e} / 双向 {diff_bi:.3e}, 阈值 1e-5)")
+print(f"PASS test/06-c1-logits  (C1 因果 {diff:.3e} / 双向 {diff_bi:.3e}, 阈值 1e-5) [IMPL={MODE}]")

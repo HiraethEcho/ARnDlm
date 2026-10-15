@@ -1,4 +1,4 @@
-"""src/training/a2d_mini-example.py -- src/training/a2d_mini.py 的参考实现。
+"""src/training/a2d_mini-example.py -- a2d/a2d_mini.py 的参考实现。
 
 A2D，minimind-dlm 风格手写 masked CE（G5 的手写侧）。两个 base 共用这一层：
   trans  -> 双向 = 传 4D 全零 attention mask（4.57 的 create_causal_mask 原样放行）

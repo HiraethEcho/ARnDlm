@@ -1,4 +1,4 @@
-"""common/metrics-example.py -- common/metrics.py 的参考实现。
+"""common/metrics-example.py -- prepare/metrics.py 的参考实现。
 
 SPEC 6.4 的口径逻辑, 纯 python/numpy, 不用 torch:
 - TpsMeter: train-only 与 wall 两个吞吐口径（验证/采样不进 train-only 分母）

@@ -1,4 +1,4 @@
-"""src/eval/repl-example.py -- src/eval/repl.py 的参考实现。
+"""src/eval/repl-example.py -- scripts/repl.py 的参考实现。
 
 终端下直观看模型输出，两种模式：
   pretrain -- 续写模式：输入 -> encode(bos=True) -> 续 48 token（每轮独立, 无历史）

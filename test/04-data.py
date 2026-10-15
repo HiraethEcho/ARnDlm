@@ -1,19 +1,18 @@
-"""test/04-data.py -- data-example 的验收（四道自检 / 包裹正确 / 批次纯函数 / epoch 重排）。
+"""test/04-data.py -- prepare/data.py 的验收（四道自检 / 包裹正确 / 批次纯函数 / epoch 重排）。
 
 跑法: .venv/bin/python test/04-data.py
 """
-import importlib.util
 import json
 import sys
 import tempfile
 from pathlib import Path
 
+
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("data_example", ROOT / "common/data-example.py")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
+from _impl import load, MODE
+
+mod = load("data_example", "common/data-example.py")
 
 failures = []
 
@@ -142,4 +141,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/04-data")
+print(f"PASS test/04-data [IMPL={MODE}]")

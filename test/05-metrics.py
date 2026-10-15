@@ -1,15 +1,14 @@
-"""test/05-metrics.py -- metrics-example 的验收（双口径分开 / rep4 两端 / 窗口均值）。
+"""test/05-metrics.py -- prepare/metrics.py 的验收（双口径分开 / rep4 两端 / 窗口均值）。
 
 跑法: .venv/bin/python test/05-metrics.py
 """
-import importlib.util
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("mx", ROOT / "common/metrics-example.py")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
+from _impl import load, MODE
+
+
+mod = load("mx", "common/metrics-example.py")
 
 failures = []
 
@@ -77,4 +76,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/05-metrics")
+print(f"PASS test/05-metrics [IMPL={MODE}]")

@@ -1,4 +1,4 @@
-"""src/training/state-example.py -- src/training/state.py 的参考实现。
+"""src/training/state-example.py -- trainer/state.py 的参考实现。
 
 训练状态的存/取: step、optimizer、批次位置、RNG 快照（C4 resume 的另一半;
 权重走 save_pretrained 的 safetensors, 这里只管额外状态 pickle）。

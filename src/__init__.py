@@ -1,2 +1,4 @@
-"""src/ -- 格子专属代码（模型实现、训练入口、评测）。与 common/ 的底座分开。
+"""src/ -- 参考实现（`-example.py`）存放处。
+
+正式骨架在 `models/`、`prepare/`、`trainer/`、`a2d/`、`scripts/`。
 """

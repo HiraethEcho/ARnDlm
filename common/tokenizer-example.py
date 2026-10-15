@@ -1,4 +1,4 @@
-"""common/tokenizer-example.py -- common/tokenizer.py 的参考实现。
+"""common/tokenizer-example.py -- models/tokenizer.py 的参考实现。
 
 6400-vocab BPE 的 encode / decode（默认不加 special token）。
 读 common/tokenizer.json（tokenizers 库直接吃这个格式）。

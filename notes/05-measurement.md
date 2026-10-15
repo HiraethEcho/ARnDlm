@@ -145,7 +145,7 @@ FLOPs/step ≈ 6 × N_params × tokens_per_step        (前向 1× + 反向 2×)
 | 有效算力 23% | **在 kernel 效率上** |
 
 然后**逐项测每个 kernel** 才能知道是哪个慢 —— 结论写在
-`logs/dev/02-hardware-perf.md` (数字继承自 dlm 项目), 测它的脚本是
+`logs/dev-old/02-hardware-perf.md` (数字继承自 dlm 项目), 测它的脚本是
 `~/Projects/dlm/test/05-sdpa-attention.py` (**本项目没搬**, 见下)。
 本机的答案是 attention 的 backward。
 

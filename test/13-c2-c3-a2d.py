@@ -11,21 +11,16 @@ C2 = transformers base；C3 = native base（set_causal(False)）。
 实测锚点：对齐后相对差 0.0（好于 legacy 7.6e-08）。
 跑法: .venv/bin/python test/13-c2-c3-a2d.py
 """
-import importlib.util
 import sys
 from pathlib import Path
 
+
 import torch
+
+from _impl import load, MODE
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("config_example", "common/config-example.py")
@@ -145,4 +140,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/13-c2-c3-a2d")
+print(f"PASS test/13-c2-c3-a2d [IMPL={MODE}]")

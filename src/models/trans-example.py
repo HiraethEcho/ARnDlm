@@ -1,4 +1,4 @@
-"""src/models/trans-example.py -- src/models/trans.py 的参考实现。
+"""src/models/trans-example.py -- models/model-trans.py 的参考实现。
 
 ModelCfg -> Qwen3Config -> Qwen3ForCausalLM（transformers 4.57.0, SPEC §5 钉版）。
 字段全部显式写 —— 默认值随版本变, 静默走默认的字段会变成幽灵 A/B 差。

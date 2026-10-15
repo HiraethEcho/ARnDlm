@@ -1,24 +1,19 @@
-"""test/09-sft.py -- sft-example 的验收（SPEC 6.2: T4b 区间正确 / T4a 展平 / T4f 无噪区间外 / 批次纯函数）。
+"""test/09-sft.py -- trainer/sft.py 的验收（SPEC 6.2: T4b 区间正确 / T4a 展平 / T4f 无噪区间外 / 批次纯函数）。
 
 跑法: .venv/bin/python test/09-sft.py
 """
-import importlib.util
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+
 import numpy as np
+
+from _impl import load, MODE
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("config_example", "common/config-example.py")
@@ -110,4 +105,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/09-sft")
+print(f"PASS test/09-sft [IMPL={MODE}]")

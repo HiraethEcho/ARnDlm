@@ -1,4 +1,4 @@
-"""common/device-example.py -- common/device.py 的参考实现。
+"""common/device-example.py -- prepare/device.py 的参考实现。
 
 设备选择（ROCm 下仍是 cuda API）+ dtype 名到 torch.dtype 的转换 + autocast 上下文。
 宁可报错也不静默退回 CPU（torch 默认 CPU 且 cuda.is_available()=True 时毫无异常，

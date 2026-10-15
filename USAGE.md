@@ -32,25 +32,25 @@ python -m common.prepare --dataset minimind --vocab 6400
 
 ## 3. 训练
 
-全部走同一个入口 `src/training/main.py`，换实现 / 换阶段不改命令形状：
+全部走同一个入口 `trainer/main.py`，换实现 / 换阶段不改命令形状：
 
 ```sh
 # 冒烟：代码能跑通、loss 能下降（约 1 分钟，GPU；名字带 -smoke 后缀）
-python -m src.training.main --tier smoketest --impl trans --steps 20
+python -m trainer.main --tier smoketest --impl trans --steps 20
 
 # 正式 pretrain（tier1，26.9M，约 11.6 h @332M token）
-python -m src.training.main --tier tier1 --impl trans     # transformers + Trainer 路线
-python -m src.training.main --tier tier1 --impl native    # 纯 torch 包路线
+python -m trainer.main --tier tier1 --impl trans     # transformers + Trainer 路线
+python -m trainer.main --tier tier1 --impl native    # 纯 torch 包路线
 
 # SFT：接某个 pretrain 权重，只在 assistant 区间算 loss
-python -m src.training.main --stage sft --base checkpoints/ar-26.9m-trans
+python -m trainer.main --stage sft --base checkpoints/ar-26.9m-trans
 
 # A2D：同 corruption 下两条实现互为对照（G5）
-python -m src.training.main --stage a2d --impl dllm --base checkpoints/ar-26.9m-trans-sft
-python -m src.training.main --stage a2d --impl mini --base checkpoints/ar-26.9m-trans-sft
+python -m trainer.main --stage a2d --impl dllm --base checkpoints/ar-26.9m-trans-sft
+python -m trainer.main --stage a2d --impl mini --base checkpoints/ar-26.9m-trans-sft
 
 # Direct-DLM：跳过 AR，从头训扩散语言模型（G2 的 dlm 侧）
-python -m src.training.main --stage dlm --impl trans
+python -m trainer.main --stage dlm --impl trans
 ```
 
 checkpoint 名就是 pipeline：`ar-26.9m-trans-sft-dllm_a2d` 这类，规则见 SPEC §1.2。
@@ -60,7 +60,7 @@ checkpoint 名就是 pipeline：`ar-26.9m-trans-sft-dllm_a2d` 这类，规则见
 
 ```sh
 # 能 chat 四门槛（SPEC 6.3）：assistant eval loss / rep-4 / 三 prompt 格式 / 不回声
-python -m src.eval.chat --base checkpoints/ar-26.9m-native-sft
+python -m scripts.chat --base checkpoints/ar-26.9m-native-sft
 
 # REPL：终端下直观查看模型输出（两种模式）
 .venv/bin/python src/eval/repl-example.py \
@@ -88,7 +88,7 @@ DLM 系的结论必须报 repetition rate，不能只报 loss；rep-4 在短样�
 - benchmark ≥ 400 步，丢弃预热，`Predicted` / `Measured` 分列；
 - 跨实现对拍用同 seed 同输入，逐位比较，不许看「两个相近的数字」。
 
-## 7. 现在就能跑的命令（example 实现，分支 `night/example-codes`）
+## 7. 现在就能跑的命令（example 实现）
 
 骨架 `x.py` 待填；`x-example.py` 是能直接跑的参考实现（命令形状与上表一致，
 但不走 `python -m`，因为连字符文件名不能被 import）：
@@ -108,8 +108,11 @@ DLM 系的结论必须报 repetition rate，不能只报 loss；rep-4 在短样�
 测试套件（全部应 PASS，从仓库根目录跑）：
 
 ```sh
-for t in test/0*.py test/10-chat.py test/11-repl.py; do .venv/bin/python "$t" | tail -1; done
+for t in test/0*.py test/1*.py; do .venv/bin/python "$t" | tail -1; done
 ```
+
+对拍骨架：加 `IMPL=x`（缺省 `example` 跑参考实现）。每个测试末行会打印 `[IMPL=…]`，两次跑
+数字逐位一致才算过。
 
 | 测试 | 验什么 |
 |---|---|
@@ -123,5 +126,5 @@ for t in test/0*.py test/10-chat.py test/11-repl.py; do .venv/bin/python "$t" | 
 
 ## 8. 排障
 
-坑与解法沉在两处：硬件与本机问题见 `logs/dev/`，与机器无关的机制问题见 `notes/`
+坑与解法沉在两处：硬件与本机问题见 `logs/dev/`（旧笔记在 `logs/dev-old/`），与机器无关的机制问题见 `notes/`
 （如 07 的 pyyaml 浮点与 RNG 命名、03 的 DLM 复读表现）。

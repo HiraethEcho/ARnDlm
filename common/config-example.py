@@ -1,4 +1,4 @@
-"""common/config-example.py -- common/config.py 的参考实现。
+"""common/config-example.py -- models/config.py 的参考实现。
 
 pyyaml 读 configs/<tier>.yaml -> frozen dataclass(MODEL/TRAIN/DATA) + 共享常量。
 未知键 / 缺键 / 浮点写成 3e-4（无小数点, YAML 1.1 会给 str）都在加载时报错,

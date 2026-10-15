@@ -1,4 +1,4 @@
-"""src/models/native/model-example.py -- src/models/native/model.py 的参考实现。
+"""src/models/native/model-example.py -- models/model.py 的参考实现。
 
 纯 torch.nn 手写 Qwen-style decoder（RoPE / RMSNorm / SwiGLU / GQA / QK-Norm / tied）。
 必须与 transformers.Qwen3ForCausalLM 是同一个模型: 同参数名、同形状、同算术 ——

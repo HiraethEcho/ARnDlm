@@ -1,23 +1,16 @@
-"""test/02-seed-device.py -- seed-example / device-example 的验收（PLAN P1: 同 seed 三路一致）。
+"""test/02-seed-device.py -- prepare/seed.py / prepare/device.py 的验收（PLAN P1: 同 seed 三路一致）。
 
 跑法: .venv/bin/python test/02-seed-device.py
 """
-import importlib.util
 import random
 import sys
 from pathlib import Path
 
+
 import numpy as np
 import torch
 
-ROOT = Path(__file__).resolve().parent.parent
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+from _impl import load, MODE
 
 
 seed_mod = load("seed_example", "common/seed-example.py")
@@ -110,4 +103,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/02-seed-device")
+print(f"PASS test/02-seed-device [IMPL={MODE}]")

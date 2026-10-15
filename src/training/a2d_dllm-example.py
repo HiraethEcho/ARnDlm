@@ -1,4 +1,4 @@
-"""src/training/a2d_dllm-example.py -- src/training/a2d_dllm.py 的参考实现。
+"""src/training/a2d_dllm-example.py -- a2d/a2d_dllm.py 的参考实现。
 
 A2D，调 dllm 包（G5 的 dllm 侧）。**故意不 import 手写的 corrupt/a2d_loss** ——
 这一格存在的意义就是跑上游路径，复制 objective 会让 C2 的对照失效。

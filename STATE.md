@@ -1,4 +1,4 @@
-# STATE — 当前能跑什么（2026-10-07，main `0bfe901`）
+# STATE — 当前能跑什么（2026-10-15，分支 `dev`，工作树未提交）
 
 一句话：**`-example.py` 全部可跑，`x.py` 全部还是骨架。** 本文只记事实与能力边界；
 契约在 SPEC.md，计划在 PLAN.md，施工顺序在 ROADMAP.md。
@@ -9,8 +9,11 @@
 |---|---|---|
 | 内容 | 4–6 行 docstring，0 行代码 | 完整实现 + 每块功能注释 |
 | 谁写 | 你 | AI |
+| 在哪 | `models/` `prepare/` `trainer/` `a2d/` `scripts/`（新布局，五个目录） | `common/` 与 `src/` |
 | 验收 | 填完与 `-example` 同 seed 同输入**逐位对拍** | 各 `test/NN-*.py` |
 | 现在能干嘛 | 不能跑 | **能下载数据、能训练、能评测、能 REPL** |
+
+`prepare/` 含 `metrics.py`（测量口径）与 `sft-prepare.py`（SFT 数据生产者）；旧开发笔记在 `logs/dev-old/`。
 
 `x-example.py` 之间用 importlib 桥互相加载（文件名有连字符，不能 import）——
 这只是临时手段，x.py 填完后桥全部拆掉换正常 import（见 ROADMAP 最后一格）。
@@ -22,7 +25,7 @@
 | prepared 目录 | token | 文档/块 | 用途 |
 |---|---:|---:|---|
 | `minimind3-6400` | 332,495,324 | 1,270,238 docs | **tier1 主实验**语料 |
-| `wikitext-6400` | 194,509,960 | 29,444 docs | 英文书面语（2026-10-07 新加） |
+| `wikitext-6400` | 194,509,960 | 29,444 docs | 英文书面语 |
 | `wikipedia-zh-6400` | 38,571,096 | 10,000 docs | 中文百科 |
 | `openwebtext-6400` | 17,174,450 | 10,000 docs | 英文网络语料 |
 | `tinystories-6400` | 3,110,358 | 10,000 docs | **smoke 默认语料** |
@@ -80,6 +83,8 @@ dpo.jsonl 51 M/17,166 对、rlaif、agent_rl×2、lora_×3）、`tinystories.jso
 | Direct-DLM→SFT（trans/dllm） | 6.50 | t2 失败（0.66-0.75） |
 | DPO（trans/native，1,000 对 × 200 步） | loss 0.693→低 | margin acc 0.700 / 0.645 |
 
+Direct-DLM pretrain 两 impl 的 eval：5.0192（trans）/ 5.0691（dllm），相对差 1.0%（步数未记）。
+
 完整表：`RESULTS-smoke.md`（`scripts/collect_results.py` 生成，`--gate` 可作硬门禁）。
 **结论一句话**：smoke 上 AR 系能 chat，DLM 系 loss 降但复读率偏高——SPEC 6.4 明说
 rep-4 不能给实现排名，正式结论要 tier1。
@@ -97,8 +102,9 @@ rep-4 不能给实现排名，正式结论要 tier1。
 .venv/bin/python src/eval/repl-example.py --ckpt checkpoints/ar-3.2m-trans-mini_a2d-smoke \
     --mode chat --sampler dlm           # DLM/A2D 模型: 双向块状揭示
 
-# 16 个测试（全部应 PASS，从仓库根跑）
+# 16 个测试（全部应 PASS，从仓库根跑；末行打印 [IMPL=example]）
 for t in test/0*.py test/1*.py; do .venv/bin/python "$t" | tail -1; done
+IMPL=x .venv/bin/python test/01-config.py   # 加载目标换成新布局的骨架（骨架空时会报错）
 ```
 
 ## 6. 方便调的参数（configs/*.yaml）
@@ -122,14 +128,4 @@ CLI 层额外可调：`--steps`、`--name`、`--data`、`--dpo-pairs`、`--sft-d
 4. **DPO 只到 smoke**（1,000 对 × 200 步）；RL 只做 DPO，无 PPO/GRPO。
 5. **rep-4 门禁在 smoke 档不达标**（这是现象不是 bug，tier1 才判）。
 6. native 与 HF 的同 seed 初始权重**不逐位相等**（用 `--base` 共享 init 绕过）。
-7. ~~`src/training/dlm.py` 没有 `dlm-example.py` 对~~ —— **2026-10-14 已补**：
-   `src/training/dlm-example.py`（Direct-DLM 独立成格）。补的过程中修掉一个真 bug：
-   旧代码里 `--stage dlm --impl trans` 静默走了 dllm loss（分支写成
-   `if impl == "mini" ... else dllm`），所以「两条 impl 轨迹逐位相同」是假象。
-   修后实测：trans eval 5.0192 / dllm 5.0691（相对差 1.0%）。
-8. ~~DPO 没有专项测试~~ —— **2026-10-14 已补** `test/16-dpo.py`（19 项：shift 语义
-   逐位、policy==ref -> loss==ln2、margin 正负方向、lr×0.1、pair 相邻映射、数据格式）。
-   补测试时修掉 `load_dpo_pairs` 的 `max_pairs` 语义 bug（数的是**行**不是 pair：
-   旧 `--dpo-pairs 1000` 实际只训 500 对）；重跑后 DPO 实测 margin acc
-   trans 0.700 / native 0.645（各 1,000 对 × 200 步）。
-9. 无 CI、无 push 脚本；`logs/run/` 与 `checkpoints/` 不进 git。
+7. 无 CI、无 push 脚本；`logs/run/` 与 `checkpoints/` 不进 git。

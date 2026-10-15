@@ -1,4 +1,4 @@
-"""test/11-repl.py -- repl-example 端到端: 四个 ckpt x 两种模式, 管道喂输入。
+"""test/11-repl.py -- scripts/repl.py 端到端: 四个 ckpt x 两种模式, 管道喂输入。
 
 断言: 正常退出、有 model> 输出、chat 模式多轮不炸。
 跑法: .venv/bin/python test/11-repl.py
@@ -7,9 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _impl import MODE, resolve
+
+
 ROOT = Path(__file__).resolve().parent.parent
 PY = ROOT / ".venv/bin/python"
-REPL = ROOT / "src/eval/repl-example.py"
+REPL = ROOT / resolve("src/eval/repl-example.py")
 
 failures = []
 
@@ -53,4 +56,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/11-repl")
+print(f"PASS test/11-repl [IMPL={MODE}]")

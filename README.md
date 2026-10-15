@@ -17,21 +17,24 @@
 ```
 AGENTS.md  SPEC.md  PLAN.md      # 契约与计划
 notes/  logs/dev/                # 事实笔记 / 开发笔记（logs/run/ 不进 git）
-common/                          # 底座：每条实现 × 每个阶段都用
-  config.py seed.py device.py tokenizer.py(+tokenizer.json)
-  data.py prepare.py metrics.py
+logs/dev-old/  logs/dev-legacy/  # 归档（只读）
 configs/                         # smoketest.yaml / tier1.yaml
-scripts/                         # 环境（setup_env / install_dllm / setup_symlinks + patches）
-src/                             # 格子专属代码
-  models/  trans.py + native/（包，接口对齐 trans）   # G1 的两条实现
-  training/ main.py ar_trans.py ar_native.py state.py
-            sft.py dlm.py a2d_dllm.py a2d_mini.py dpo.py
-  eval/    chat.py（能 chat 四门槛 + rep-4）
+models/                          # 模型层
+  config.py tokenizer.py tokenizer.json
+  model-trans.py（transformers 包）  model.py（纯 torch 手写）   # G1 的两条实现
+prepare/                         # seed.py device.py data.py prepare.py metrics.py
+trainer/                         # main.py state.py ar_trans.py ar_native.py
+                                 # sft.py dlm.py dpo.py
+a2d/                             # a2d_mini.py（手写 masked CE）a2d_dllm.py（dllm 包）
+scripts/                         # 入口 chat.py repl.py + 环境（setup_env / install_dllm / setup_symlinks + patches）
+test/                            # 01–16 验收测试
+common/  src/                    # 只放 -example.py 参考实现
 data -> /mnt/extra  checkpoints -> /mnt/extra   # 大文件软链
 .venv                            # uv 环境
 ```
 
-代码成对：`x.py` 骨架（人填实现）＋ `x-example.py` 参考实现（对拍基准）。
+代码成对：`x.py` 骨架（人填实现）＋ `x-example.py` 参考实现（对拍基准）。参考实现集中在
+`common/` 与 `src/`，骨架 ↔ 参考实现的对照表在 [ROADMAP.md](ROADMAP.md)。
 
 ## Qwen3：用 transformers 官方实现
 
@@ -59,14 +62,14 @@ data -> /mnt/extra  checkpoints -> /mnt/extra   # 大文件软链
 | 参数量 | 3,213,056 | 26,879,488 |
 | 数据 | minimind3-6400 前段（max_blocks 4096） | 全量一遍（81,174 步 @ B8） |
 
-tier1 的数字是实测（7,995 train-only tok/s，332M token ≈ 11.6 h，`logs/dev/02-hardware-perf.md`），
+tier1 的数字是实测（7,995 train-only tok/s，332M token ≈ 11.6 h，`logs/dev-old/02-hardware-perf.md`），
 不是估计。换尺寸只动 config：`head_dim` 独立让 10M–70M 都能拼出合法形状。
 
 ## 数据流水线
 
-语料是 **minimind 数据集**（中文，`common/prepare.py` 下载/整理）：
+语料是 **minimind 数据集**（中文，`prepare/prepare.py` 下载/整理）：
 
-1. tokenize 成 token 流（6400-vocab BPE，`common/tokenizer.json`）
+1. tokenize 成 token 流（6400-vocab BPE，`models/tokenizer.json`）
 2. 每篇文档 `[BOS] … [EOS]` 包裹，拼成长流后按 ctx 切定长块
 3. 落 `data/prepared/minimind3-6400/`：`tokens.bin` + `doc_lengths.npy` + `meta.json`
 4. 三件文件加载时互相对账；MASK（id 27）不允许出现在正文
@@ -75,10 +78,10 @@ vocab_size 必须等于 tokenizer 词表，加载时断言。
 
 ## 训练入口
 
-全部格子走 `src/training/main.py`：读 config → build（model / loss / sample 三元组）→ 训练 → 验证 → 采样 → 存盘。
+全部格子走 `trainer/main.py`：读 config → build（model / loss / sample 三元组）→ 训练 → 验证 → 采样 → 存盘。
 
 - `--impl trans`：transformers `Trainer` 走 AR pretrain，训练配置在 `TrainingArguments`
-- `--impl native`：`src/models/native/` 纯 torch 包在同一条 main 上跑，换芯片不换代码
+- `--impl native`：`models/model.py` 纯 torch 包在同一条 main 上跑，换芯片不换代码
 - SFT / A2D / DLM 是 main 的不同 stage（`--stage`），a2d 用 `--impl dllm|mini` 切对照
 - 续训：step / optimizer / 批次位置 / RNG 快照一起恢复（C4 要求逐步等价）
 
@@ -94,7 +97,7 @@ decode 写进 summary。rep-4 复读率对所有 DLM 结论必报（SPEC §6.4�
 
 ```sh
 ./scripts/setup_env.sh && ./scripts/install_dllm.sh && ./scripts/setup_symlinks.sh
-python -m src.training.main --tier smoketest --impl trans --steps 20
+python -m trainer.main --tier smoketest --impl trans --steps 20
 ```
 
 GPU 约 1 分钟：loss 从 ~8.9（ln 6400）往下走、checkpoint 与 summary 生成。

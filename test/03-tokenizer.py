@@ -1,15 +1,14 @@
-"""test/03-tokenizer.py -- tokenizer-example 的验收（vocab=6400、roundtrip、默认无 special）。
+"""test/03-tokenizer.py -- models/tokenizer.py 的验收（vocab=6400、roundtrip、默认无 special）。
 
 跑法: .venv/bin/python test/03-tokenizer.py
 """
-import importlib.util
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("tok_example", ROOT / "common/tokenizer-example.py")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
+from _impl import load, MODE
+
+
+mod = load("tok_example", "common/tokenizer-example.py")
 
 failures = []
 
@@ -61,4 +60,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/03-tokenizer")
+print(f"PASS test/03-tokenizer [IMPL={MODE}]")

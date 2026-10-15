@@ -1,4 +1,4 @@
-"""src/training/dlm-example.py -- src/training/dlm.py 的参考实现。
+"""src/training/dlm-example.py -- trainer/dlm.py 的参考实现。
 
 Direct-DLM：**不经过 AR**，随机初始化一张 Qwen3，直接在双向 + 加权 masked CE 上训
 （G2 的 dlm 侧）。两条 impl 与 a2d 同义：

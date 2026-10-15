@@ -1,16 +1,15 @@
-"""test/01-config.py -- common/config-example.py 的验收（PLAN P1: yaml 浮点为 float、未知键报错）。
+"""test/01-config.py -- models/config.py 的验收（PLAN P1: yaml 浮点为 float、未知键报错）。
 
 跑法: .venv/bin/python test/01-config.py   （从仓库根目录）
 """
-import importlib.util
 import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("config_example", ROOT / "common/config-example.py")
-cfg_mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cfg_mod)
+from _impl import load, MODE
+
+
+cfg_mod = load("config_example", "common/config-example.py")
 
 failures = []
 
@@ -143,4 +142,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/01-config")
+print(f"PASS test/01-config [IMPL={MODE}]")

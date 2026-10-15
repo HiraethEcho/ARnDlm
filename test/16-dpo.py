@@ -1,4 +1,4 @@
-"""test/16-dpo.py -- dpo-example 的专项验收（此前只有 smoke run 的 margin acc 背书）。
+"""test/16-dpo.py -- trainer/dpo.py 的专项验收（此前只有 smoke run 的 margin acc 背书）。
 
 钉住的语义:
   ① 数据格式: 右 pad 定长、response 区间 mask 精确（prompt 段永不全监督）
@@ -8,7 +8,6 @@
   ⑤ lr 缩放: main 的 DPO 路径 lr == ctx.lr_at(step) * 0.1
 跑法: .venv/bin/python test/16-dpo.py
 """
-import importlib.util
 import json
 import math
 import shutil
@@ -16,18 +15,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+
 import numpy as np
 import torch
 
+from _impl import load, MODE
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("c", "common/config-example.py")
@@ -188,4 +183,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/16-dpo")
+print(f"PASS test/16-dpo [IMPL={MODE}]")

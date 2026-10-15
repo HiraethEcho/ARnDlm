@@ -1,4 +1,4 @@
-"""src/training/main-example.py -- src/training/main.py 的参考实现。
+"""src/training/main-example.py -- trainer/main.py 的参考实现。
 
 训练主干: 读 config -> impl 装载 -> 训练 -> eval -> 采样 -> 存盘 -> summary。
 换 trans/native 不改这里; eval/采样/存盘/命名只有这一份, 两条路线不会漂移。

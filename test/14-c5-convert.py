@@ -4,21 +4,16 @@
 因果 mask 在 modeling 里删掉）。附加: 转换后模型与 trans+4D零mask 的双向 logits 逐位一致。
 跑法: .venv/bin/python test/14-c5-convert.py
 """
-import importlib.util
 import sys
 from pathlib import Path
 
+
 import torch
+
+from _impl import load, MODE
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("config_example", "common/config-example.py")
@@ -95,4 +90,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/14-c5-convert")
+print(f"PASS test/14-c5-convert [IMPL={MODE}]")

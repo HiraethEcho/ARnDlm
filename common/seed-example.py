@@ -1,4 +1,4 @@
-"""common/seed-example.py -- common/seed.py 的参考实现。
+"""common/seed-example.py -- prepare/seed.py 的参考实现。
 
 random / numpy / torch 三处随机源统一设定；可快照可恢复（C4 resume 的根）。
 同 seed 同输入必须逐位同序列。

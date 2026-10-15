@@ -1,5 +1,5 @@
-"""common/ -- 所有模型共用的底座：配置、种子、设备、tokenizer、数据、指标。
+"""common/ -- 只放参考实现（`-example.py`）与共享资源（`tokenizer.json`）。
 
-和训练无关的准备工作（prepare、软链）也在这里。
-代码文件成对出现：x.py 是骨架（只有注释，待填），x-example.py 是正确参考实现。
+正式骨架在 `models/`、`prepare/`、`trainer/`、`a2d/`、`scripts/`。
+代码依然成对：骨架 x.py 与参考实现 x-example.py 同 seed 同输入逐位对拍。
 """

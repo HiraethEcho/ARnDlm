@@ -1,24 +1,17 @@
-"""test/15-sft-prepare.py -- sft-prepare-example 的验收: 产物被 SFTBlocks 直接吃 + span 语义。
+"""test/15-sft-prepare.py -- prepare/sft-prepare.py 的验收: 产物被 SFTBlocks 直接吃 + span 语义。
 
 跑法: .venv/bin/python test/15-sft-prepare.py
 """
-import importlib.util
 import json
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+from _impl import load, MODE
 
 
 prep = load("p", "common/sft-prepare-example.py")
@@ -83,9 +76,7 @@ try:
 
     print("[4] 加噪约束（T4f）: corrupt 的 masked ⊆ span")
     import torch
-    import importlib.util as iu
-    spec = iu.spec_from_file_location("a2dx", ROOT / "common/a2d-example.py")
-    a2d = importlib.util.module_from_spec(spec); spec.loader.exec_module(a2d)
+    a2d = load("a2dx", "common/a2d-example.py")
     viol = 0
     for b in range(sft.n_blocks):
         labels = sft.labels(int(b))
@@ -103,4 +94,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/15-sft-prepare")
+print(f"PASS test/15-sft-prepare [IMPL={MODE}]")

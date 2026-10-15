@@ -1,4 +1,4 @@
-"""test/10-chat.py -- chat-example 端到端: 真 SFT 200 步 -> 四门槛报告。
+"""test/10-chat.py -- scripts/chat.py 端到端: 真 SFT 200 步 -> 四门槛报告。
 
 断言「报告完整且数字真实」，不断言门槛全过 —— 未训好的模型可能确实不能 chat,
 门槛失败要如实出现在报告里（false-green 反模式）。门槛 1 需要 AR-SFT 参照,
@@ -6,21 +6,16 @@
 
 跑法: .venv/bin/python test/10-chat.py
 """
-import importlib.util
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+from _impl import load, MODE
+
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("config_example", "common/config-example.py")
@@ -104,4 +99,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/10-chat")
+print(f"PASS test/10-chat [IMPL={MODE}]")

@@ -1,18 +1,17 @@
-"""test/12-a2d-core.py -- a2d-example 共享层的验收（分母语义 / per-sample t / 采样器行为）。
+"""test/12-a2d-core.py -- a2d/a2d.py 共享层的验收（分母语义 / per-sample t / 采样器行为）。
 
 跑法: .venv/bin/python test/12-a2d-core.py
 """
-import importlib.util
 import sys
 from pathlib import Path
+
 
 import torch
 import torch.nn.functional as F
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("a2d_example", ROOT / "common/a2d-example.py")
-a2d = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(a2d)
+from _impl import load, MODE
+
+a2d = load("a2d_example", "common/a2d-example.py")
 
 failures = []
 
@@ -105,4 +104,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print("PASS test/12-a2d-core")
+print(f"PASS test/12-a2d-core [IMPL={MODE}]")

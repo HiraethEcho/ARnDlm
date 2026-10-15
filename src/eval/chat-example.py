@@ -1,4 +1,4 @@
-"""src/eval/chat-example.py -- src/eval/chat.py 的参考实现。
+"""src/eval/chat-example.py -- scripts/chat.py 的参考实现。
 
 「能 chat」四门槛（SPEC 6.3）的测量与报告:
   1. assistant 段 eval loss <= 1.5x 同条件 AR-SFT（参照缺失时报 pending, 不装绿）

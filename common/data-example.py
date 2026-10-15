@@ -1,4 +1,4 @@
-"""common/data-example.py -- common/data.py 的参考实现。
+"""common/data-example.py -- prepare/data.py 的参考实现。
 
 tokens.bin(裸文档拼接, uint16) + doc_lengths.npy -> 虚拟 [BOS] doc [EOS] 流 -> 定长块。
 不物化大流: 位置 -> (doc, local) 用 searchsorted 映射, tier1 332M token 也不用复制。

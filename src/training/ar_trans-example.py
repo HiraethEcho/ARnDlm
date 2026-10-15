@@ -1,4 +1,4 @@
-"""src/training/ar_trans-example.py -- src/training/ar_trans.py 的参考实现。
+"""src/training/ar_trans-example.py -- trainer/ar_trans.py 的参考实现。
 
 G1 格 1: transformers Trainer 走 AR pretrain（用包, 代码最少），产出 ar-<size>-trans。
 所有训练数值（max_steps/warmup/cosine+min_lr/bf16/clip）只从 config 读, 不出现第二处数字。

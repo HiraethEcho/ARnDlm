@@ -18,6 +18,7 @@
 | `notes/`    | **事实笔记** — 换开发环境依然成立：概念、原理、架构、外部知识、规格限制                 | 本机状态、开发过程、时间戳                                  |
 | `logs/dev/` | **开发笔记** — 开发中学到的：本机实测、环境故障、踩坑与解法、参考路径                   | 与开发过程无关的纯概念（→ notes）；程序吐的（→ logs/run/）  |
 | `logs/run/` | **训练运行产物** — 运行日志、`summary.json`、`metrics.csv`、曲线 PNG                    | 任何手写内容                                                |
+| `logs/dev-old/` `logs/dev-legacy/` | **归档** — 旧开发笔记，只读                          | 新写的笔记（→ `logs/dev/`）                                |
 
 判断方法: **「换一台机器这句话还成立吗?」** 成立 → `notes/`, 不成立 → `logs/dev/`。
 再问: **「人写的还是程序吐的?」** 程序吐的 → `logs/run/`。
@@ -33,12 +34,20 @@
 
 ## 代码
 
-- `common/`：底座 —— 配置 / 种子 / 设备 / tokenizer / 数据（含 prepare）/ 指标。
-  每条实现 × 每个阶段都用，不属于任何格子。与训练无关的准备也在这里。
-- `src/`：格子专属 —— `models/`（trans + native 包，接口一致）、`training/`（各入口 + state）、`eval/`。
-- **代码成对**：`x.py` 骨架只有「这个文件是干什么的」注释，代码由人填；同目录 `x-example.py`
-  是 AI 写的正确参考实现（每个代码块附一行功能注释）。骨架填完同 seed 同输入逐位对拍 `-example`，
-  一致才算完。
+正式代码在新布局的五个目录；骨架只有「这个文件是干什么的」注释，代码由人填。
+
+- `models/`：模型层 —— `config.py`、`tokenizer.py`+`tokenizer.json`、`model-trans.py`（transformers 包）、
+  `model.py`（纯 torch 手写）。两个实现接口一致，logits 逐位对拍（C1）。
+- `prepare/`：训练前与共用件 —— `seed.py`、`device.py`、`data.py`、`prepare.py`、`metrics.py`（测量口径）。
+- `trainer/`：各训练入口 —— `main.py`（唯一主干）、`state.py`、`ar_trans.py`、`ar_native.py`、
+  `sft.py`、`dlm.py`、`dpo.py`。
+- `a2d/`：A2D 入口 —— `a2d_mini.py`（手写 masked CE）、`a2d_dllm.py`（调 dllm 包）。
+- `scripts/`：执行入口 —— `chat.py`（四门槛 + rep-4）、`repl.py`、环境脚本、`collect_results.py`。
+- `common/` 与 `src/`：**只放 `-example.py` 参考实现**，不放正式代码。
+- **代码成对**：`x.py` 骨架由人填；`x-example.py` 是 AI 写的正确参考实现（每个代码块附一行功能注释）。
+  参考实现**不在骨架同目录**，骨架 ↔ 参考实现的对照表在 ROADMAP.md。填完同 seed 同输入逐位
+  对拍 `-example`，一致才算完。对拍开关：`IMPL=x` 让 `test/` 加载骨架，缺省 `example` 加载参考
+  实现（映射在 `test/_impl.py`）。
 - 注释只写功能。坑、注意事项写 `logs/dev/`。
 
 ## 环境
@@ -78,4 +87,4 @@
   返还给主 agent。** 不要在主面板阻塞等待, 也不要用裸 `nohup &` 之后失联。
 - 大文件一律走软链接到 `/mnt/extra` (`data/` `checkpoints/`), 由
   `scripts/setup_symlinks.sh` 创建, 全部在 .gitignore 里。
-- `logs/run/` 不链接 (纯文本), 也不进 git。`logs/dev/` **进 git**。
+- `logs/run/` 不链接 (纯文本), 也不进 git。`logs/dev/` 与两个归档目录 (`logs/dev-old/` `logs/dev-legacy/`) **进 git**。

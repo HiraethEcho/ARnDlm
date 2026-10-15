@@ -3,24 +3,19 @@
 跑法: .venv/bin/python test/07-c4-resume.py
 （trans 侧的 Trainer resume 是 03-call-flow 留下的开放点, 不在此测。）
 """
-import importlib.util
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+
 import numpy as np
 import torch
 
+from _impl import load, MODE
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-
-
-def load(name, path):
-    spec = importlib.util.spec_from_file_location(name, ROOT / path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 cfg_mod = load("config_example", "common/config-example.py")
@@ -134,4 +129,4 @@ print()
 if failures:
     print(f"FAIL ({len(failures)}): {failures}")
     sys.exit(1)
-print(f"PASS test/07-c4-resume  (C4 max|Δloss| = {max_diff:.1e}, 权重差 {wdiff:.1e})")
+print(f"PASS test/07-c4-resume  (C4 max|Δloss| = {max_diff:.1e}, 权重差 {wdiff:.1e}) [IMPL={MODE}]")

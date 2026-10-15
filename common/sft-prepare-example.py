@@ -1,4 +1,4 @@
-"""common/sft-prepare-example.py -- common/sft-prepare.py 的参考实现。
+"""common/sft-prepare-example.py -- prepare/sft-prepare.py 的参考实现。
 
 SFT prepared 目录的仓内生产者（SPEC §3.3 单管道承诺的另一半 —— 此前只有读者,
 没有写者, 格式不可复现）。输入 minimind sft_t2t_*.jsonl（conversations 格式）,

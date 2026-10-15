@@ -9,19 +9,22 @@
 | `x.py` | 你 | 骨架：只有「这个文件是干什么的」注释，逐条填代码 |
 | `x-example.py` | AI | 正确的参考实现，每个代码块一行功能注释；验收时跑它出基准行为 |
 
-骨架填完对拍同目录 `-example`（同 seed 同输入逐位一致），对拍通过才算完。
+骨架填完对拍 ROADMAP.md 对照表里对应的 `-example`（同 seed 同输入逐位一致），对拍通过才算完。
+参考实现不在骨架同目录：`common/` 与 `src/` 只放 `-example.py`。
 
 ## 目录
 
-见 SPEC §7。一句版：`common/` 底座（模型无关），`src/` 格子（models / training / eval），
-`scripts/` 环境，`configs/` 两份 yaml，`/mnt/extra` 软链放大数据与 checkpoints。
+见 AGENTS.md「代码」段（SPEC §7 写的是旧布局）。一句版：`models/` 模型层，
+`prepare/` 共用件（含 metrics 测量口径），`trainer/` 各训练入口，`a2d/` A2D 入口，
+`scripts/` 执行入口，`common/` 与 `src/` 只放参考实现，`configs/` 两份 yaml，
+`/mnt/extra` 软链放大数据与 checkpoints。
 
 ## 主干接口（换实现不改主代码）
 
-`src/training/main.py` 只认一个 `build(cfg) -> (model, loss, sample)` 三元组：
+`trainer/main.py` 只认一个 `build(cfg) -> (model, loss, sample)` 三元组：
 
 - `trans`：transformers `Qwen3ForCausalLM` + Trainer 路线（模型层 + 训练层都尽量用包）
-- `native`：`src/models/native/` 纯 torch 包（接口对齐 trans）
+- `native`：`models/model.py` 纯 torch 包（接口对齐 trans）
 - G1 = 同一 main 跑两个 build；SFT/A2D 同理只换 build
 
 ## 命名（SPEC §1.2）
@@ -35,14 +38,14 @@
 smoke 档永远取尽量轻和快的组合：最小模型（SPEC §4.1，3.2M）× 最小数据
 （最小就位语料，如 tinystories-6400 / sft-mini-6400，不用 minimind3 全量）×
 最少步数（能暴露失败即可）。只检验代码正确性，不评性能，不引用 smoke 跑出的
-吞吐数字；判读时丢掉预热段（前 50 步是编译相，见 logs/dev/02）。
+吞吐数字；判读时丢掉预热段（前 50 步是编译相，见 logs/dev-old/02）。
 
 ## 阶段
 
 | Phase | 内容 | 验收（SPEC 条款） |
 |---|---|---|
 | **P0 文档与骨架** | SPEC + PLAN + 目录树 + 骨架注释 | 结构 vs §7 一致 |
-| **P1 common/** | config（pyyaml）/ seed / device / tokenizer / data / prepare / metrics | yaml 浮点为 float；同 seed 三路一致；`_stream` 手工例 |
+| **P1 底座** | config（pyyaml）/ seed / device / tokenizer / data / prepare / metrics（`models/` + `prepare/`） | yaml 浮点为 float；同 seed 三路一致；`_stream` 手工例 |
 | **P2 models** | `trans.py` + `native/` 包 | **C1**：logits max\|Δ\| ≤ 1e-5（锚 6.91e-06） |
 | **P3 smoke 训练** | `main.py` + `ar_trans.py` + `ar_native.py` + `state.py` | 20 步跑通；双口径 tok/s；checkpoint 名合 §1.2 |
 | **P4 数据** | prepare.py 跑通（minimind3-6400 已在 /mnt/extra） | vocab 6400；MASK=27 不在语料 |
@@ -56,4 +59,4 @@ smoke 档永远取尽量轻和快的组合：最小模型（SPEC §4.1，3.2M）
 ## 尺寸基准（实测，勿重测）
 
 smoke 3.2M（解析值 3,213,056）；tier1 26.9M = 7,995 train-only tok/s @ B8/512，
-332M token ≈ 11.6 h，峰值 1.41 GB。细节在 `logs/dev/02-hardware-perf.md`。
+332M token ≈ 11.6 h，峰值 1.41 GB。细节在 `logs/dev-old/02-hardware-perf.md`。

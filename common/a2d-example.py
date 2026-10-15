@@ -1,4 +1,4 @@
-"""common/a2d-example.py -- common/a2d.py 的参考实现。
+"""common/a2d-example.py -- a2d/a2d.py 的参考实现。
 
 MiniMind-DLM 风格 A2D 的共享层：corruption / 加权 loss / 块状揭示采样器。
 **trans 与 native、mini 与 dllm 四条组合共用这一份** —— 复制一份会让 C2/C3
